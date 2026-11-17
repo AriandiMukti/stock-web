@@ -1221,18 +1221,18 @@
 
 {% if user.is_authenticated %}
 <div class="command-palette-overlay" id="cmdPaletteOverlay">
-    <div class="command-palette" id="cmdPalette" role="dialog" aria-modal="true" aria-label="Cari halaman atau kode saham">
+    <div class="command-palette" id="cmdPalette" role="dialog" aria-modal="true" aria-label="Search pages or stock symbols">
         <div class="cmd-input-wrap">
             <i data-feather="search"></i>
-            <input type="text" id="cmdPaletteInput" placeholder="Cari halaman atau kode saham&hellip;" autocomplete="off" spellcheck="false">
+            <input type="text" id="cmdPaletteInput" placeholder="Search pages or stock symbols&hellip;" autocomplete="off" spellcheck="false">
             <kbd>esc</kbd>
         </div>
         <div class="command-palette-results" id="cmdPaletteResults" role="listbox"></div>
         <div class="cmd-foot">
-            <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> pilih</span>
-            <span><kbd>&crarr;</kbd> buka</span>
-            <span><kbd>esc</kbd> tutup</span>
-            <span class="push"><kbd><span class="kbd-mod">Ctrl</span> K</kbd> dari halaman mana pun</span>
+            <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> select</span>
+            <span><kbd>&crarr;</kbd> open</span>
+            <span><kbd>esc</kbd> close</span>
+            <span class="push"><kbd><span class="kbd-mod">Ctrl</span> K</kbd> from any page</span>
         </div>
     </div>
 </div>
@@ -1265,7 +1265,7 @@
             <span class="brand-mark">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
             </span>
-            <span class="brand-text"><b>BDM</b><small>Riset bandarmologi BEI</small></span>
+            <span class="brand-text"><b>BDM</b><small>IDX broker-flow research</small></span>
             <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="Collapse menu">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
@@ -1277,22 +1277,22 @@
         <nav class="app-nav">
             <button type="button" class="nav-group" data-group="pantau" aria-expanded="true">
                 <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                <span class="nav-group-text">Pantau</span>
+                <span class="nav-group-text">Overview</span>
                 <span class="nav-group-count">6</span>
             </button>
             <div class="nav-items" data-group-items="pantau">
                 <div class="nav-items-inner">
                     <a class="nav-link" href="/"><i data-feather="home"></i><span class="nav-text">Dashboard</span></a>
-                    <a class="nav-link" href="/musiman-saham"><i data-feather="calendar"></i><span class="nav-text">Musiman Saham</span></a>
-                    <a class="nav-link" href="/perubahan-kepemilikan"><i data-feather="users"></i><span class="nav-text">Perubahan Kepemilikan</span></a>
-                    <a class="nav-link" href="/rotasi-sektor"><i data-feather="bar-chart-2"></i><span class="nav-text">Rotasi Sektor</span></a>
-                    <a class="nav-link" href="/kalender-pasar"><i data-feather="calendar"></i><span class="nav-text">Kalender Pasar</span></a>
-                    <a class="nav-link" href="/agenda-emiten"><i data-feather="briefcase"></i><span class="nav-text">Agenda Emiten</span></a>
-                    <a class="nav-link" href="/kabar-semalam"><i data-feather="moon"></i><span class="nav-text">Kabar Semalam</span></a>
-                    <a class="nav-link" href="/ramai-dibahas"><i data-feather="message-circle"></i><span class="nav-text">Ramai Dibahas</span></a>
-                    <a class="nav-link" href="/watchlist-digest"><i data-feather="list"></i><span class="nav-text">Ringkasan Watchlist</span></a>
-                    <a class="nav-link" href="/watchlist-history"><i data-feather="clock"></i><span class="nav-text">History</span><span class="nav-dot" id="historyNavDot" style="display:none;"></span></a>
-                    <a class="nav-link" href="/jurnal-keputusan"><i data-feather="book-open"></i><span class="nav-text">Jurnal Keputusan</span></a>
+                    <a class="nav-link" href="/musiman-saham"><i data-feather="calendar"></i><span class="nav-text">Stock Seasonality</span></a>
+                    <a class="nav-link" href="/perubahan-kepemilikan"><i data-feather="users"></i><span class="nav-text">Ownership Changes</span></a>
+                    <a class="nav-link" href="/rotasi-sektor"><i data-feather="bar-chart-2"></i><span class="nav-text">Sector Rotation</span></a>
+                    <a class="nav-link" href="/kalender-pasar"><i data-feather="calendar"></i><span class="nav-text">Market Calendar</span></a>
+                    <a class="nav-link" href="/agenda-emiten"><i data-feather="briefcase"></i><span class="nav-text">Corporate Events</span></a>
+                    <a class="nav-link" href="/kabar-semalam"><i data-feather="moon"></i><span class="nav-text">Overnight News</span></a>
+                    <a class="nav-link" href="/ramai-dibahas"><i data-feather="message-circle"></i><span class="nav-text">Market Buzz</span></a>
+                    <a class="nav-link" href="/watchlist-digest"><i data-feather="list"></i><span class="nav-text">Watchlist Summary</span></a>
+                    <a class="nav-link" href="/watchlist-history"><i data-feather="clock"></i><span class="nav-text">Watchlist History</span><span class="nav-dot" id="historyNavDot" style="display:none;"></span></a>
+                    <a class="nav-link" href="/jurnal-keputusan"><i data-feather="book-open"></i><span class="nav-text">Decision Journal</span></a>
                 </div>
             </div>
             <button type="button" class="nav-group" data-group="watchlist" aria-expanded="true">
@@ -1311,40 +1311,40 @@
             </div>
             <button type="button" class="nav-group" data-group="telaah" aria-expanded="true">
                 <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                <span class="nav-group-text">Telaah Saham</span>
+                <span class="nav-group-text">Stock Analysis</span>
                 <span class="nav-group-count">6</span>
             </button>
             <div class="nav-items" data-group-items="telaah">
                 <div class="nav-items-inner">
-                    <a class="nav-link" href="/saham/BBRI"><i data-feather="search"></i><span class="nav-text">Halaman Saham</span></a>
-                    <a class="nav-link" href="/kepemilikan-saham"><i data-feather="pie-chart"></i><span class="nav-text">Kepemilikan Saham</span></a>
-                    <a class="nav-link" href="/perbarui-kepemilikan"><i data-feather="refresh-cw"></i><span class="nav-text">Perbarui Kepemilikan</span></a>
-                    <a class="nav-link" href="/sidik-jari-broker"><i data-feather="users"></i><span class="nav-text">Sidik Jari Broker</span></a>
-                    <a class="nav-link" href="/konsistensi-broker"><i data-feather="repeat"></i><span class="nav-text">Konsistensi Broker</span></a>
-                    <a class="nav-link" href="/insider-activity"><i data-feather="user-check"></i><span class="nav-text">Aktivitas Insider</span></a>
+                    <a class="nav-link" href="/saham/BBRI"><i data-feather="search"></i><span class="nav-text">Stock Overview</span></a>
+                    <a class="nav-link" href="/kepemilikan-saham"><i data-feather="pie-chart"></i><span class="nav-text">Share Ownership</span></a>
+                    <a class="nav-link" href="/perbarui-kepemilikan"><i data-feather="refresh-cw"></i><span class="nav-text">Refresh Ownership</span></a>
+                    <a class="nav-link" href="/sidik-jari-broker"><i data-feather="users"></i><span class="nav-text">Broker Fingerprints</span></a>
+                    <a class="nav-link" href="/konsistensi-broker"><i data-feather="repeat"></i><span class="nav-text">Broker Consistency</span></a>
+                    <a class="nav-link" href="/insider-activity"><i data-feather="user-check"></i><span class="nav-text">Insider Activity</span></a>
                 </div>
             </div>
             <button type="button" class="nav-group collapsed" data-group="pindai" aria-expanded="false">
                 <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                <span class="nav-group-text">Pindai Pasar</span>
+                <span class="nav-group-text">Market Screens</span>
                 <span class="nav-group-count">18</span>
             </button>
             <div class="nav-items collapsed" data-group-items="pindai">
                 <div class="nav-items-inner">
-                    <a class="nav-link" href="/apa-berubah"><i data-feather="git-compare"></i><span class="nav-text">Apa Berubah Hari Ini</span></a>
-                    <a class="nav-link" href="/takaran-risiko"><i data-feather="activity"></i><span class="nav-text">Takaran Risiko</span></a>
+                    <a class="nav-link" href="/apa-berubah"><i data-feather="git-compare"></i><span class="nav-text">Today’s Changes</span></a>
+                    <a class="nav-link" href="/takaran-risiko"><i data-feather="activity"></i><span class="nav-text">Risk Assessment</span></a>
                     <a class="nav-link" href="/scanner-lab"><i data-feather="radio"></i><span class="nav-text">Scanner Lab</span></a>
-                    <a class="nav-link" href="/kering-screener"><i data-feather="droplet"></i><span class="nav-text">Kering Screener</span></a>
-                    <a class="nav-link" href="/serapan-float"><i data-feather="download-cloud"></i><span class="nav-text">Serapan Float</span></a>
-                    <a class="nav-link" href="/akumulasi-palsu"><i data-feather="alert-triangle"></i><span class="nav-text">Akumulasi Palsu</span></a>
-                    <a class="nav-link" href="/jatuh-dalam"><i data-feather="trending-down"></i><span class="nav-text">Jatuh Dalam</span></a>
-                    <a class="nav-link" href="/tembus-basis"><i data-feather="trending-up"></i><span class="nav-text">Tembus Basis</span></a>
-                    <a class="nav-link" href="/ema-weekly"><i data-feather="trending-up"></i><span class="nav-text">EMA Golden Cross Weekly</span></a>
-                    <a class="nav-link" href="/skor-kecondongan"><i data-feather="sliders"></i><span class="nav-text">Skor Kecondongan</span></a>
-                    <a class="nav-link" href="/radar-insider"><i data-feather="crosshair"></i><span class="nav-text">Radar Insider</span></a>
-                    <a class="nav-link" href="/dicicil-insider"><i data-feather="shopping-bag"></i><span class="nav-text">Dicicil Insider</span></a>
-                    <a class="nav-link" href="/rapat-agen"><i data-feather="users"></i><span class="nav-text">Rapat Agen</span></a>
-                    <a class="nav-link" href="/penemu-pola"><i data-feather="git-branch"></i><span class="nav-text">Penemu Pola</span></a>
+                    <a class="nav-link" href="/kering-screener"><i data-feather="droplet"></i><span class="nav-text">Low-Liquidity Screener</span></a>
+                    <a class="nav-link" href="/serapan-float"><i data-feather="download-cloud"></i><span class="nav-text">Float Absorption</span></a>
+                    <a class="nav-link" href="/akumulasi-palsu"><i data-feather="alert-triangle"></i><span class="nav-text">False Accumulation</span></a>
+                    <a class="nav-link" href="/jatuh-dalam"><i data-feather="trending-down"></i><span class="nav-text">Deep Declines</span></a>
+                    <a class="nav-link" href="/tembus-basis"><i data-feather="trending-up"></i><span class="nav-text">Base Breakout</span></a>
+                    <a class="nav-link" href="/ema-weekly"><i data-feather="trending-up"></i><span class="nav-text">Weekly EMA Golden Cross</span></a>
+                    <a class="nav-link" href="/skor-kecondongan"><i data-feather="sliders"></i><span class="nav-text">Trend Score</span></a>
+                    <a class="nav-link" href="/radar-insider"><i data-feather="crosshair"></i><span class="nav-text">Insider Radar</span></a>
+                    <a class="nav-link" href="/dicicil-insider"><i data-feather="shopping-bag"></i><span class="nav-text">Gradual Insider Buying</span></a>
+                    <a class="nav-link" href="/rapat-agen"><i data-feather="users"></i><span class="nav-text">Agent Meeting</span></a>
+                    <a class="nav-link" href="/penemu-pola"><i data-feather="git-branch"></i><span class="nav-text">Pattern Finder</span></a>
                     <a class="nav-link" href="/display-analyze?type=RetailSellStocks"><i data-feather="filter"></i><span class="nav-text">Retail Sell</span></a>
                     <a class="nav-link" href="/display-analyze?type=ConsolStocks"><i data-feather="filter"></i><span class="nav-text">Consol</span></a>
                     <a class="nav-link" href="/display-analyze?type=RetailSellLowValueStocks"><i data-feather="filter"></i><span class="nav-text">Retail Sell Low</span></a>
@@ -1354,33 +1354,33 @@
             </div>
             <button type="button" class="nav-group collapsed" data-group="periksa" aria-expanded="false">
                 <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                <span class="nav-group-text">Periksa Diri</span>
+                <span class="nav-group-text">Validation</span>
                 <span class="nav-group-count">5</span>
             </button>
             <div class="nav-items collapsed" data-group-items="periksa">
                 <div class="nav-items-inner">
-                    <a class="nav-link" href="/status-bukti"><i data-feather="award"></i><span class="nav-text">Status Bukti</span></a>
-                    <a class="nav-link" href="/audit-screener"><i data-feather="crosshair"></i><span class="nav-text">Audit Screener</span></a>
-                    <a class="nav-link" href="/rontgen-portofolio"><i data-feather="shield"></i><span class="nav-text">Rontgen Portofolio</span></a>
-                    <a class="nav-link" href="/emiten-hilang"><i data-feather="user-x"></i><span class="nav-text">Emiten Hilang</span></a>
-                    <a class="nav-link" href="/kepercayaan-data"><i data-feather="check-circle"></i><span class="nav-text">Kepercayaan Data</span></a>
+                    <a class="nav-link" href="/status-bukti"><i data-feather="award"></i><span class="nav-text">Evidence Status</span></a>
+                    <a class="nav-link" href="/audit-screener"><i data-feather="crosshair"></i><span class="nav-text">Screener Audit</span></a>
+                    <a class="nav-link" href="/rontgen-portofolio"><i data-feather="shield"></i><span class="nav-text">Portfolio X-Ray</span></a>
+                    <a class="nav-link" href="/emiten-hilang"><i data-feather="user-x"></i><span class="nav-text">Missing Issuers</span></a>
+                    <a class="nav-link" href="/kepercayaan-data"><i data-feather="check-circle"></i><span class="nav-text">Data Confidence</span></a>
                 </div>
             </div>
             <button type="button" class="nav-group collapsed" data-group="laporan" aria-expanded="false">
                 <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                <span class="nav-group-text">Laporan</span>
+                <span class="nav-group-text">Reports</span>
                 <span class="nav-group-count">9</span>
             </button>
             <div class="nav-items collapsed" data-group-items="laporan">
                 <div class="nav-items-inner">
                     <a class="nav-link" href="/weekly-report"><i data-feather="file-text"></i><span class="nav-text">Weekly Report</span></a>
                     <a class="nav-link" href="/pnl"><i data-feather="dollar-sign"></i><span class="nav-text">Portfolio P&amp;L</span></a>
-                    <a class="nav-link" href="/akuisisi"><i data-feather="zap"></i><span class="nav-text">Akuisisi</span></a>
+                    <a class="nav-link" href="/akuisisi"><i data-feather="zap"></i><span class="nav-text">Acquisitions</span></a>
                     <a class="nav-link" href="/count"><i data-feather="hash"></i><span class="nav-text">Count</span></a>
                     <a class="nav-link" href="/dream-agent/"><i data-feather="moon"></i><span class="nav-text">Dream Agent</span></a>
                     <a class="nav-link" href="/research"><i data-feather="cpu"></i><span class="nav-text">Research</span></a>
                     <a class="nav-link" href="/digital-twin"><i data-feather="git-branch"></i><span class="nav-text">Digital Twin</span></a>
-                    <a class="nav-link" href="/sebaran-kabar"><i data-feather="share-2"></i><span class="nav-text">Sebaran Kabar</span></a>
+                    <a class="nav-link" href="/sebaran-kabar"><i data-feather="share-2"></i><span class="nav-text">News Diffusion</span></a>
                     <a class="nav-link" href="/stocklang"><i data-feather="terminal"></i><span class="nav-text">StockLang</span></a>
                 </div>
             </div>
@@ -1389,12 +1389,12 @@
         <div class="app-user">
             <span class="app-user-avatar" aria-hidden="true">{{ ((user.firstName or 'B')[:1])|upper }}</span>
             <div class="app-user-meta">
-                <b>{{ user.firstName or 'Pengguna' }}</b>
-                <small>Sesi aktif</small>
+                <b>{{ user.firstName or 'User' }}</b>
+                <small>Active session</small>
             </div>
             <form method="POST" action="/logout">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="app-user-out" title="Keluar" aria-label="Keluar"><i data-feather="log-out"></i></button>
+                <button type="submit" class="app-user-out" title="Sign out" aria-label="Sign out"><i data-feather="log-out"></i></button>
             </form>
         </div>
     </aside>
@@ -1421,7 +1421,7 @@
                 {% endif %}
                 <div class="toolbar">
                     <div class="quick-add">
-                        <input type="text" class="inputText" placeholder="Kode saham" aria-label="Kode saham untuk ditambahkan ke Portfolio" autocomplete="off" spellcheck="false">
+                        <input type="text" class="inputText" placeholder="Stock symbol" aria-label="Stock symbol to add to Portfolio" autocomplete="off" spellcheck="false">
                         <button type="button" onclick="addStock('/admin?param=add&amp;type=PortfolioStocks&amp;stock=')">+ Portfolio</button>
                     </div>
                     <form method="POST" action="/admin?param=analyze" onsubmit="showLoader();" class="d-inline">
@@ -1648,12 +1648,12 @@
     var ALL_STOCKS = {{ (all_stocks if all_stocks else [])|tojson }};
     var CMD_PAGES = [
         { label: 'Dashboard', hint: 'page', url: '/' },
-        { label: 'Musiman Saham', hint: 'page', url: '/musiman-saham' },
-        { label: 'Perubahan Kepemilikan', hint: 'page', url: '/perubahan-kepemilikan' },
-        { label: 'Rotasi Sektor', hint: 'page', url: '/rotasi-sektor' },
-        { label: 'EMA Golden Cross Weekly', hint: 'page', url: '/ema-weekly' },
-        { label: 'Kabar Semalam', hint: 'page', url: '/kabar-semalam' },
-        { label: 'Ramai Dibahas', hint: 'page', url: '/ramai-dibahas' },
+        { label: 'Stock Seasonality', hint: 'page', url: '/musiman-saham' },
+        { label: 'Ownership Changes', hint: 'page', url: '/perubahan-kepemilikan' },
+        { label: 'Sector Rotation', hint: 'page', url: '/rotasi-sektor' },
+        { label: 'Weekly EMA Golden Cross', hint: 'page', url: '/ema-weekly' },
+        { label: 'Overnight News', hint: 'page', url: '/kabar-semalam' },
+        { label: 'Market Buzz', hint: 'page', url: '/ramai-dibahas' },
         { label: 'Portfolio', hint: 'watchlist', url: '/display-stock-list?type=PortfolioStocks' },
         { label: 'Best', hint: 'watchlist', url: '/display-stock-list?type=BestStocks' },
         { label: 'Best Low', hint: 'watchlist', url: '/display-stock-list?type=BestLowStocks' },
@@ -1662,33 +1662,33 @@
         { label: 'Compare', hint: 'page', url: '/compare' },
         { label: 'Weekly Report', hint: 'page', url: '/weekly-report' },
         { label: 'Portfolio P&L', hint: 'page', url: '/pnl' },
-        { label: 'Akuisisi', hint: 'page', url: '/akuisisi' },
-        { label: 'Kepemilikan Saham', hint: 'page', url: '/kepemilikan-saham' },
-        { label: 'Perbarui Kepemilikan', hint: 'page', url: '/perbarui-kepemilikan' },
+        { label: 'Acquisitions', hint: 'page', url: '/akuisisi' },
+        { label: 'Share Ownership', hint: 'page', url: '/kepemilikan-saham' },
+        { label: 'Refresh Ownership', hint: 'page', url: '/perbarui-kepemilikan' },
         { label: 'Scanner Lab', hint: 'page', url: '/scanner-lab' },
-        { label: 'Serapan Float', hint: 'page', url: '/serapan-float' },
-        { label: 'Akumulasi Palsu', hint: 'page', url: '/akumulasi-palsu' },
-        { label: 'Jatuh Dalam', hint: 'page', url: '/jatuh-dalam' },
-        { label: 'Tembus Basis', hint: 'page', url: '/tembus-basis' },
-        { label: 'Skor Kecondongan', hint: 'page', url: '/skor-kecondongan' },
-        { label: 'Apa Berubah Hari Ini', hint: 'page', url: '/apa-berubah' },
-        { label: 'Takaran Risiko', hint: 'page', url: '/takaran-risiko' },
-        { label: 'Emiten Hilang', hint: 'page', url: '/emiten-hilang' },
-        { label: 'Status Bukti', hint: 'page', url: '/status-bukti' },
-        { label: 'Audit Screener', hint: 'page', url: '/audit-screener' },
-        { label: 'Penemu Pola', hint: 'page', url: '/penemu-pola' },
-        { label: 'Sidik Jari Broker', hint: 'page', url: '/sidik-jari-broker' },
-        { label: 'Konsistensi Broker', hint: 'page', url: '/konsistensi-broker' },
-        { label: 'Rontgen Portofolio', hint: 'page', url: '/rontgen-portofolio' },
-        { label: 'Kepercayaan Data', hint: 'page', url: '/kepercayaan-data' },
-        { label: 'Halaman Saham', hint: 'page', url: '/saham/BBRI' },
-        { label: 'Kering Screener', hint: 'page', url: '/kering-screener' },
-        { label: 'Aktivitas Insider', hint: 'page', url: '/insider-activity' },
-        { label: 'Radar Insider', hint: 'page', url: '/radar-insider' },
-        { label: 'Dicicil Insider', hint: 'page', url: '/dicicil-insider' },
-        { label: 'Rapat Agen', hint: 'page', url: '/rapat-agen' },
-        { label: 'Ringkasan Watchlist', hint: 'page', url: '/watchlist-digest' },
-        { label: 'Jurnal Keputusan', hint: 'page', url: '/jurnal-keputusan' },
+        { label: 'Float Absorption', hint: 'page', url: '/serapan-float' },
+        { label: 'False Accumulation', hint: 'page', url: '/akumulasi-palsu' },
+        { label: 'Deep Declines', hint: 'page', url: '/jatuh-dalam' },
+        { label: 'Base Breakout', hint: 'page', url: '/tembus-basis' },
+        { label: 'Trend Score', hint: 'page', url: '/skor-kecondongan' },
+        { label: 'Today’s Changes', hint: 'page', url: '/apa-berubah' },
+        { label: 'Risk Assessment', hint: 'page', url: '/takaran-risiko' },
+        { label: 'Missing Issuers', hint: 'page', url: '/emiten-hilang' },
+        { label: 'Evidence Status', hint: 'page', url: '/status-bukti' },
+        { label: 'Screener Audit', hint: 'page', url: '/audit-screener' },
+        { label: 'Pattern Finder', hint: 'page', url: '/penemu-pola' },
+        { label: 'Broker Fingerprints', hint: 'page', url: '/sidik-jari-broker' },
+        { label: 'Broker Consistency', hint: 'page', url: '/konsistensi-broker' },
+        { label: 'Portfolio X-Ray', hint: 'page', url: '/rontgen-portofolio' },
+        { label: 'Data Confidence', hint: 'page', url: '/kepercayaan-data' },
+        { label: 'Stock Overview', hint: 'page', url: '/saham/BBRI' },
+        { label: 'Low-Liquidity Screener', hint: 'page', url: '/kering-screener' },
+        { label: 'Insider Activity', hint: 'page', url: '/insider-activity' },
+        { label: 'Insider Radar', hint: 'page', url: '/radar-insider' },
+        { label: 'Gradual Insider Buying', hint: 'page', url: '/dicicil-insider' },
+        { label: 'Agent Meeting', hint: 'page', url: '/rapat-agen' },
+        { label: 'Watchlist Summary', hint: 'page', url: '/watchlist-digest' },
+        { label: 'Decision Journal', hint: 'page', url: '/jurnal-keputusan' },
         { label: 'Retail Sell', hint: 'screen', url: '/display-analyze?type=RetailSellStocks' },
         { label: 'Consol', hint: 'screen', url: '/display-analyze?type=ConsolStocks' },
         { label: 'Retail Sell Low', hint: 'screen', url: '/display-analyze?type=RetailSellLowValueStocks' },
@@ -1698,7 +1698,7 @@
         { label: 'Research', hint: 'page', url: '/research' },
         { label: 'Dream Agent', hint: 'page', url: '/dream-agent/' },
         { label: 'Market Digital Twin', hint: 'page', url: '/digital-twin' },
-        { label: 'Sebaran Kabar', hint: 'page', url: '/sebaran-kabar' },
+        { label: 'News Diffusion', hint: 'page', url: '/sebaran-kabar' },
         { label: 'StockLang', hint: 'page', url: '/stocklang' }
     ];
 
@@ -1714,7 +1714,7 @@
             NAV_INFO[a.getAttribute('href')] = { grup: grup, ikon: svg ? svg.outerHTML : '' };
         });
     });
-    var HINT_LABEL = { page: 'Halaman', watchlist: 'Watchlist', screen: 'Screen' };
+    var HINT_LABEL = { page: 'Page', watchlist: 'Watchlist', screen: 'Screen' };
     function ikonFeather(nama) {
         return (window.feather && feather.icons[nama]) ? feather.icons[nama].toSvg() : '';
     }
@@ -1752,7 +1752,7 @@
             stockMatches = ALL_STOCKS.filter(function (t) { return t.indexOf(q) !== -1; })
                 .sort(function (a, b) { return skor(a) - skor(b); })
                 .slice(0, 8)
-                .map(function (t) { return { type: 'stock', label: t, hint: 'Halaman saham', ticker: t }; });
+                .map(function (t) { return { type: 'stock', label: t, hint: 'Stock overview', ticker: t }; });
         }
 
         cmdItems = pageMatches.slice(0, 8).concat(stockMatches);
@@ -1760,13 +1760,13 @@
 
         $cmdResults.empty();
         if (cmdItems.length === 0) {
-            $cmdResults.append('<div class="cmd-item-empty">Tidak ada halaman atau kode saham yang cocok.</div>');
+            $cmdResults.append('<div class="cmd-item-empty">No matching pages or stock symbols.</div>');
             return;
         }
         var grupSebelumnya = null;
         var ikonSaham = ikonFeather('bar-chart-2');
         cmdItems.forEach(function (item, i) {
-            var grup = item.type === 'stock' ? 'Saham' : 'Halaman';
+            var grup = item.type === 'stock' ? 'Stocks' : 'Pages';
             if (grup !== grupSebelumnya) {
                 $cmdResults.append($('<div class="cmd-group"></div>').text(grup));
                 grupSebelumnya = grup;

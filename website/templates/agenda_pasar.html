@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="content-card">
+    <div class="ap-section-title">{{ title }}</div>
+    <p>Jadwal diperbarui saat dibuka atau Sync (cache 1 jam). Jam yang tersedia ditampilkan dalam WIB. Data ikut dikirim ke HP.</p>
+    <input id="agendaCari" class="form-control" placeholder="Cari emiten, kegiatan, atau kategori…" aria-label="Cari agenda">
+    <select id="agendaRentang" class="form-control" aria-label="Rentang waktu"><option value="30">30 hari ke depan</option><option value="7">7 hari ke depan</option><option value="120">120 hari ke depan</option><option value="all">Termasuk 7 hari terakhir</option></select>
+    {% if kind == 'emiten' %}
+    <label for="agendaJenis" class="mt-2">Jenis agenda</label>
+    <select id="agendaJenis" class="form-control"><option value="">Semua jenis</option></select>
+    <small class="ap-note">Jumlah jadwal mengikuti rentang waktu dan pencarian yang dipilih.</small>
+    {% endif %}
+    <button id="agendaUlang" class="btn btn-outline-secondary mt-2">Perbarui sekarang</button>
+    <p id="agendaStatus" class="ap-note" role="status">Memuat jadwal…</p>
+    <div id="agendaDaftar"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+var data={};
+var isEmiten={{ (kind == 'emiten')|tojson }};
+function esc(x){return $('<div>').text(x == null ? '' : x).html();}
+function agendaFilter(items,q,range,today,until,jenis){
+ var counts={};
+ items.forEach(function(x){counts[x.kategori||'Lainnya']=0;});
+ var eligible=items.filter(function(x){return JSON.stringify(x).toLowerCase().indexOf(q)>=0 && (range==='all'||(x.tanggal>=today&&x.tanggal<=until));});
+ eligible.forEach(function(x){counts[x.kategori||'Lainnya']++;});
+ return {counts:counts,total:eligible.length,rows:eligible.filter(function(x){return !jenis||(x.kategori||'Lainnya')===jenis;})};
+}
+function render(){
+ var q=$('#agendaCari').val().toLowerCase(), range=$('#agendaRentang').val();
+ var now=new Date(), today=now.toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}), until=new Date(now.getTime()+Number(range)*86400000).toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'});
+ var jenis=$('#agendaJenis').val()||'';
+ var filtered=agendaFilter(data.items||[],q,range,today,until,isEmiten?jenis:'');
+ if(isEmiten){
+  $('#agendaJenis').empty().append($('<option>').val('').text('Semua jenis ('+filtered.total+' jadwal)'));
+  Object.keys(filtered.counts).sort().forEach(function(k){$('#agendaJenis').append($('<option>').val(k).text(k+' ('+filtered.counts[k]+' jadwal)'));});
+  $('#agendaJenis').val(Object.prototype.hasOwnProperty.call(filtered.counts,jenis)?jenis:'');
+ }
+ var rows=filtered.rows;
+ function rowHtml(x){return '<div style="padding:14px 0;border-bottom:1px solid var(--line)"><small>'+esc(x.kategori)+' · '+esc(x.jenis_tanggal||'Jadwal')+(x.stale?' · DATA LAMA':'')+'</small><h4>'+esc((x.ticker||'')+' '+x.judul)+'</h4><strong>'+esc(x.waktu?new Date(x.waktu).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' WIB':x.tanggal+' · jam tidak tersedia')+'</strong><p>'+esc(x.catatan||'')+'</p>'+((x.konsensus||x.sebelumnya)?'<p>Konsensus: '+esc(x.konsensus||'—')+' · Sebelumnya: '+esc(x.sebelumnya||'—')+' · Aktual: '+esc(x.aktual||'belum tersedia')+'</p>':'')+'<small>Sumber: '+esc(x.sumber)+'</small></div>';}
+ var html='';
+ if(isEmiten){
+  var groups={};rows.forEach(function(x){var k=x.kategori||'Lainnya';(groups[k]||(groups[k]=[])).push(x);});
+  Object.keys(groups).sort().forEach(function(k){
+   html+='<section style="margin-top:24px"><h3 class="ap-section-title">'+esc(k)+' <small>('+groups[k].length+' jadwal)</small></h3>'+groups[k].map(rowHtml).join('')+'</section>';
+  });
+ }else{html=rows.map(rowHtml).join('');}
+ $('#agendaDaftar').html(html||'<p>Tidak ada jadwal pada pilihan ini. Periksa status sumber di atas.</p>');
+}
+function load(force){
+ $('#agendaUlang').prop('disabled',true); $('#agendaStatus').text('Memperbarui jadwal…');
+ $.post({{ ('/kalender-pasar-data' if kind=='kalender' else '/agenda-emiten-data')|tojson }},force?{force:'1'}:{}).done(function(d){data=d;
+ $('#agendaStatus').text(d.message+' Diperiksa: '+new Date(d.diperiksa).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' WIB. '+(d.sources||[]).map(function(s){return s.nama+': '+(s.ok?'tersambung':'gagal diperbarui');}).join(' · '));render();}).fail(function(){$('#agendaStatus').text('Gagal memuat. Coba perbarui kembali.');}).always(function(){$('#agendaUlang').prop('disabled',false);});
+}
+$(function(){$('#agendaUlang').on('click',function(){load(true);});$('#agendaCari,#agendaRentang,#agendaJenis').on('input change',render);load(false);});
+})();
+</script>
+{% endblock %}

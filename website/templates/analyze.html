@@ -1,0 +1,66 @@
+{% extends "base.html" %} {% block title %}Home{% endblock %}
+
+{% block content %} 
+
+<!--
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.css') }}">
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/button.css') }}">
+
+<form method="POST" action="/admin?param=analyze" id ="analyze" style="display:block">
+    <button type="submit" value="Submit" class="analyze" role="button">Analyze</button>
+</form>
+
+
+<form method="POST" action="/admin?param=add" id ="addPortfolioForm" style="display:block">
+    <div class="box">
+        <span class="text-center">Add Portfolio</span>
+        <div class="input-container">
+            <input type="text" required="" name="portfolio"/>
+            <label>Stock</label>		
+        </div>
+            <button type="submit" value="Submit">submit</button>
+    </div>
+</form>
+<br>
+<br>
+
+
+<form method="POST" action="/admin?param=delete" id ="deletePortfolioForm" style="display:block">
+    <div class="box2">
+        <span class="text-center">Delete Portfolio</span>
+        <div class="input-container">
+            <input type="text" required="" name="portfolio"/>
+            <label>Stock</label>		
+        </div>
+            <button type="submit" value="Submit">submit</button>
+    </div>
+</form>
+-->
+<!--
+<button onclick="hideAndShow('addPortfolioForm', 'deletePortfolioForm')">Add Portfolio</button>
+<button onclick="hideAndShow('deletePortfolioForm', 'addPortfolioForm')">Delete Portfolio</button>
+
+<form method="GET" action="/display-portfolio">
+    <button type="submit" value="Submit">Show PortFolio</button>
+</form>
+-->
+
+<!--
+{% if listImages %}
+<div class="container" >
+    {% for image in listImages %}
+    <div class="mySlides" id = "imageId"  opacity: 0.1>
+        <img src="data:image/jpeg;base64,{{ image }}"  style="width:1150px">
+    </div>
+    
+    {% endfor %}
+
+    <a class="prev" onclick="plusSlides(-1)">&#10094;</a>
+    <a class="next" onclick="plusSlides(1)">&#10095;</a>
+</div>
+{% endif %}
+-->
+
+
+{% endblock %}

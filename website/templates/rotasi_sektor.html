@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Rotasi Sektor{% endblock %}
+{% block page_title %}Rotasi Sektor{% endblock %}
+{% block content %}
+<div class="content-card">
+ <div class="ap-section-title">Rotasi Sektor</div>
+ <p>Bandingkan kekuatan harga, pemerataan kenaikan, dan perubahan aktivitas transaksi antar sektor.</p>
+ <label for="rotasiUrut">Urutkan berdasarkan</label>
+ <select id="rotasiUrut" class="form-control"><option value="r5">Kinerja 5 hari</option><option value="r1">Kinerja 1 hari</option><option value="r20">Kinerja 20 hari</option><option value="aktivitas">Peningkatan aktivitas transaksi</option><option value="perubahan_porsi">Kenaikan porsi transaksi</option></select>
+ <button id="rotasiUlang" class="btn btn-outline-secondary mt-2">Perbarui</button>
+ <div id="rotasiIsi" style="margin-top:16px" role="status">Membaca Summary dan profil sektor…</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static',filename='js/rotasi_sektor.js') }}"></script>
+<script>
+$(function(){
+ var data;
+ function render(){ $('#rotasiIsi').html(rotasiHtml(data,$('#rotasiUrut').val())); }
+ function load(force){
+  $('#rotasiUlang').prop('disabled',true);$('#rotasiIsi').text('Membaca Summary dan profil sektor…');
+  $.post('/rotasi-sektor-data',force?{force:'1'}:{}).done(function(d){data=d;render();}).fail(function(){$('#rotasiIsi').text('Gagal memuat rotasi sektor. Coba perbarui kembali.');}).always(function(){$('#rotasiUlang').prop('disabled',false);});
+ }
+ $('#rotasiUrut').on('change',render);$('#rotasiUlang').on('click',function(){load(true);});load(false);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Count{% endblock %}
+{% block page_title %}Targets &amp; Stop-Loss{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-end mb-3">
+    <button type="button" class="btn btn-sm btn-outline-primary" id="sendWhatsappBtn">
+        Send to WhatsApp
+    </button>
+</div>
+
+<style>
+    .count-section { margin-bottom: 22px; }
+    .count-section-head {
+        display: flex; align-items: baseline; justify-content: space-between;
+        margin-bottom: 10px;
+    }
+    .count-section-head h6 { font-size: 15px; font-weight: 700; margin: 0; color: var(--text); }
+    .count-section-head .sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+
+    .count-table { width: 100%; }
+    .count-table th {
+        font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+        letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim);
+        text-align: right; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    }
+    .count-table th:first-child, .count-table td:first-child { text-align: left; }
+    .count-table td {
+        font-family: var(--font-mono); font-size: 12.5px; text-align: right;
+        padding: 9px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text);
+    }
+    .count-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    .count-table td.ticker { font-weight: 600; text-align: left; letter-spacing: 0.03em; }
+    .count-table td.pct-up { color: var(--accum); }
+    .count-table td.pct-down { color: var(--distrib); }
+
+    .count-empty { color: var(--text-dim); font-size: 13px; padding: 18px 4px; font-family: var(--font-mono); }
+    .count-skipped {
+        font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+        margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line-soft);
+    }
+</style>
+
+{% for label, section in sections.items() %}
+<div class="content-card count-section">
+    <div class="count-section-head">
+        <h6>{{ label }}</h6>
+        <span class="sub">{{ section.rows|length }} STOCKS</span>
+    </div>
+
+    {% if section.rows %}
+    <div class="table-responsive">
+        <table class="count-table">
+            <thead>
+                <tr>
+                    <th>Stock</th>
+                    <th>Close</th>
+                    <th>Target</th>
+                    <th>Target %</th>
+                    <th>Stop Loss</th>
+                    <th>Stop %</th>
+                    <th>Value (B)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in section.rows %}
+                <tr>
+                    <td class="ticker">{{ row['Stock'] }}</td>
+                    <td>{{ row['Close'] }}</td>
+                    <td>{{ row['Target'] }}</td>
+                    <td class="{{ 'pct-up' if row['Target%'] and row['Target%'] > 0 else 'pct-down' if row['Target%'] and row['Target%'] < 0 else '' }}">{{ row['Target%'] }}%</td>
+                    <td>{{ row['Stop Loss'] }}</td>
+                    <td class="{{ 'pct-down' if row['Stop%'] and row['Stop%'] > 0 else '' }}">{{ row['Stop%'] }}%</td>
+                    <td>{{ row['Value'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="count-empty">No stocks in {{ label }} yet.</div>
+    {% endif %}
+
+    {% if section.skipped %}
+    <div class="count-skipped">Skipped (no usable data): {{ section.skipped|join(', ') }}</div>
+    {% endif %}
+</div>
+{% endfor %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Opens WhatsApp (app or Web) with the message pre-filled, letting
+    // you pick who to send it to — no API credentials or setup needed.
+    // wa.me is the standard WhatsApp "click to chat" link format.
+    document.getElementById('sendWhatsappBtn').addEventListener('click', function () {
+        var text = {{ whatsapp_text|tojson }};
+        window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    });
+</script>
+{% endblock %}

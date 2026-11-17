@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+{% block title %}Penemu Pola{% endblock %}
+{% block page_title %}Penemu Pola{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="pmRefresh">Hitung Ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .pm-buka {
+        display: inline-block; white-space: nowrap;
+        border: 1px solid var(--line); border-radius: 6px;
+        color: var(--text-mid); font-family: var(--font-mono); font-size: 11px;
+        padding: 2px 8px; text-decoration: none;
+    }
+    .pm-buka:hover { border-color: var(--accum); color: var(--accum); background: var(--accum-glow); }
+
+    .pm-section-title { font-size: 9px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase;
+                        color: var(--text-dim); margin-bottom: 12px; }
+    .pm-finding { background: var(--void); border: 1px solid var(--line); border-radius: 10px;
+                  padding: 14px 16px; margin-bottom: 14px; }
+    .pm-finding:last-child { margin-bottom: 0; }
+    .pm-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .pm-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .pm-finding strong { color: var(--text); }
+
+    .pm-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+    .pm-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-dim); }
+    .pm-stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 600; margin-top: 4px; }
+
+    .pm-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .pm-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .pm-table th.pm-left { text-align: left; }
+    .pm-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .pm-table td.pm-left { text-align: left; font-family: var(--font-ui); white-space: normal; }
+    .pm-table tbody tr:hover { background: var(--raised); }
+
+    .pm-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px;
+                font-weight: 600; font-family: var(--font-ui); white-space: nowrap; }
+    .pm-up { color: var(--accum); }
+    .pm-down { color: var(--distrib); }
+    .pm-dim { color: var(--text-dim); }
+    .pm-empty { color: var(--text-dim); text-align: center; padding: 30px; font-size: 12px; }
+
+    .pm-controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px; }
+    .pm-field { display: flex; flex-direction: column; gap: 3px; }
+    .pm-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .pm-note { font-size: 11px; color: var(--text-dim); margin-top: 10px; line-height: 1.6; }
+</style>
+
+<div class="pm-controls">
+    <div class="pm-field">
+        <label>Arah</label>
+        <select id="pmArah" class="form-select form-select-sm" style="width:220px;">
+            <option value="positif" selected>Lebih baik dari pasar</option>
+            <option value="negatif">Lebih buruk dari pasar</option>
+            <option value="all">Semua</option>
+        </select>
+    </div>
+    <div class="pm-field">
+        <label>Lolos koreksi</label>
+        <select id="pmLolos" class="form-select form-select-sm" style="width:200px;">
+            <option value="1" selected>Hanya yang lolos (q &lt; 0,10)</option>
+            <option value="0">Termasuk yang tidak lolos</option>
+        </select>
+    </div>
+    <div class="pm-field">
+        <label>Jumlah metrik</label>
+        <select id="pmOrde" class="form-select form-select-sm" style="width:150px;">
+            <option value="0" selected>Semua</option>
+            <option value="1">1 metrik</option>
+            <option value="2">2 metrik</option>
+            <option value="3">3 metrik</option>
+        </select>
+    </div>
+    <div class="pm-field">
+        <label>Cari metrik</label>
+        <input type="text" id="pmFilter" class="form-control form-control-sm"
+               placeholder="volatilitas" style="width:170px;">
+    </div>
+</div>
+
+<div id="pmLoading" class="pm-empty">Menguji ribuan kombinasi metrik&hellip; (~1 menit saat pertama)</div>
+<div id="pmMessage" class="pm-empty" style="display:none;"></div>
+
+<div id="pmBody" style="display:none;">
+
+    <div class="content-card" style="border-left:3px solid var(--distrib);">
+        <div class="pm-section-title" style="color:var(--distrib);">Uji Luar Sampel 10 Tahun &mdash; Hasilnya Mengecilkan Semua Angka di Bawah</div>
+        <div class="pm-finding">
+            <h4>Koreksi FDR tidak melindungi dari kebetulan periode. Itu batasnya, dan sudah terbukti.</h4>
+            <p>FDR hanya mengendalikan pengujian berganda <em>di dalam satu dataset</em>. Seluruh angka di
+            halaman ini berasal dari Jan&ndash;Sep 2026 &mdash; satu rezim pasar turun (baseline win 36,5%).
+            Diuji ulang pada data terpisah (21 emiten, 2016&ndash;2025), fitur direkonstruksi dari JSON mentah
+            dan diverifikasi dulu di periode tumpang tindih: Net Top5 All Lot korelasi <strong>1,000</strong>,
+            Total Buyer/Seller <strong>1,000</strong>, rasio volume <strong>0,890</strong>. Fitur
+            <em>ritel</em> tidak bisa direkonstruksi, jadi pola yang memakainya tidak teruji.</p>
+        </div>
+        <div class="pm-finding">
+            <h4>Dari 450 pola yang lolos FDR, 280 bisa diuji &mdash; dan sebagai kelompok mereka setara lempar koin.</h4>
+            <p>Tanda yang bertahan di luar sampel: <strong>146 dari 280 = 52,1%</strong>, sementara kebetulan
+            murni memberi 50% (uji binomial z=0,72, <strong>p=0,47</strong>). Korelasi antara edge in-sample dan
+            edge luar sampel: <strong>0,099</strong> &mdash; praktis nol. Rata-rata edge jatuh dari
+            &minus;4,57 pp jadi +0,95 pp.</p>
+        </div>
+        <div class="pm-finding">
+            <h4>Yang benar-benar tersisa: arahnya, bukan besarnya.</h4>
+            <p>14 pola lolos saringan ketat (tanda sama, signifikan, n&ge;300, &ge;70% tahun searah) dengan
+            konsistensi tingkat-tahun 73,4% &mdash; tapi ke-14 itu dipilih <em>setelah</em> melihat hasil luar
+            sampel, jadi besarnya mengandung bias seleksi. Supaya tidak sirkular, temanya dirumuskan jadi dua
+            aturan tunggal lalu diuji sekali saja:
+            <strong>beli saat harga 20h turun: +1,37 pp (7/10 tahun)</strong> versus
+            <strong>ikut Top5 beli saat harga sudah naik: &minus;0,95 pp (7/10 tahun)</strong>.
+            Arahnya bertahan &mdash; membeli saat lemah mengalahkan mengikuti akumulasi saat harga sudah lari
+            &mdash; tapi besarnya hanya sekitar <strong>1 poin persen</strong>, bukan 6&ndash;18 pp seperti tabel
+            di bawah, dan keduanya tidak signifikan sendiri-sendiri (t=1,36 dan &minus;0,85).</p>
+        </div>
+        <div class="pm-note">
+            <strong>Cara membaca halaman ini:</strong> urutan dan arah pola masih informatif, tapi
+            <strong>angka edge-nya tidak</strong>. Perlakukan tabel di bawah sebagai daftar hipotesis untuk
+            diuji, bukan daftar sinyal siap pakai.
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="pm-section-title">Membalik Cara Kerjanya</div>
+        <div class="pm-finding">
+            <h4>Selama ini pola ditemukan dengan menebak dulu, baru diuji. Itu kerja mesin.</h4>
+            <p>Serapan Float dan Akumulasi Palsu dibangun persis begitu: tiga hipotesis diuji satu per satu dengan
+            tangan &mdash; dua gagal (&quot;float mengering&quot;, &quot;penjual melebar&quot;), satu berhasil
+            (harga &times; arus). Halaman ini membalik urutannya: <strong>enumerasi semua kombinasi</strong> 1&ndash;3
+            metrik yang tersedia, uji semuanya sekaligus terhadap return ke depan, lalu tampilkan yang paling
+            menyimpang dari baseline.</p>
+        </div>
+        <div class="pm-finding">
+            <h4>Menguji ribuan hipotesis itu berbahaya &mdash; dan itu ditangani secara eksplisit.</h4>
+            <p>Kalau ribuan kombinasi diuji pada data acak sekalipun, sekian persen akan tampak
+            &quot;signifikan&quot; murni karena kebetulan. Menampilkan yang terbaik tanpa koreksi sama saja
+            memamerkan noise. Karena itu tiap sel dihitung p-value-nya terhadap baseline, lalu dikoreksi dengan
+            <strong>Benjamini-Hochberg (FDR)</strong> &mdash; kolom <strong>q</strong> adalah p yang sudah
+            dikoreksi. Sel dengan sampel di bawah minimum tidak pernah ikut dinilai. <strong>Tapi FDR hanya mengendalikan kebetulan di dalam satu dataset</strong> &mdash; ia tidak melindungi dari kebetulan periode, dan uji 10 tahun di atas menunjukkan justru di situ pertahanannya jebol.</p>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="pm-section-title">Hasil Pencarian <span id="pmMeta" class="pm-dim"></span></div>
+        <div class="pm-stat-grid" id="pmStats"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="pm-section-title">Jurnal Maju <span id="pmJurnalMeta" class="pm-dim"></span></div>
+        <div class="pm-finding">
+            <h4>Semua angka di bawah in-sample. Ini yang mencatat ke arah sebaliknya.</h4>
+            <p>Setiap hari bursa, ketujuh metrik tiap emiten disimpan ke berkas
+            <code>pola_jurnal.csv</code> <em>sebelum</em> hasilnya ada. Empat puluh hari bursa kemudian,
+            return yang benar-benar terjadi diukur dan dibandingkan dengan baseline dari baris-baris
+            yang sama. Karena barisnya ditulis lebih dulu, <strong>lookahead secara struktural tidak
+            mungkin</strong> &mdash; tidak ada cara membocorkan masa depan ke berkas yang sudah ada
+            di disk. Backtest mana pun harus dipercaya soal itu; jurnal tidak perlu dipercaya.</p>
+        </div>
+        <div class="pm-stat-grid" id="pmJurnalStats"></div>
+        <div class="pm-note" id="pmJurnalNote"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="pm-section-title">Temuan <span id="pmCount" class="pm-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="pm-table">
+                <thead id="pmThead">
+                    <tr>
+                        <th class="pm-left" data-sort-key="label">Pola</th>
+                        <th data-sort-key="orde">Metrik</th>
+                        <th data-sort-key="n">n</th>
+                        <th data-sort-key="win">Win %</th>
+                        <th data-sort-key="vs_baseline">vs baseline</th>
+                        <th data-sort-key="mean">Rata-rata</th>
+                        <th data-sort-key="median">Median</th>
+                        <th data-sort-key="q">q (FDR)</th>
+                        <th data-sort-key="maju_vs">Maju</th>
+                        <th data-sort-key="n_saham">Chart kini</th>
+                    </tr>
+                </thead>
+                <tbody id="pmTableBody"></tbody>
+            </table>
+        </div>
+        <div class="pm-note">
+            Pengamatan memakai jendela geser tiap 5 hari sehingga <strong>saling tumpang tindih</strong> &mdash;
+            keduanya tidak benar-benar independen, jadi p-value di sini lebih optimistis dari seharusnya.
+            Perlakukan sebagai penyaring kandidat, bukan bukti akhir. Semua temuan juga <strong>belum diuji di
+            luar sampel</strong>: dikalibrasi dan dinilai pada periode yang sama (Jan&ndash;Sep 2026, pasar turun).
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="pm-section-title">Metrik yang Dienumerasi</div>
+        <div style="overflow-x:auto;">
+            <table class="pm-table">
+                <thead><tr><th class="pm-left">Metrik</th><th class="pm-left">Keranjang</th></tr></thead>
+                <tbody id="pmFiturBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var pmData = null;
+    var pmSort = { key: 'vs_baseline', dir: 'desc' };
+
+    function pmNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function pmSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="pm-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'pm-up' : (v < 0 ? 'pm-down' : 'pm-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + pmNum(v, d) + '</span>';
+    }
+
+    // Sel kolom Maju. Sengaja menampilkan em-dash, bukan 0, selama sampelnya
+    // belum cukup: nol akan terbaca sebagai "tidak ada edge" padahal artinya
+    // "belum diukur", dan itu dua kesimpulan yang sangat berbeda.
+    function pmSelMaju(t) {
+        var m = t.maju;
+        if (!m) { return '<span class="pm-dim">&mdash;</span>'; }
+        return '<span title="n=' + m.n + ', win ' + m.win + '%, rata-rata '
+             + m.mean + '%, median ' + m.median + '%">'
+             + pmSigned(m.vs_baseline, 1) + '</span>';
+    }
+
+    function pmRenderJurnal(d) {
+        var j = d.jurnal;
+        if (!j || j.available === false) {
+            $('#pmJurnalMeta').text('— tidak tersedia');
+            $('#pmJurnalStats').empty();
+            $('#pmJurnalNote').text('Jurnal belum bisa dibaca.');
+            return;
+        }
+
+        $('#pmJurnalMeta').text('— ' + (j.mulai ? ('mulai ' + j.mulai) : 'belum ada catatan'));
+        var items = [
+            ['Hari bursa tercatat', pmNum(j.n_hari), 'var(--text)'],
+            ['Potret emiten', pmNum(j.n_baris), 'var(--text-mid)'],
+            ['Sudah matang', pmNum(j.n_matang), j.n_matang ? 'var(--accum)' : 'var(--text-dim)'],
+            ['Pola berangka maju', pmNum(Object.keys(j.pola || {}).length),
+             Object.keys(j.pola || {}).length ? 'var(--accum)' : 'var(--text-dim)'],
+            ['Horizon', pmNum(j.fwd_hari) + ' hari', 'var(--warn)']
+        ];
+        $('#pmJurnalStats').html(items.map(function (it) {
+            return '<div><div class="pm-stat-label">' + it[0] + '</div>'
+                 + '<div class="pm-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+
+        if (j.baseline) {
+            $('#pmJurnalNote').html('<strong>Baseline maju:</strong> win ' + j.baseline.win
+                + '%, rata-rata ' + j.baseline.mean + '%, median ' + j.baseline.median
+                + '% dari ' + pmNum(j.baseline.n) + ' potret yang sudah matang. Kolom <strong>Maju</strong>'
+                + ' di tabel bawah adalah selisih win pola terhadap baseline ini &mdash; bukan terhadap'
+                + ' baseline in-sample, karena rentang tanggal dan semestanya berbeda.'
+                + ' Pola dengan kurang dari ' + j.min_n + ' potret matang tidak diberi angka.');
+        } else {
+            $('#pmJurnalNote').html('<strong>Belum ada yang matang.</strong> Bacaan pertama butuh '
+                + j.fwd_hari + ' hari bursa sejak catatan tertua'
+                + (j.sisa_hari_bursa === null || j.sisa_hari_bursa === undefined
+                   ? '' : ' &mdash; sisa sekitar <strong>' + j.sisa_hari_bursa + ' hari bursa</strong>')
+                + '. Tidak ada cara mempercepatnya: apa pun yang dihitung dari data yang sudah ada'
+                + ' akan kembali jadi in-sample, dan itu persis yang sedang dihindari.');
+        }
+    }
+
+    function pmRenderStats(d) {
+        var b = d.baseline;
+        $('#pmMeta').text('— baseline: win ' + b.win + '%, rata-rata ' + b.mean + '%, n ' + pmNum(b.n)
+            + ' · horizon ' + d.config.FWD + ' hari');
+        var items = [
+            ['Kombinasi diuji', pmNum(d.n_diuji), 'var(--text)'],
+            ['Lolos sampel minimum', pmNum(d.n_temuan), 'var(--text-mid)'],
+            ['Lolos koreksi FDR', pmNum(d.n_lolos), 'var(--accum)'],
+            ['Dibuang: sampel kecil', pmNum(d.n_dilewati_kecil), 'var(--text-dim)'],
+            ['Baseline win', pmNum(b.win, 1) + '%', 'var(--warn)']
+        ];
+        $('#pmStats').html(items.map(function (it) {
+            return '<div><div class="pm-stat-label">' + it[0] + '</div>'
+                 + '<div class="pm-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function pmRenderFitur(d) {
+        $('#pmFiturBody').html(Object.keys(d.fitur).map(function (k) {
+            return '<tr><td class="pm-left">' + d.fitur[k].label + '</td>'
+                 + '<td class="pm-left pm-dim">' + d.fitur[k].keranjang.join(' · ') + '</td></tr>';
+        }).join(''));
+    }
+
+    function pmRenderTable() {
+        if (!pmData) { return; }
+        var arah = $('#pmArah').val();
+        var lolosOnly = $('#pmLolos').val() === '1';
+        var orde = parseInt($('#pmOrde').val(), 10);
+        var q = ($('#pmFilter').val() || '').trim().toLowerCase();
+
+        var jp = (pmData.jurnal && pmData.jurnal.pola) || {};
+        pmData.temuan.forEach(function (t) {
+            t.maju = jp[t.kunci] || null;
+            t.maju_vs = t.maju ? t.maju.vs_baseline : null;
+        });
+
+        var rows = pmData.temuan.filter(function (t) {
+            if (lolosOnly && !t.lolos) { return false; }
+            if (arah === 'positif' && !(t.vs_baseline > 0)) { return false; }
+            if (arah === 'negatif' && !(t.vs_baseline < 0)) { return false; }
+            if (orde && t.orde !== orde) { return false; }
+            if (q && t.label.toLowerCase().indexOf(q) === -1) { return false; }
+            return true;
+        });
+        rows = window.sortRows(rows, pmSort.key, pmSort.dir);
+
+        $('#pmCount').text('— ' + rows.length + ' pola');
+        if (!rows.length) {
+            $('#pmTableBody').html('<tr><td colspan="10" class="pm-empty">Tidak ada pola yang cocok.</td></tr>');
+            return;
+        }
+
+        $('#pmTableBody').html(rows.slice(0, 300).map(function (t) {
+            var warna = t.vs_baseline > 0 ? 'var(--accum)' : 'var(--distrib)';
+            var jml = (t.saham || []).length;
+            // Langsung ke chart-viewer berisi semua emiten itu. Yang dikirim
+            // cuma kunci polanya; daftar kodenya diambil server dari hasil
+            // mine() yang sama, jadi URL tetap pendek dan tidak bisa basi.
+            var sel = jml
+                ? '<a class="pm-buka" href="/penemu-pola/saham?k='
+                  + encodeURIComponent(t.kunci || '') + '">'
+                  + jml + ' chart &rsaquo;</a>'
+                : '<span class="pm-dim">&mdash;</span>';
+
+            return '<tr>'
+                 + '<td class="pm-left">' + t.label
+                 +   (t.lolos ? '' : ' <span class="pm-badge" style="color:var(--text-dim); border:1px solid var(--line);">belum lolos</span>')
+                 + '</td>'
+                 + '<td>' + t.orde + '</td>'
+                 + '<td>' + pmNum(t.n) + '</td>'
+                 + '<td style="color:' + warna + ';">' + pmNum(t.win, 1) + '</td>'
+                 + '<td>' + pmSigned(t.vs_baseline, 1) + '</td>'
+                 + '<td>' + pmNum(t.mean, 2) + '</td>'
+                 + '<td>' + pmNum(t.median, 2) + '</td>'
+                 + '<td class="pm-dim">' + (t.q < 0.0001 ? '&lt;0,0001' : pmNum(t.q, 4)) + '</td>'
+                 + '<td>' + pmSelMaju(t) + '</td>'
+                 + '<td>' + sel + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function pmLoad(force) {
+        $('#pmLoading').show();
+        $('#pmBody').hide();
+        $('#pmMessage').hide();
+        $.post('/penemu-pola-data', { force: force ? '1' : '0' }).done(function (d) {
+            $('#pmLoading').hide();
+            if (!d || d.available === false) {
+                $('#pmMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            pmData = d;
+            pmRenderStats(d);
+            pmRenderJurnal(d);
+            pmRenderFitur(d);
+            pmRenderTable();
+            $('#pmBody').show();
+        }).fail(function () {
+            $('#pmLoading').hide();
+            $('#pmMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // Di dalam document.ready: base.html memasang $.ajaxSetup untuk header
+    // X-CSRFToken di dalam $(function(){...}), jadi POST yang berangkat
+    // lebih awal akan ditolak 400.
+    $(document).ready(function () {
+        $('#pmArah, #pmLolos, #pmOrde').on('change', pmRenderTable);
+        $('#pmFilter').on('input', pmRenderTable);
+        $('#pmRefresh').on('click', function () { pmLoad(true); });
+
+        pmSort = window.makeSortable('#pmThead', function (key, dir) {
+            pmSort.key = key; pmSort.dir = dir;
+            pmRenderTable();
+        }, pmSort.key, pmSort.dir);
+
+        pmLoad(false);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,1197 @@
+{% extends "base.html" %}
+{% block title %}{{ db_type_name if db_type_name else 'Charts' }}{% endblock %}
+{% block page_title %}{{ db_type_name if db_type_name else 'Charts' }}{% endblock %}
+
+{% block page_actions %}
+{% if tickers %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="brokerToggleBtn">Broker Summary &#9662;</button>
+<button type="button" class="btn btn-sm btn-outline-secondary" id="crowdToggleBtn">Lensa Keramaian &#9662;</button>
+{% if context == 'watchlist' %}
+<button type="button" class="btn btn-sm btn-outline-success" id="pdfShareBtn" title="Menggabungkan Portfolio, Best, Best Low &amp; Pattern Up jadi satu PDF">Kirim PDF ke WhatsApp</button>
+{% endif %}
+{% endif %}
+{% if context == 'kering' %}
+<div class="btn-group btn-group-sm" role="group">
+    <a class="btn btn-outline-secondary {{ 'active' if keringDaysBack == 14 }}" href="/kering-screener?days_back=14">14h</a>
+    <a class="btn btn-outline-secondary {{ 'active' if keringDaysBack == 30 }}" href="/kering-screener?days_back=30">30h</a>
+    <a class="btn btn-outline-secondary {{ 'active' if keringDaysBack == 60 }}" href="/kering-screener?days_back=60">60h</a>
+</div>
+{% if keringStale %}
+{# Cache lama disajikan seketika sementara hitung ulang berjalan di latar.
+   Tanpa penanda ini, angka lama terlihat seperti angka terbaru. #}
+<span style="font-size:11px; font-weight:600; color:var(--warn); margin-right:10px;">
+  &middot; sedang diperbarui di latar, muat ulang sebentar lagi</span>
+{% endif %}
+<a class="btn btn-sm btn-outline-secondary" href="/kering-screener?days_back={{ keringDaysBack }}&force=1">Pindai Ulang</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<style>
+    /* Swap header order on this page only: Broker Summary button on the
+       left, page title on the right. The shared .topbar-right class sets
+       margin-left:auto (it's normally the last item in a row), which
+       overrides justify-content and pins it to the right regardless of
+       `order` -- override that here so it actually sits at the left edge
+       and pushes the title (order 2) to the right instead. */
+    .page-header .page-title-wrap { order: 2; }
+    .page-header .topbar-right { order: 1; margin-left: 0; margin-right: auto; }
+
+    .viewer-layout { display: flex; align-items: flex-start; }
+    .broker-panel {
+        width: 0; flex-shrink: 0; overflow: hidden;
+        align-self: flex-start;
+        background: var(--surface);
+        border: 1px solid var(--line-soft);
+        border-radius: 12px;
+        padding: 14px; margin-right: 0;
+        opacity: 0;
+        transition: width 0.22s ease, margin-right 0.22s ease, opacity 0.18s ease;
+    }
+    .broker-panel.open {
+        width: 420px; margin-right: 16px; opacity: 1;
+    }
+    /* padding 22px, sama dengan .content-card lain -- termasuk kartu
+       Ringkasan Sinyal tepat di atasnya. Dulu 12px, jadi tepi kartunya
+       lurus tapi ISI-nya masuk 10px lebih jauh daripada kartu di atas,
+       dan itu yang terbaca sebagai tidak rapi. Latarnya ikut --void
+       supaya seluruh area chart jadi satu bidang hitam. */
+    .chart-viewer-card {
+        position: relative; flex: 1; min-width: 0;
+        padding: 22px; background: var(--void);
+    }
+    .broker-panel .form-label {
+        font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+        text-transform: uppercase; color: var(--text-dim); margin-bottom: 0;
+    }
+    .broker-panel .mb-2, .broker-panel .mb-3 { margin-bottom: 6px !important; }
+    .broker-panel .form-control-sm, .broker-panel .form-select-sm { padding: 4px 8px; font-size: 12px; }
+    .broker-panel .btn-sm { padding: 5px; font-size: 12px; }
+    .broker-row { display: flex; gap: 8px; }
+    .broker-row > div { flex: 1; min-width: 0; }
+    .broker-row > .broker-date-field { flex: 1.65; }
+    .broker-date-nav { display: flex; align-items: stretch; gap: 4px; }
+    .broker-date-nav input { flex: 1; min-width: 0; }
+    .broker-date-nav .btn { flex: 0 0 28px; font-size: 18px; line-height: 1; }
+
+    .broker-table-wrap table { width: 100%; font-size: 12.5px; }
+    .broker-table-wrap th, .broker-table-wrap td {
+        white-space: nowrap; padding: 4px 8px;
+    }
+    .broker-table-wrap { margin-top: 14px; max-height: 640px; overflow-y: auto; overflow-x: auto; }
+
+    /* Plotly's default modebar ships plain gray — restyle it to sit
+       quietly against the dark theme. */
+    .js-plotly-plot .modebar { background: transparent !important; }
+    .js-plotly-plot .modebar-btn path { fill: var(--text-dim); }
+    .js-plotly-plot .modebar-btn:hover path, .js-plotly-plot .modebar-btn.active path { fill: var(--accum); }
+    /* Sewarna dengan plot_bgcolor chart-nya (--void). Dulu bergradien
+       abu-abu, jadi ada cincin terang di antara bidang plot yang hitam
+       dan kartu di luarnya -- kelihatan sebagai "kotak abu-abu" yang
+       mengelilingi chart. Garis tepinya dipertahankan karena saat Weekly
+       View menyala ada DUA frame bersebelahan yang perlu dibedakan. */
+    .chart-frame {
+        flex: 1; border-radius: 12px; overflow: hidden;
+        background: var(--void);
+        border: 1px solid var(--line-soft);
+    }
+    .chart-nav-btn {
+        width: 38px; height: 38px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+    }
+    .weekly-frame-label {
+        font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+        text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 12px 0;
+    }
+    .chart-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+    .chart-ticker-label { font-size: 18px; font-weight: 800; }
+    .chart-counter { color: var(--ink-dim); font-size: 13px; margin-right: 8px; }
+    .chart-actions .btn { margin-left: 6px; }
+
+    @media (max-width: 1100px) {
+        .viewer-layout { flex-direction: column; }
+        .broker-panel.open { width: 100%; margin-right: 0; margin-bottom: 16px; }
+        .broker-table-wrap table { font-size: 9.5px; }
+        .broker-table-wrap th, .broker-table-wrap td { padding: 3px 2px; }
+    }
+
+    /* Kartu keputusan -- sama persis dengan Halaman Saham (dibangun oleh
+       DecisionCard di static/js/stock_chart.js), cuma id elemennya beda
+       supaya bisa berdampingan dengan chart di sini. */
+    .hb-decision-head { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; margin-bottom: 16px; }
+    .hb-decision-ring-wrap { position: relative; width: 116px; height: 116px; flex: 0 0 auto; }
+    .hb-decision-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column;
+                               align-items: center; justify-content: center; pointer-events: none; }
+    .hb-decision-headline { font-family: var(--font-mono); font-size: 24px; font-weight: 700; line-height: 1; }
+    .hb-decision-sub { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+    .hb-decision-legend { display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: var(--text-mid); }
+    .hb-decision-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; }
+    .hb-flags { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+    .hb-flag { border-radius: 10px; padding: 11px 13px; }
+    .hb-flag-name { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+    .hb-flag-detail { font-size: 11px; line-height: 1.55; color: var(--text-mid); }
+    .hb-flag-hijau { background: rgba(22,224,174,0.08); border: 1px solid rgba(22,224,174,0.3); }
+    .hb-flag-hijau .hb-flag-name { color: var(--accum); }
+    .hb-flag-kuning { background: rgba(255,195,82,0.08); border: 1px solid rgba(255,195,82,0.3); }
+    .hb-flag-kuning .hb-flag-name { color: var(--warn); }
+    .hb-flag-merah { background: rgba(255,96,118,0.08); border: 1px solid rgba(255,96,118,0.3); }
+    .hb-flag-merah .hb-flag-name { color: var(--distrib); }
+    .hb-flag-netral { background: var(--void); border: 1px solid var(--line); }
+    .hb-flag-netral .hb-flag-name { color: var(--text); }
+    .hb-note { color: var(--text-dim); font-size: 11px; line-height: 1.65; margin-top: 10px; }
+    .hb-empty { color: var(--text-dim); font-size: 12.5px; padding: 10px 0; }
+
+    /* Screen/Insider -- disalin persis dari Halaman Saham (dulu dibuang
+       di sini via ?light=1 untuk performa; sekarang ikut ditampilkan
+       atas permintaan, lihat loadDecisionCard(). Pola Penemu Pola
+       sempat ditambahkan juga tapi sengaja dibuang lagi dari halaman
+       ini atas permintaan -- tetap ada di Halaman Saham). */
+    .hb-screen { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+    .hb-screen-name { font-family: var(--font-ui); font-size: 15px; font-weight: 600; color: var(--text); }
+    .hb-record { background: var(--void); border: 1px solid var(--line); border-radius: 8px;
+                 padding: 10px 12px; font-size: 11.5px; color: var(--text-mid); line-height: 1.65; flex: 1 1 320px; }
+    .hb-record strong { color: var(--text); }
+    .hb-ins-row { display: flex; align-items: baseline; gap: 8px; padding: 7px 0;
+                  border-bottom: 1px solid var(--line-soft); font-size: 12px; flex-wrap: wrap; }
+    .hb-ins-row:last-child { border-bottom: 0; }
+    .hb-ins-date { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); flex: 0 0 76px; }
+    .hb-ins-name { color: var(--text-mid); }
+    .hb-ins-purpose { flex-basis: 100%; min-width: 0; color: var(--text-mid); overflow-wrap: anywhere; }
+    .hb-ins-buy { color: var(--accum); border: 1px solid rgba(22,224,174,0.35); background: rgba(22,224,174,0.08); }
+    .hb-ins-sell { color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08); }
+    .hb-ins-value { margin-left: auto; font-family: var(--font-mono); color: var(--text); }
+    .hb-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 9.5px;
+                font-family: var(--font-ui); font-weight: 600; }
+
+    .kr2-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .kr2-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 8px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .kr2-table th:first-child { text-align: left; }
+    .kr2-table td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .kr2-table td:first-child { text-align: left; }
+    .kr2-calib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
+    .kr2-calib-card { background: var(--void); border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; }
+    .kr2-calib-ticker { font-family: var(--font-ui); font-weight: 700; font-size: 13px; }
+    .kr2-calib-detail { font-size: 11px; color: var(--text-mid); margin-top: 3px; font-family: var(--font-mono); }
+    .kr2-days-link { color: var(--text-dim); }
+    .kr2-days-link.active { color: var(--accum); font-weight: 600; }
+</style>
+
+{% if tickers %}
+<style>
+    .crowd-panel { display: none; background: var(--surface); border: 1px solid var(--line);
+                   border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+    .crowd-panel.open { display: block; }
+    .crowd-summary { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+    .crowd-chip { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-mid); }
+    .crowd-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .crowd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .crowd-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                      text-transform: uppercase; color: var(--text-dim); padding: 0 9px 8px;
+                      border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .crowd-table th:first-child, .crowd-table th.cl { text-align: left; }
+    .crowd-table td { padding: 8px 9px; border-bottom: 1px solid var(--line-soft);
+                      text-align: right; font-family: var(--font-mono); white-space: nowrap; }
+    .crowd-table td:first-child, .crowd-table td.cl { text-align: left; }
+    .crowd-table tbody tr { cursor: pointer; }
+    .crowd-table tbody tr:hover { background: var(--raised); }
+    .crowd-badge { display: inline-block; padding: 2px 8px; border-radius: 999px;
+                   font-size: 10px; font-family: var(--font-ui); font-weight: 600; }
+    .crowd-note { color: var(--text-dim); font-size: 11px; line-height: 1.6; margin-top: 10px; }
+    .crowd-cur { font-size: 11.5px; color: var(--text-mid); margin-left: 10px; }
+</style>
+
+<div id="captureArea">
+<div class="crowd-panel" id="crowdPanel">
+    <div class="crowd-summary" id="crowdSummary"></div>
+    <div style="overflow-x:auto;">
+        <table class="crowd-table">
+            <thead>
+                <tr>
+                    <th class="cl">Kode</th>
+                    <th class="cl">Hasil historis kelompoknya</th>
+                    <th class="cl">Keramaian</th>
+                    <th>Volume</th>
+                    <th>Nilai transaksi</th>
+                    <th>Rata-rata 20h</th>
+                    <th>Win rate</th>
+                    <th>vs Pasar</th>
+                </tr>
+            </thead>
+            <tbody id="crowdBody"></tbody>
+        </table>
+    </div>
+    <div class="crowd-note" id="crowdNote"></div>
+</div>
+
+
+<div class="content-card" id="siDecisionCard" style="margin-bottom:16px; display:none;">
+    <div class="hb-section-title">Ringkasan Sinyal — <span id="siDecisionTicker"></span></div>
+    <div class="hb-decision-head">
+        <div class="hb-decision-ring-wrap">
+            <canvas id="siRingChart"></canvas>
+            <div class="hb-decision-ring-center">
+                <div class="hb-decision-headline" id="siDecisionHeadline">—</div>
+                <div class="hb-decision-sub" id="siDecisionSub"></div>
+            </div>
+        </div>
+        <div class="hb-decision-legend" id="siDecisionLegend"></div>
+    </div>
+    <div class="hb-flags" id="siFlags"></div>
+    <div class="hb-note">Bukan skor gabungan dan bukan rekomendasi beli/jual &mdash; tiap warna berdiri sendiri
+        per sumber data. Detail lengkap ada di <a href="#" id="siHubLink">Halaman Saham</a> ticker ini.</div>
+
+    <!-- Screen/Insider: dulu dibuang lewat ?light=1 (dianggap cuma
+         dipakai Halaman Saham), sekarang ikut ditampilkan di sini juga
+         -- lihat catatan "Screen otomatis dan Aktivitas insider sengaja
+         tidak dimasukkan ke RING" di style Halaman Saham: itu soal
+         ring/flag di atas (dimensi yang struktural tidak pernah bisa
+         hijau bikin ring itu bising), bukan alasan buat menyembunyikan
+         datanya sama sekali dari halaman ini. (Pola Penemu Pola sempat
+         ditambahkan di sini juga tapi dibuang lagi atas permintaan.) -->
+    <div class="hb-section-title" style="margin-top:20px;">Screen &amp; Rekam Jejaknya</div>
+    <div id="siScreen"></div>
+
+    <div class="hb-section-title" style="margin-top:20px;">Aktivitas Insider (180 hari terakhir)</div>
+    <div class="hb-note" id="siInsiderCluster" style="display:none;"></div>
+    <div id="siInsider"></div>
+</div>
+
+<div id="sfMount"></div>
+<div class="viewer-layout">
+    <div class="broker-panel" id="brokerPanel">
+        <form id="brokerSummaryForm">
+            <div class="mb-2">
+                <div class="form-label">Stock</div>
+                <input type="text" name="stock" id="brokerStockInput" class="form-control form-control-sm" placeholder="Stock code" autocomplete="off">
+            </div>
+            <div class="mb-3 broker-row">
+                <div>
+                    <div class="form-label">Type</div>
+                    <select name="stockType" class="form-select form-select-sm">
+                        <option value="All">All</option>
+                        <option value="Foreign">Foreign</option>
+                    </select>
+                </div>
+                <div class="broker-date-field">
+                    <label class="form-label" for="brokerRangeDate">Date range</label>
+                    <div class="broker-date-nav">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="brokerDatePrev" aria-label="Tanggal sebelumnya" title="Mundur 1 hari">&#8249;</button>
+                        <input type="text" name="rangeDate" id="brokerRangeDate" class="form-control form-control-sm" value="{{ rangeDate }}">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="brokerDateNext" aria-label="Tanggal sesudahnya" title="Maju 1 hari">&#8250;</button>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary w-100">Process</button>
+        </form>
+        <div class="broker-table-wrap" id="brokerTable"></div>
+    </div>
+    <div class="content-card chart-viewer-card">
+        <div class="chart-header">
+            <div>
+                <span class="chart-counter" id="chartCounter"></span>
+                <span class="chart-ticker-label" id="chartTickerLabel"></span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="weeklyToggleBtn">Weekly View</button>
+                <div class="chart-actions" id="chartActions"></div>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-start">
+            <button type="button" class="btn btn-outline-secondary chart-nav-btn" id="prevBtn">&#8249;</button>
+            <div style="flex:1; min-width:0; display:flex; gap:14px; flex-wrap:wrap;">
+                <div class="chart-frame" style="flex:1; min-width:280px;">
+                    <div id="chartDiv" style="height:760px;"></div>
+                </div>
+                <div class="chart-frame" id="weeklyFrame" style="display:none; flex:1; min-width:280px;">
+                    <div class="weekly-frame-label">Weekly (5-day bars, approx.)</div>
+                    <div id="weeklyChartDiv" style="height:540px;"></div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-outline-secondary chart-nav-btn" id="nextBtn">&#8250;</button>
+        </div>
+    </div>
+</div>
+</div>
+{% else %}
+    <div class="content-card text-center text-muted py-5">No stocks to display.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/stock_chart.js') }}"></script>
+
+
+<script>
+    var tickers = {{ (tickers or [])|tojson }};
+    var focusDates = {{ (focusDates if focusDates else [])|tojson }};
+    var candidateMeta = {{ (candidateMeta if candidateMeta else [])|tojson }};
+    var dbTypeName = {{ (db_type_name or None)|tojson }};
+    var addTargets = {{ (add_targets or [])|tojson }};
+    var allowDelete = {{ 'true' if allow_delete else 'false' }};
+    var contextType = {{ (context or None)|tojson }};
+    var currentIndex = {{ startIndex|default(0) }};
+    var lastChartData = null;
+    var WHATSAPP_SHARE_TYPES = ['PortfolioStocks', 'BestStocks', 'BestLowStocks'];
+
+    var TYPE_LABELS = {
+        'BestStocks': 'Best',
+        'BestLowStocks': 'Best Low',
+        'PatternUpStocks': 'Pattern Up',
+        'PortfolioStocks': 'Portfolio'
+    };
+    function labelForType(t) { return TYPE_LABELS[t] || t; }
+
+    // Plotly doesn't auto-rescale the y-axes to fit whatever's currently
+    // visible when you zoom/pan the x-axis (TradingView does this). This
+    // recomputes price/net-lot/volume ranges from only the visible
+    // candles on every viewport change.
+
+    // The Weekly Summary CSV this app reads from only has Net Top3 Lot /
+    // Retail — no OHLC — so a real weekly candlestick isn't available
+    // from the data pipeline. This resamples the daily OHLC we do have
+    // into 5-trading-day buckets as an approximation, so the two
+    // timeframes can at least be eyeballed side by side.
+    function resampleWeekly(data) {
+        var weeks = [];
+        for (var i = 0; i < data.dates.length; i += 5) {
+            var o = data.open.slice(i, i + 5), h = data.high.slice(i, i + 5),
+                l = data.low.slice(i, i + 5), c = data.close.slice(i, i + 5),
+                d = data.dates.slice(i, i + 5);
+            if (!o.length) { continue; }
+            weeks.push({
+                label: d[0] + (d.length > 1 ? '–' + d[d.length - 1] : ''),
+                open: o[0], high: Math.max.apply(null, h), low: Math.min.apply(null, l), close: c[c.length - 1]
+            });
+        }
+        return weeks;
+    }
+
+    function renderWeeklyChart(data) {
+        var weeks = resampleWeekly(data);
+        var trace = {
+            type: 'candlestick',
+            x: weeks.map(function (w) { return w.label; }),
+            open: weeks.map(function (w) { return w.open; }),
+            high: weeks.map(function (w) { return w.high; }),
+            low: weeks.map(function (w) { return w.low; }),
+            close: weeks.map(function (w) { return w.close; }),
+            increasing: { line: { color: THEME.up, width: 1 }, fillcolor: THEME.up },
+            decreasing: { line: { color: THEME.down, width: 1 }, fillcolor: THEME.down }
+        };
+        var layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: '#04060A',
+            font: { color: THEME.text, family: 'JetBrains Mono' },
+            // r dulu 20 - label tanggal terakhir (diagonal, tickangle -45,
+            // lebih lebar dari label chart utama yang vertikal) mepet ke
+            // tepi kanan, gampang kepotong di DPI/zoom tertentu. Disamakan
+            // ke margin kanan chart utama (lihat stock_chart.js) yang sudah
+            // terbukti punya jarak aman.
+            margin: { t: 10, l: 46, r: 46, b: 60 },
+            showlegend: false, dragmode: 'pan',
+            xaxis: { rangeslider: { visible: false }, tickangle: -45, gridcolor: 'rgba(255,255,255,0.045)', color: THEME.text, tickfont: { size: 9, family: 'JetBrains Mono' } },
+            yaxis: { gridcolor: 'rgba(255,255,255,0.045)', color: THEME.text, tickfont: { size: 10, family: 'JetBrains Mono' } }
+        };
+        Plotly.newPlot('weeklyChartDiv', [trace], layout, { responsive: true, displaylogo: false, scrollZoom: true });
+    }
+
+    $('#weeklyToggleBtn').on('click', function () {
+        var $frame = $('#weeklyFrame');
+        $frame.toggle();
+        $(this).toggleClass('active', $frame.is(':visible'));
+        if ($frame.is(':visible') && lastChartData) {
+            renderWeeklyChart(lastChartData);
+        }
+    });
+
+    // Broker Summary is a collapsible panel next to the chart (closed by
+    // default so the chart gets the full width), not a floating overlay --
+    // toggling it changes how much width Plotly actually has. Plotly's
+    // responsive:true only reacts to the window 'resize' event (it
+    // doesn't watch the container itself), so without dispatching one
+    // here the chart would stay sized to whatever width it had when it
+    // first rendered. The delay matches the panel's width transition
+    // (220ms) so Plotly measures the *settled* width, not a mid-animation
+    // one -- same pattern the sidebar collapse button uses.
+    function toggleBrokerPanel() {
+        var isOpen = $('#brokerPanel').toggleClass('open').hasClass('open');
+        $('#brokerToggleBtn').html('Broker Summary ' + (isOpen ? '&#9652;' : '&#9662;'));
+        setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 230);
+    }
+
+    $('#crowdToggleBtn').on('click', function () {
+        $('#crowdPanel').toggleClass('open');
+        if ($('#crowdPanel').hasClass('open')) { loadCrowding(); }
+    });
+
+    function downloadBlob(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename || ((currentTicker() || 'chart') + '.png');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    // Loop berurutan lewat SEMUA saham di watchlist ini (harus berurutan,
+    // bukan paralel -- semuanya berbagi DOM/elemen chart yang sama):
+    // muat data, tunggu Plotly BENAR-BENAR selesai melukis (lewat promise
+    // dari renderChart(), bukan cuma sampai datanya datang), lalu tangkap
+    // #captureArea jadi canvas dan serahkan ke onCapture(). Dipakai oleh
+    // "Kirim PDF ke WhatsApp".
+    //
+    // Akar masalah "hasilnya cuma layar hitam polos" (sempat dikira soal
+    // tab background) ternyata: base.html punya aturan CSS
+    // `.app-content > * { animation: rise .4s ... backwards; }` (efek
+    // fade-in saat halaman dimuat) yang berlaku juga ke #captureArea.
+    // html2canvas meng-clone DOM ke dokumen terpisah untuk digambar ulang
+    // -- clone itu MEMICU ULANG animasi "rise" dari awal (opacity:0), dan
+    // tertangkap sebelum animasinya sempat selesai. onclone di bawah
+    // mematikan animasi itu KHUSUS di elemen hasil clone, tidak menyentuh
+    // tampilan halaman yang sungguhan.
+    function captureAllTickers(onProgress, onCapture) {
+        var savedIndex = currentIndex;
+        var scale = window.devicePixelRatio > 1 ? window.devicePixelRatio : 2;
+        var bg = getComputedStyle(document.body).backgroundColor || '#04060A';
+        var failed = [];
+
+        function captureOne(t, i) {
+            return html2canvas(document.getElementById('captureArea'), {
+                backgroundColor: bg, useCORS: true, scale: scale,
+                onclone: function (clonedDoc) {
+                    var el = clonedDoc.getElementById('captureArea');
+                    if (!el) { return; }
+                    // Bukan cuma #captureArea sendiri -- animasi "rise" di
+                    // base.html juga kena ke elemen-elemen di dalamnya
+                    // (terverifikasi: >200 elemen turunan ikut punya
+                    // opacity:0 di clone-nya), jadi dipaksa satu-satu.
+                    el.style.animation = 'none';
+                    el.style.opacity = '1';
+                    el.style.transform = 'none';
+                    el.querySelectorAll('*').forEach(function (node) {
+                        node.style.animation = 'none';
+                        node.style.opacity = '1';
+                    });
+                }
+            }).then(function (canvas) {
+                return onCapture(t, canvas, i);
+            }).catch(function () { failed.push(t); });
+        }
+
+        return new Promise(function (resolveAll) {
+            function processOne(i) {
+                if (i >= tickers.length) {
+                    currentIndex = savedIndex;
+                    loadCurrent();
+                    resolveAll(failed);
+                    return;
+                }
+                currentIndex = i;
+                var t = tickers[i];
+                onProgress(i, t);
+                $.when(loadCurrent()).always(function () {
+                    setTimeout(function () {
+                        captureOne(t, i).then(function () { processOne(i + 1); });
+                    }, 250);
+                });
+            }
+            processOne(0);
+        });
+    }
+
+    // Kirim PDF ke WhatsApp -- BUKAN cuma watchlist yang sedang dibuka:
+    // Portfolio, Best, Best Low dan Pattern Up ditarik semua lalu digabung
+    // jadi SATU file PDF (satu halaman gambar per saham, plus satu
+    // halaman judul di awal tiap bagian), supaya sekali kirim ke WhatsApp
+    // sudah mencakup keempat watchlist. Satu file jauh lebih ramah
+    // dibanding banyak gambar terpisah: tidak kena batas "multiple
+    // automatic downloads" browser, dan dukungan Web Share API untuk SATU
+    // file jauh lebih luas daripada banyak file sekaligus.
+    var PDF_WATCHLIST_TYPES = [
+        { type: 'PortfolioStocks', label: 'Portfolio' },
+        { type: 'BestStocks', label: 'Best' },
+        { type: 'BestLowStocks', label: 'Best Low' },
+        { type: 'PatternUpStocks', label: 'Pattern Up' }
+    ];
+    var PDF_TITLE_W = 900, PDF_TITLE_H = 500;
+
+    function addPdfTitlePage(doc, label, count) {
+        if (doc) {
+            doc.addPage([PDF_TITLE_W, PDF_TITLE_H], 'l');
+        } else {
+            doc = new window.jspdf.jsPDF({ unit: 'px', format: [PDF_TITLE_W, PDF_TITLE_H], orientation: 'l' });
+        }
+        doc.setFillColor(4, 6, 10);
+        doc.rect(0, 0, PDF_TITLE_W, PDF_TITLE_H, 'F');
+        doc.setTextColor(230, 236, 245);
+        doc.setFontSize(40);
+        doc.text(label, PDF_TITLE_W / 2, PDF_TITLE_H / 2 - 10, { align: 'center' });
+        doc.setFontSize(18);
+        doc.setTextColor(150, 162, 182);
+        doc.text(count + ' saham', PDF_TITLE_W / 2, PDF_TITLE_H / 2 + 26, { align: 'center' });
+        return doc;
+    }
+
+    // Prosesnya beberapa menit untuk watchlist besar. Boleh pindah tab
+    // atau aplikasi lain selagi berjalan (trik audio senyap di
+    // captureAllTickers() menjaga Chrome tidak men-throttle tab-nya) --
+    // TAPI tab halaman ini tidak boleh ditutup/di-refresh, karena
+    // prosesnya JS di dalam tab itu sendiri, bukan proses di server.
+    function notifyWhenDone(body) {
+        var originalTitle = document.title;
+        var flashCount = 0;
+        var flashTimer = setInterval(function () {
+            document.title = (flashCount % 2 === 0) ? '✓ PDF siap!' : originalTitle;
+            flashCount++;
+            if (flashCount > 6) { clearInterval(flashTimer); document.title = originalTitle; }
+        }, 1000);
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('BDM — PDF siap', { body: body });
+        }
+    }
+
+    function captureCombinedPdf() {
+        if (typeof window.jspdf === 'undefined') { return; }
+        // Diminta di awal (dipicu langsung dari klik tombol, jadi masih
+        // dianggap browser sebagai gesture pengguna) supaya notifikasi
+        // sudah siap dipakai begitu prosesnya selesai.
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+        var $btn = $('#pdfShareBtn');
+        var original = $btn.text();
+        $btn.prop('disabled', true);
+        $btn.text('Memuat daftar saham...');
+
+        var requests = PDF_WATCHLIST_TYPES.map(function (s) {
+            return $.get('/watchlist-tickers', { type: s.type });
+        });
+
+        $.when.apply($, requests).then(function (r1, r2, r3, r4) {
+            var results = [r1, r2, r3, r4];
+            var combined = [];
+            var sectionStart = {};
+            PDF_WATCHLIST_TYPES.forEach(function (s, idx) {
+                var list = (results[idx] && results[idx][0] && results[idx][0].tickers) || [];
+                if (!list.length) { return; }
+                sectionStart[combined.length] = { label: s.label, count: list.length };
+                combined = combined.concat(list);
+            });
+
+            if (!combined.length) {
+                $btn.prop('disabled', false).text(original);
+                alert('Semua watchlist kosong.');
+                return;
+            }
+
+            // Ditukar sementara -- captureAllTickers() beroperasi lewat
+            // variabel global tickers/currentIndex/loadCurrent() yang
+            // sama dipakai navigasi ‹ › biasa, supaya tidak perlu jalur
+            // kode terpisah untuk mode gabungan ini. Dikembalikan di
+            // akhir (baik sukses maupun gagal).
+            var savedTickers = tickers, savedFocus = focusDates, savedMeta = candidateMeta, savedIndex = currentIndex;
+            tickers = combined; focusDates = []; candidateMeta = [];
+
+            var doc = null;
+            var pageCount = 0;
+
+            captureAllTickers(function (i, t) {
+                $btn.text('Memuat ' + (i + 1) + '/' + combined.length + ' (' + t + ')...');
+            }, function (t, canvas, i) {
+                if (sectionStart[i]) {
+                    doc = addPdfTitlePage(doc, sectionStart[i].label, sectionStart[i].count);
+                }
+                var w = canvas.width, h = canvas.height;
+                var orientation = w > h ? 'l' : 'p';
+                if (!doc) {
+                    doc = new window.jspdf.jsPDF({ unit: 'px', format: [w, h], orientation: orientation });
+                } else {
+                    doc.addPage([w, h], orientation);
+                }
+                // JPEG, bukan PNG -- PDF-nya bisa berisi puluhan halaman
+                // resolusi tinggi, ukuran filenya penting untuk dikirim
+                // lewat WhatsApp.
+                doc.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, w, h);
+                pageCount++;
+            }).then(function (failed) {
+                tickers = savedTickers; focusDates = savedFocus; candidateMeta = savedMeta; currentIndex = savedIndex;
+                loadCurrent();
+
+                $btn.prop('disabled', false).text(original);
+                if (!pageCount) { alert('Gagal menangkap gambar.'); return; }
+
+                var blob = doc.output('blob');
+                var name = 'watchlist-gabungan.pdf';
+                var file = new File([blob], name, { type: 'application/pdf' });
+
+                notifyWhenDone(pageCount + ' halaman — ' + combined.length + ' saham siap dikirim.');
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    navigator.share({ files: [file], text: 'Watchlist — ' + combined.length + ' saham' })
+                        .catch(function () { downloadBlob(blob, name); });
+                } else {
+                    downloadBlob(blob, name);
+                }
+                if (failed.length) {
+                    showFeedback('Gagal menangkap: ' + failed.join(', '), 'warning');
+                }
+            });
+        });
+    }
+
+    $('#pdfShareBtn').on('click', captureCombinedPdf);
+
+    $('#crowdBody').on('click', 'tr[data-ticker]', function () {
+        var idx = tickers.indexOf($(this).data('ticker'));
+        if (idx >= 0) { currentIndex = idx; loadCurrent(); scrollToChart(); }
+    });
+
+    $('#brokerToggleBtn').on('click', toggleBrokerPanel);
+
+    // Up-arrow key also toggles the panel, not just the button click --
+    // skipped while typing in a field or while the command palette (which
+    // uses ArrowUp itself, for moving through its results) is open.
+    $(document).on('keydown', function (e) {
+        if (e.key !== 'ArrowUp') { return; }
+        var tag = (e.target.tagName || '').toLowerCase();
+        var typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+        var paletteOpen = $('#cmdPaletteOverlay').hasClass('open');
+        if (typing || paletteOpen) { return; }
+        e.preventDefault();
+        toggleBrokerPanel();
+    });
+
+    function currentTicker() { return tickers[currentIndex]; }
+
+    function loadCurrent() {
+        if (tickers.length === 0) { return; }
+        var t = currentTicker();
+        var focusDate = focusDates[currentIndex] || null;
+        var meta = candidateMeta[currentIndex] || null;
+        $('#chartCounter').text((currentIndex + 1) + ' / ' + tickers.length);
+        var label = t + (focusDate ? ' — signal ' + focusDate : '');
+        if (meta) { label += ' · skor ' + meta.skor + ' · K=' + meta.K + ' · naik ' + meta.naik_pct + '%'; }
+        // chip sisi A/B ditempel di sebelah label supaya penilaian sisi terlihat
+        // di tempat keputusan diambil, bukan cuma di halaman audit.
+        $('#chartTickerLabel').html($('<span>').text(label).html() + StockFilter.chipSisi(t));
+        $('#chartDiv').empty();
+
+        var chartUrl = '/stock-chart-data/' + encodeURIComponent(t);
+        if (focusDate) { chartUrl += '?focus=' + encodeURIComponent(focusDate); }
+
+        // renderChart() mengembalikan promise dari Plotly.newPlot() --
+        // ditangkap di sini (bukan cuma dipanggil) supaya loadCurrent()
+        // bisa dinanti sampai chart-nya BENAR-BENAR selesai dilukis, bukan
+        // cuma sampai datanya diterima. Tanpa ini, "Bagikan Semua Gambar"
+        // kadang menangkap layar hitam kosong untuk saham yang datanya
+        // datang cepat tapi Plotly-nya belum sempat menggambar apa-apa.
+        var drawPromise = null;
+        var chartPromise = $.getJSON(chartUrl, function (data) {
+            if (data.found) {
+                lastChartData = data;
+                drawPromise = renderChart(data);
+                if ($('#weeklyFrame').is(':visible')) { renderWeeklyChart(data); }
+            } else {
+                lastChartData = null;
+                $('#chartDiv').html('<p class="text-muted text-center pt-5">No data found for ' + t + '</p>');
+            }
+        }).fail(function () {
+            $('#chartDiv').html('<p class="text-danger text-center pt-5">Failed to load chart for ' + t + '</p>');
+        });
+
+        return $.when(chartPromise, loadBrokerSummary(t), loadDecisionCard(t)).then(function () {
+            return drawPromise;
+        });
+    }
+
+    // Screen/Insider -- fungsi render disalin persis dari Halaman
+    // Saham (templates/stock_hub.html), dipakai di sini karena ?light=1
+    // di bawah sudah dilepas dan payload penuhnya sekarang ikut memuat
+    // ketiga bagian ini.
+    function idNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d || 0, maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function pct(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return idNum(v, d === undefined ? 2 : d) + '%';
+    }
+    function esc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+    function signed(v, suffix, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="hb-flat">—</span>'; }
+        var cls = v > 0 ? 'hb-up' : (v < 0 ? 'hb-down' : 'hb-flat');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '')
+             + idNum(v, d === undefined ? 2 : d) + (suffix || '') + '</span>';
+    }
+    function rupiahShort(v) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        var abs = Math.abs(v);
+        if (abs >= 1e12) { return idNum(v / 1e12, 2) + ' T'; }
+        if (abs >= 1e9) { return idNum(v / 1e9, 2) + ' M'; }
+        if (abs >= 1e6) { return idNum(v / 1e6, 1) + ' jt'; }
+        return idNum(v, 0);
+    }
+
+    function renderSiInsiderCluster(n) {
+        var el = $('#siInsiderCluster');
+        if (!n || n < 2) { el.hide(); return; }
+        el.text(n + ' transaksi Beli insider (pasar) dalam 5 hari terakhir — dicatat untuk dipantau, '
+            + 'bukan sinyal yang tervalidasi (baru terlihat mengungguli pada cluster ≥10 transaksi, n=72, belum cukup bukti).').show();
+    }
+
+    function renderSiInsider(list) {
+        if (!list || !list.length) {
+            $('#siInsider').html('<div class="hb-empty">Tidak ada transaksi Beli/Jual insider dalam 180 hari terakhir.</div>');
+            return;
+        }
+        $('#siInsider').html(list.map(function (r) {
+            var cls = r.action_type === 'ACTION_TYPE_BUY' ? 'hb-ins-buy' : 'hb-ins-sell';
+            var sign = r.shares_changed >= 0 ? '+' : '';
+            var sourceHtml = r.source
+                ? '<span class="hb-badge" style="' + (r.cross_source_confirmed
+                    ? 'color:var(--accum); border:1px solid rgba(22,224,174,0.35); background:rgba(22,224,174,0.08);'
+                    : 'color:var(--text-dim); border:1px solid var(--line);')
+                  + '" title="' + (r.cross_source_confirmed
+                    ? 'Dilaporkan terpisah oleh KSEI dan IDX untuk transaksi yang sama -- digabung jadi satu baris.'
+                    : 'Sumber data transaksi ini.') + '">' + esc(r.source) + (r.cross_source_confirmed ? ' ✓' : '') + '</span>'
+                : '';
+            return '<div class="hb-ins-row">'
+                 + '<span class="hb-ins-date">' + esc(r.date) + '</span>'
+                 + '<span class="hb-badge ' + cls + '">' + esc(r.action_label) + '</span>'
+                 + sourceHtml
+                 + (r.is_controller ? '<span class="hb-badge" style="color:var(--warn); border:1px solid rgba(255,195,82,0.35); background:rgba(255,195,82,0.08);">Pengendali</span>' : '')
+                 + '<span class="hb-ins-name">' + esc(r.name) + '</span>'
+                 + '<span class="hb-ins-value">' + sign + idNum(r.shares_changed) + ' lembar'
+                 +   (r.value_idr ? ' &middot; Rp' + rupiahShort(r.value_idr)
+                        + (r.price_source === 'estimated_close' ? ' (estimasi)' : '') : '') + '</span>'
+                 + '<span class="hb-ins-purpose">Tujuan: ' + esc(r.purpose || 'Tidak dicantumkan') + '</span>'
+                 + '</div>';
+        }).join(''));
+    }
+
+    function renderSiScreen(s, baseline) {
+        if (!s) {
+            $('#siScreen').html('<div class="hb-empty">Saham ini sedang tidak masuk screen otomatis mana pun.</div>');
+            return;
+        }
+        var rec = s.record;
+        var recHtml = rec
+            ? '<div class="hb-record">Screen <strong>' + esc(s.label) + '</strong> secara historis: '
+              + '<strong>' + idNum(rec.n) + '</strong> kemunculan, rata-rata <strong>' + pct(rec.mean) + '</strong> '
+              + 'dalam 20 hari, win rate <strong>' + pct(rec.win_rate, 1) + '</strong> &mdash; '
+              + signed(rec.vs_baseline, 'pp') + ' dibanding baseline pasar ' + pct(baseline) + '. '
+              + (rec.vs_baseline < 0
+                    ? '<strong>Screen ini historisnya kalah dari pasar</strong>, jadi masuknya sebuah saham ke sini '
+                      + 'bukan alasan untuk membeli.'
+                    : 'Ini satu-satunya kelompok yang mengungguli pasar, walau tipis.')
+              + '</div>'
+            : '';
+        $('#siScreen').html(
+            '<div class="hb-screen">'
+            + '<div style="flex:0 0 auto;">'
+            +   '<div class="hb-screen-name">' + esc(s.label) + '</div>'
+            +   '<div class="hb-note" style="margin-top:4px;">' + s.streak_days + ' hari beruntun · '
+            +     'nilai transaksi ' + idNum(s.value_b, 2) + ' M</div>'
+            +   (s.type ? '<div style="margin-top:8px;"><a class="btn btn-sm btn-outline-secondary" '
+            +     'href="/display-analyze?type=' + encodeURIComponent(s.type) + '">Buka screen ini</a></div>' : '')
+            + '</div>'
+            + recHtml
+            + '</div>');
+    }
+
+
+    // Kartu keputusan (DecisionCard, static/js/stock_chart.js) -- sama
+    // dengan yang tampil di Halaman Saham, ditambahkan di sini supaya
+    // Watchlist dan Screens tidak cuma menampilkan chart tanpa konteks.
+    //
+    // Payload PENUH (bukan ?light=1 lagi) -- versi light dulu melewati
+    // screen/insider/pattern karena dianggap "tidak dipakai kartu ini".
+    // Screen dan Insider sekarang ikut dirender di bawah kartu (lihat
+    // render*Si* di atas); pattern_matches masih ikut termuat di payload
+    // tapi sengaja TIDAK dirender lagi di halaman ini (dibuang atas
+    // permintaan) -- kalau mau dihemat juga di sisi server, build_hub()
+    // perlu mode "light" ketiga yang lebih rinci, belum dibuat.
+    //
+    // Kartu ditampilkan (dengan status memuat) SEJAK AWAL, bukan
+    // disembunyikan sampai datanya datang -- sebelumnya chart selalu
+    // muncul duluan karena kartu ini baru terlihat setelah AJAX selesai,
+    // membuatnya terasa jauh lebih lambat padahal beda waktunya kecil.
+    function loadDecisionCard(t) {
+        $('#siDecisionTicker').text('memuat...');
+        $('#siFlags').html('<div class="hb-empty">Menghitung sinyal untuk ' + t + '&hellip; '
+            + 'Kalau ini kunjungan pertama sejak app baru start, cache Scanner Lab/Kering Screener '
+            + 'masih dingin dan bisa makan waktu sampai ~1 menit &mdash; setelah itu jadi cepat.</div>');
+        $('#siDecisionLegend').html('');
+        $('#siDecisionHeadline').text('—');
+        $('#siDecisionSub').text('');
+        $('#siScreen').html('');
+        $('#siInsiderCluster').hide();
+        $('#siInsider').html('');
+        $('#siDecisionCard').show();
+
+        return $.post('/saham-data/' + encodeURIComponent(t)).done(function (d) {
+            if (!d || !d.available) {
+                $('#siFlags').html('<div class="hb-empty">Kartu keputusan tidak tersedia untuk ' + t + '.</div>');
+                return;
+            }
+            $('#siDecisionTicker').text(t);
+            $('#siHubLink').attr('href', '/saham/' + encodeURIComponent(t));
+            // Ring Chart.js diukur dari lebar kontainernya -- harus
+            // digambar SETELAH kartunya terlihat, kalau tidak Chart.js
+            // mengukur 0x0 (bug yang sama pernah terjadi di sini juga
+            // sebelum ditemukan & diperbaiki di Halaman Saham).
+            DecisionCard.render({ ring: 'siRingChart', headline: 'siDecisionHeadline',
+                sub: 'siDecisionSub', legend: 'siDecisionLegend', flags: 'siFlags' }, d);
+            renderSiScreen(d.screen, d.baseline);
+            renderSiInsiderCluster(d.insider_buy_cluster_5d);
+            renderSiInsider(d.insider);
+        }).fail(function () {
+            $('#siFlags').html('<div class="hb-empty">Gagal memuat kartu keputusan.</div>');
+        });
+    }
+
+    // ---- Lensa keramaian -------------------------------------------------
+    // Warnanya sengaja terbalik dari intuisi: ramai = merah. Itu yang
+    // ditunjukkan backtest, bukan pilihan gaya.
+    var CROWD_COLOR = { setara: '#16E0AE', bawah: '#93A2B6',
+                        jauh: '#FFB454', sangat_jauh: '#FF6076' };
+    var CROWD_ORDER = ['sangat_jauh', 'jauh', 'bawah', 'setara'];
+    var CROWD_TEXT = { sangat_jauh: 'Sangat jauh di bawah pasar', jauh: 'Jauh di bawah pasar',
+                       bawah: 'Di bawah pasar', setara: 'Setara pasar' };
+    var crowdLoaded = false;
+
+    function crowdNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d || 0, maximumFractionDigits: d === undefined ? 0 : d });
+    }
+
+    function renderCrowd(data) {
+        var counts = data.counts || {};
+        $('#crowdSummary').html(CROWD_ORDER.map(function (k) {
+            return '<span class="crowd-chip"><span class="crowd-dot" style="background:'
+                 + CROWD_COLOR[k] + ';"></span>' + CROWD_TEXT[k]
+                 + ': <strong>' + (counts[k] || 0) + '</strong></span>';
+        }).join(''));
+
+        var body = $('#crowdBody').empty();
+        (data.rows || []).forEach(function (r) {
+            body.append('<tr data-ticker="' + r.stock + '">'
+                + '<td class="cl" style="font-family:var(--font-ui); font-weight:600;">' + r.stock + '</td>'
+                + '<td class="cl"><span class="crowd-badge" style="color:' + CROWD_COLOR[r.verdict]
+                +   '; border:1px solid ' + CROWD_COLOR[r.verdict] + '55; background:'
+                +   CROWD_COLOR[r.verdict] + '14;">' + r.verdict_label + '</span></td>'
+                + '<td class="cl" style="color:var(--text-mid);">' + (r.crowd_desc || '—') + '</td>'
+                + '<td>' + crowdNum(r.vol_mult, 2) + 'x</td>'
+                + '<td>' + crowdNum(r.value_b, 2) + ' M</td>'
+                + '<td>' + crowdNum(r.cell_mean, 2) + '% <span style="color:var(--text-dim);">n='
+                +   crowdNum(r.cell_n) + '</span></td>'
+                + '<td>' + crowdNum(r.cell_win_rate, 1) + '%</td>'
+                + '<td style="color:' + (r.vs_baseline < 0 ? '#FF6076' : '#16E0AE') + ';">'
+                +   (r.vs_baseline > 0 ? '+' : '') + crowdNum(r.vs_baseline, 2) + 'pp</td>'
+                + '</tr>');
+        });
+
+        $('#crowdNote').html(
+            'Berasal dari matriks 4&times;4 (volume relatif &times; nilai transaksi) yang diukur dari '
+            + '<strong>98.958 pengamatan seluruh bursa</strong> &mdash; semua saham, semua hari. '
+            + 'Kolom <em>Rata-rata 20h</em> adalah hasil historis saham-saham yang berada di kombinasi '
+            + 'yang sama, <strong>bukan ramalan untuk saham ini</strong>. Baseline pasar '
+            + crowdNum(data.baseline, 2) + '%. '
+            + 'Kolom <em>Keramaian</em> murni fakta hari ini, terpisah dari penilaian hasil &mdash; '
+            + 'saham bisa saja sepi tapi kelompoknya tetap historisnya di bawah pasar, dan sebaliknya. '
+            + 'Klik baris untuk melompat ke chart saham itu.');
+    }
+
+    function loadCrowding() {
+        if (crowdLoaded || !tickers.length) { return; }
+        $('#crowdBody').html('<tr><td colspan="8" style="text-align:center; color:var(--text-dim); padding:20px;">Menghitung...</td></tr>');
+        $.post('/crowding-data', { stocks: tickers.join(',') }).done(function (d) {
+            if (!d || d.available === false) {
+                $('#crowdBody').html('<tr><td colspan="8" style="text-align:center; color:var(--text-dim); padding:20px;">'
+                    + ((d && d.message) || 'Gagal memuat.') + '</td></tr>');
+                return;
+            }
+            crowdLoaded = true;
+            renderCrowd(d);
+        }).fail(function () {
+            $('#crowdBody').html('<tr><td colspan="8" style="text-align:center; color:var(--distrib); padding:20px;">Gagal memuat lensa keramaian.</td></tr>');
+        });
+    }
+
+    var brokerSummaryRequest = null;
+    var brokerSummarySequence = 0;
+    function loadBrokerSummary(t) {
+        var sequence = ++brokerSummarySequence;
+        if (brokerSummaryRequest) { brokerSummaryRequest.abort(); }
+        $('#brokerStockInput').val(t);
+        $('#brokerTable').html(
+            '<div class="skeleton" style="height:14px; width:70%; margin-bottom:8px;">Loading</div>' +
+            '<div class="skeleton" style="height:14px; width:90%; margin-bottom:8px;">Loading</div>' +
+            '<div class="skeleton" style="height:14px; width:60%; margin-bottom:8px;">Loading</div>' +
+            '<div class="skeleton" style="height:14px; width:80%;">Loading</div>'
+        );
+        brokerSummaryRequest = $.post('/broker-summary', $('#brokerSummaryForm').serialize())
+            .done(function (data) {
+                if (sequence === brokerSummarySequence) { $('#brokerTable').html(data.message); }
+            })
+            .fail(function (xhr, status) {
+                if (status !== 'abort' && sequence === brokerSummarySequence) { brokerSummaryGagal(xhr); }
+            });
+        return brokerSummaryRequest;
+    }
+
+    // Backend membalas 400/404 dengan JSON {message} yang menjelaskan
+    // masukan mana yang salah -- tampilkan itu, jangan ditelan jadi
+    // pesan generik.
+    function brokerSummaryGagal(xhr) {
+        var pesan = (xhr && xhr.responseJSON && xhr.responseJSON.message) || 'Gagal memuat broker summary.';
+        $('#brokerTable').html($('<div class="text-danger small">').text(pesan));
+    }
+
+    function showFeedback(msg, type) {
+        var el = $('<div class="alert alert-' + type + ' alert-dismissible fade show" style="position:fixed; top:70px; right:16px; z-index:2000; max-width:320px;">' +
+            msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+        $('body').append(el);
+        setTimeout(function () { el.alert('close'); }, 3000);
+    }
+
+    function removeCurrentAndAdvance() {
+        tickers.splice(currentIndex, 1);
+        if (focusDates.length) { focusDates.splice(currentIndex, 1); }
+        if (currentIndex >= tickers.length) { currentIndex = Math.max(0, tickers.length - 1); }
+        if (tickers.length === 0) {
+            $('#chartCounter').text('');
+            $('#chartTickerLabel').text('');
+            $('#chartDiv').html('<p class="text-muted text-center pt-5">No more stocks.</p>');
+            $('#chartActions').empty();
+            return;
+        }
+        loadCurrent();
+    }
+
+    function addCurrentTo(type) {
+        var t = currentTicker();
+        var url = '/admin?param=add&type=' + type + '&stock=' + encodeURIComponent(t);
+        // Tell the server to clean up the origin list too — not just
+        // when adding from a Screen (Retail Sell/Consol/etc), but also
+        // when moving between watchlists (Best -> Best Low, etc). This
+        // was previously scoped to 'screen' only, which is why moving a
+        // stock between watchlists added it to the destination but left
+        // it sitting in the origin list too.
+        if ((contextType === 'screen' || contextType === 'watchlist') && dbTypeName) { url += '&source=' + dbTypeName; }
+        $.post(url).done(function (data) {
+            if (data.rsp === 'success') {
+                showFeedback(data.message || (t + ' added to ' + labelForType(type)), 'success');
+                removeCurrentAndAdvance();
+            } else {
+                showFeedback(data.message || ('Could not add ' + t), 'danger');
+            }
+        }).fail(function () {
+            showFeedback('Request failed', 'danger');
+        });
+    }
+
+    function deleteCurrentFrom(type) {
+        var t = currentTicker();
+        var url = '/admin?param=delete&type=' + type + '&stock=' + encodeURIComponent(t);
+        // Only treat this as deleted if the server actually confirms it —
+        // previously this relied on the AJAX call merely succeeding
+        // (.done()), which fired even when the server silently did
+        // nothing, making it look like the stock was removed when it
+        // never actually left the database.
+        $.post(url).done(function (data) {
+            if (data.rsp === 'success') {
+                showFeedback(data.message || (t + ' deleted from ' + labelForType(type)), 'warning');
+                removeCurrentAndAdvance();
+            } else {
+                showFeedback(data.message || ('Could not delete ' + t), 'danger');
+            }
+        }).fail(function () {
+            showFeedback('Request failed', 'danger');
+        });
+    }
+
+    function buildShareCaption(t) {
+        var lines = [t];
+        if (lastChartData) {
+            lines.push('Value ' + lastChartData.value + 'B  ·  Change ' + lastChartData.change + '%');
+        }
+        var brokerText = $('#brokerTable').text().replace(/\s+\n/g, '\n').replace(/\n{2,}/g, '\n').trim();
+        if (brokerText) {
+            lines.push('');
+            lines.push(brokerText);
+        }
+        return lines.join('\n');
+    }
+
+    function shareToWhatsApp() {
+        var t = currentTicker();
+        var caption = buildShareCaption(t);
+        var chartDiv = document.getElementById('chartDiv');
+
+        function fallbackTextShare() {
+            window.open('https://wa.me/?text=' + encodeURIComponent(caption), '_blank');
+        }
+
+        if (!chartDiv || typeof Plotly === 'undefined') { fallbackTextShare(); return; }
+
+        Plotly.toImage(chartDiv, { format: 'png', width: 900, height: 580 }).then(function (dataUrl) {
+            fetch(dataUrl).then(function (res) { return res.blob(); }).then(function (blob) {
+                var file = new File([blob], t + '.png', { type: 'image/png' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    navigator.share({ files: [file], text: caption }).catch(function () { fallbackTextShare(); });
+                } else {
+                    fallbackTextShare();
+                }
+            }).catch(fallbackTextShare);
+        }).catch(fallbackTextShare);
+    }
+
+    function renderActions() {
+        var $actions = $('#chartActions').empty();
+        addTargets.forEach(function (t) {
+            var btn = $('<button type="button" class="btn btn-sm btn-outline-primary"></button>').text('+ ' + labelForType(t));
+            btn.on('click', function () { addCurrentTo(t); });
+            $actions.append(btn);
+        });
+        if (allowDelete && dbTypeName) {
+            var delBtn = $('<button type="button" class="btn btn-sm btn-outline-danger"></button>').text('Delete');
+            delBtn.on('click', function () { deleteCurrentFrom(dbTypeName); });
+            $actions.append(delBtn);
+        }
+        if (contextType === 'watchlist' && WHATSAPP_SHARE_TYPES.indexOf(dbTypeName) !== -1) {
+            var waBtn = $('<button type="button" class="btn btn-sm btn-outline-success"></button>').text('Send to WhatsApp');
+            waBtn.on('click', function () { shareToWhatsApp(); });
+            $actions.append(waBtn);
+        }
+    }
+
+    // Kartu keputusan (+ Screen/Insider di bawahnya) bikin halaman jauh
+    // lebih tinggi dari chart-nya sendiri -- tanpa ini, pindah saham
+    // (‹ ›, panah kiri/kanan, atau klik baris di tabel keramaian) selalu
+    // membiarkan scroll di posisi lama, jadi chart saham BARU tidak
+    // langsung terlihat kalau posisi scroll-nya sudah turun.
+    function scrollToChart() {
+        var el = document.querySelector('.chart-viewer-card');
+        if (!el) { return; }
+        // scrollIntoView({block:'start'}) taruh tepi ATAS kartu persis di
+        // y=0 -- tapi .app-topbar itu position:sticky, tinggi 62px, jadi
+        // "y=0" sebenarnya ketutup topbar dan nama saham (di dalam
+        // .chart-header, bagian PALING ATAS kartu) ikut ketutup. Dihitung
+        // manual + jarak 78px (62px topbar + sedikit napas) supaya nama
+        // sahamnya kebaca, bukan cuma chart-nya.
+        var y = el.getBoundingClientRect().top + window.pageYOffset - 78;
+        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    }
+
+    function goPrev() {
+        if (tickers.length === 0) return;
+        currentIndex = (currentIndex - 1 + tickers.length) % tickers.length;
+        loadCurrent();
+        scrollToChart();
+    }
+    function goNext() {
+        if (tickers.length === 0) return;
+        currentIndex = (currentIndex + 1) % tickers.length;
+        loadCurrent();
+        scrollToChart();
+    }
+    $('#prevBtn').on('click', goPrev);
+    $('#nextBtn').on('click', goNext);
+
+    // Left/Right arrow keys page through the tickers, same as the prev/
+    // next buttons — skipped while typing in a field (broker stock/date
+    // inputs) so arrow keys still move the text cursor there normally.
+    $(document).on('keydown', function (e) {
+        var tag = (e.target.tagName || '').toLowerCase();
+        var typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+        if (typing) { return; }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
+    });
+
+    // Manual override — if you edit the type/date and hit Process, this
+    // takes precedence over the auto-load-on-chart-change behavior above.
+    $('#brokerSummaryForm').on('submit', function (e) {
+        e.preventDefault();
+        loadBrokerSummary($('#brokerStockInput').val());
+    });
+
+    function shiftBrokerDate(direction) {
+        var $input = $('#brokerRangeDate');
+        var parts = $input.val().split(' - ');
+        var start = moment((parts[0] || '').trim(), 'MM/DD/YYYY', true);
+        var end = moment((parts[1] || parts[0] || '').trim(), 'MM/DD/YYYY', true);
+        if (!start.isValid() || !end.isValid() || end.isBefore(start, 'day')) {
+            showFeedback('Pilih rentang tanggal yang valid terlebih dahulu.', 'warning');
+            return;
+        }
+        start.add(direction, 'day');
+        end.add(direction, 'day');
+        var picker = $input.data('daterangepicker');
+        if (picker) {
+            picker.setStartDate(start.clone());
+            picker.setEndDate(end.clone());
+        }
+        $input.val(start.format('MM/DD/YYYY') + ' - ' + end.format('MM/DD/YYYY'));
+        $('#brokerSummaryForm').trigger('submit');
+    }
+    $('#brokerDatePrev').on('click', function () { shiftBrokerDate(-1); });
+    $('#brokerDateNext').on('click', function () { shiftBrokerDate(1); });
+
+    $(document).ready(function () {
+    /* ---- Bar filter bersama ----
+       Menyaring daftar `tickers` yang dilewati penampil grafik. Daftar aslinya
+       disimpan supaya mengubah filter tidak pernah menghilangkan data, cuma
+       mengubah apa yang ditampilkan. Kode yang sedang dibuka dipertahankan
+       walau tersaring -- kalau tidak, mengaktifkan filter bisa melompatkan
+       tampilan ke saham lain tanpa sebab yang jelas. */
+    var tickersAsli = tickers.slice();
+    if (tickersAsli.length) {
+        StockFilter.init({
+            mount: '#sfMount',
+            tickers: tickersAsli,
+            onChange: function (hasil) {
+                var sedang = tickers[currentIndex];
+                var baru = hasil.lolos.slice();
+                if (sedang && baru.indexOf(sedang) === -1) { baru.unshift(sedang); }
+                if (!baru.length) { baru = tickersAsli.slice(); }
+                tickers = baru;
+                var idx = baru.indexOf(sedang);
+                currentIndex = idx >= 0 ? idx : 0;
+                loadCurrent();
+                if ($('#crowdPanel').hasClass('open')) { loadCrowding(); }
+            }
+        });
+    }
+
+
+        if (tickers.length > 0) {
+            renderActions();
+            loadCurrent();
+        }
+
+        var $rangeInput = $('#brokerRangeDate');
+        var parts = $rangeInput.val().split('-');
+        $rangeInput.daterangepicker({
+            opens: 'left',
+            startDate: moment(parts[0].trim(), 'MM/DD/YYYY'),
+            endDate: moment((parts[1] || parts[0]).trim(), 'MM/DD/YYYY'),
+            locale: { format: 'MM/DD/YYYY' }
+        });
+    });
+</script>
+{% endblock %}

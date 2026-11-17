@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwarmSim</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>SwarmSim</h1>
+    <p class="sub">Simulasi reaksi publik berbasis agen, tanpa AI. Atur skenario, tambah event, lalu lihat opini menyebar.</p>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="panel form" aria-label="Pengaturan skenario">
+    <label class="field">
+      <span>Jenis skenario</span>
+      <select id="preset"></select>
+    </label>
+    <label class="field">
+      <span id="subjectLabel">Nama</span>
+      <input id="subject" type="text" maxlength="60">
+    </label>
+    <label class="field" id="competitorField">
+      <span>Nama kompetitor / pembanding</span>
+      <input id="competitor" type="text" maxlength="60">
+    </label>
+
+    <h2 class="h">Parameter</h2>
+    <div id="params"></div>
+
+    <h2 class="h">Populasi &amp; simulasi</h2>
+    <div class="grid2">
+      <label class="field"><span>Jumlah agen</span><input id="population" type="number" min="50" max="1000" value="300"></label>
+      <label class="field"><span>Jumlah ronde</span><input id="rounds" type="number" min="5" max="60" value="30"></label>
+      <label class="field"><span>Ulangan (Monte Carlo)</span><input id="runs" type="number" min="1" max="40" value="12"></label>
+      <label class="field"><span>Seed acak</span><input id="seed" type="number" min="0" value="42"></label>
+    </div>
+
+    <h2 class="h">Event <span class="muted">(opsional, maks 8)</span></h2>
+    <div id="events"></div>
+    <button type="button" class="ghost" id="addEvent">+ Tambah event</button>
+
+    <button type="button" class="primary" id="run">Jalankan simulasi</button>
+    <p class="status" id="status" role="status"></p>
+  </aside>
+
+  <section class="results" id="results" hidden>
+    <div class="kpis" id="kpis"></div>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="report" aria-selected="true">Laporan</button>
+      <button role="tab" data-tab="sim" aria-selected="false">Simulasi</button>
+      <button role="tab" data-tab="history" aria-selected="false">Riwayat</button>
+    </nav>
+
+    <div class="tab" id="tab-report"></div>
+
+    <div class="tab" id="tab-sim" hidden>
+      <div class="player">
+        <button type="button" id="play" class="ghost" aria-label="Putar">▶ Putar</button>
+        <input type="range" id="round" min="0" value="0" aria-label="Ronde">
+        <span id="roundLabel" class="mono"></span>
+      </div>
+      <div class="simgrid">
+        <div class="card">
+          <div class="cardhead">
+            <h3>Jaringan sosial</h3>
+            <div class="legend">
+              <span><i class="dot neg"></i>Negatif</span><span><i class="dot neu"></i>Netral</span><span><i class="dot pos"></i>Positif</span><span><i class="dot unaware"></i>Belum tahu</span><span><i class="ring"></i>Sudah beraksi</span>
+            </div>
+          </div>
+          <canvas id="net" aria-label="Peta jaringan agen, warna = opini"></canvas>
+          <p class="hint">Ukuran titik = jumlah koneksi. Klik titik untuk melihat cerita agen.</p>
+        </div>
+        <div class="card feedcard">
+          <div class="cardhead">
+            <h3>Feed</h3>
+            <select id="feedMode" aria-label="Filter feed">
+              <option value="round">Ronde ini</option>
+              <option value="all">Paling viral (semua ronde)</option>
+            </select>
+          </div>
+          <div id="feed" class="feed"></div>
+        </div>
+      </div>
+      <div class="chartgrid">
+        <div class="card"><h3>Sentimen rata-rata</h3><p class="hint">Garis = median, area = rentang 10–90% dari semua ulangan.</p><div class="chart" id="chartSent"></div></div>
+        <div class="card"><h3>Aksi populasi (%)</h3><p class="hint" id="actHint"></p><div class="chart" id="chartAct"></div></div>
+      </div>
+      <div class="card"><h3>Opini per segmen <span class="muted" id="segRound"></span></h3><div id="segbars"></div></div>
+    </div>
+
+    <div class="tab" id="tab-history" hidden></div>
+  </section>
+
+  <section class="empty" id="empty">
+    <h2>Belum ada simulasi</h2>
+    <p>Pilih skenario di kiri lalu tekan <strong>Jalankan simulasi</strong>. Ratusan agen dengan sifat berbeda akan saling memengaruhi lewat jaringan sosial, dan hasilnya dirangkum jadi laporan.</p>
+  </section>
+</main>
+
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer-inner" role="dialog" aria-modal="true" aria-labelledby="agentName">
+    <button type="button" class="close" id="closeDrawer" aria-label="Tutup">✕</button>
+    <div id="agentBody"></div>
+  </div>
+</div>
+<div class="tooltip" id="tooltip" hidden></div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

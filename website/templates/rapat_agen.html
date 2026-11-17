@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}Rapat Agen{% endblock %}
+{% block page_title %}Rapat Agen{% endblock %}
+
+{% block page_actions %}
+<button id="raUlang" class="btn btn-outline-secondary btn-sm">Rapat ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .ra-flag {
+        display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+        color: var(--info); border: 1px solid var(--line); padding: 2px 8px; border-radius: 20px; margin-left: 8px; vertical-align: middle;
+    }
+    .ra-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 10px; }
+    .ra-role { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 11.5px; color: var(--text-mid); line-height: 1.45; }
+    .ra-role b { display: block; color: var(--text); font-size: 12px; margin-bottom: 2px; }
+
+    .ra-pasar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ra-chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 12px; color: var(--text-mid); }
+    .ra-chip.merah { border-color: var(--distrib); color: var(--distrib); background: var(--distrib-glow); }
+
+    .ra-tally { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .ra-filter { border: 1px solid var(--line); background: transparent; color: var(--text-mid); border-radius: 999px;
+                 padding: 4px 12px; font-size: 12px; cursor: pointer; }
+    .ra-filter.on { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+
+    .ra-k { display: inline-block; min-width: 62px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: .5px;
+            padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
+    .ra-k-AMBIL  { color: var(--accum); border-color: var(--accum); background: var(--accum-glow); }
+    .ra-k-PANTAU { color: var(--warn); border-color: rgba(255,195,82,0.4); }
+    .ra-k-TOLAK  { color: var(--distrib); border-color: var(--distrib); background: var(--distrib-glow); }
+    .ra-tag { display: inline-block; font-size: 9.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line);
+              color: var(--text-dim); margin-left: 4px; }
+    .ra-row { cursor: pointer; }
+    .ra-row:hover td { background: var(--raised); }
+    .ra-detail td { background: var(--deep); white-space: normal !important; }
+    .ra-transkrip { display: grid; gap: 6px; padding: 6px 4px 10px; font-size: 12px; line-height: 1.5; }
+    .ra-agen { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
+    .ra-agen > span:first-child { color: var(--text-dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding-top: 1px; }
+    .ra-agen ul { margin: 0; padding-left: 16px; }
+    .ra-b { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 0 6px; border-radius: 999px; margin-right: 6px; border: 1px solid var(--line); color: var(--text-dim); }
+    .ra-b-kuat, .ra-b-lemah { color: var(--accum); border-color: var(--accum-dim); }
+    .ra-b-veto, .ra-b-berat { color: var(--distrib); border-color: var(--distrib-dim); }
+    .ra-b-ringan { color: var(--warn); }
+    .ra-bukti { color: var(--text-dim); font-size: 11px; }
+    .ra-lampu { color: var(--distrib); }
+    @media (max-width: 640px) { .ra-agen { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+
+<div class="content-card">
+    <div class="ap-section-title">Rapat Pagi<span class="ra-flag">Aturan, tanpa LLM</span></div>
+    <div class="ap-finding">
+        <h4>Kandidat dekat support dan saham yang dicicil insider, ditimbang satu per satu oleh enam agen.</h4>
+        <p>Tiap agen adalah aturan tetap, dan setiap argumen yang mereka ucapkan menempel ke hasil uji yang sudah ada di app ini
+        &mdash; tidak ada informasi baru yang diciptakan. Tembus basis dan puncak 52 minggu sengaja tidak dipakai:
+        kandidat dinilai dengan kakinya sendiri. Akibatnya <strong>AMBIL di sini bertumpu pada bukti lemah</strong>
+        (pantul + di atas MA200, desil 10, insider dalam konteks Akumulasi Palsu) &mdash; artinya "lolos semua saringan
+        hindari + ada alasan", bukan "terbukti condong naik". Dekat support ~netral di luar sampel, dan beli-rutin insider
+        belum pernah diuji. Semua keputusan dicatat dan dinilai maju terhadap <em>semua kandidat</em> &mdash; itu yang akan menunjukkan apakah rapat
+        ini menambah nilai.</p>
+    </div>
+    <div class="ra-roles">
+        <div class="ra-role"><b>Pengumpul</b>Close 0&ndash;2% di atas support chart (emiten likuid), plus semua yang sedang dicicil insider.</div>
+        <div class="ra-role"><b>Analis</b>Argumen untuk: pantul + MA200, desil 10, insider dalam konteks, dan fakta kandidat.</div>
+        <div class="ra-role"><b>Pembantah</b>Argumen melawan dari daftar hindari yang kokoh &mdash; veto, berat, ringan.</div>
+        <div class="ra-role"><b>Manajer Risiko</b>Stop di garis jebol support (atau TS10), porsi dari risiko 1% modal.</div>
+        <div class="ra-role"><b>Pengamat Pasar</b>Kabar semalam S&amp;P dan komoditas &mdash; cuma lampu merah pagi, tak pernah hijau.</div>
+        <div class="ra-role"><b>Hakim &amp; Notulen</b>AMBIL / PANTAU / TOLAK dengan aturan terkunci, lalu dicatat ke jurnal maju.</div>
+    </div>
+</div>
+
+<div id="raLoading" class="ap-empty">Rapat sedang berlangsung&hellip; (pertama kali ~30 detik)</div>
+<div id="raMessage" class="ap-empty" style="display:none;"></div>
+
+<div id="raBody" style="display:none;">
+    <div class="content-card">
+        <div class="ap-section-title">Pengamat Pasar <span id="raPasarInfo" class="ap-dim"></span></div>
+        <div id="raPasar" class="ra-pasar"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Keputusan <span id="raCount" class="ap-dim"></span></div>
+        <div class="ra-tally" id="raFilters"></div>
+        <div style="overflow-x:auto; margin-top:10px;">
+            <table class="ap-table">
+                <thead id="raThead">
+                    <tr>
+                        <th class="ap-left" data-sort-key="stock">Kode</th>
+                        <th class="ap-left" data-sort-key="keputusan">Hakim</th>
+                        <th data-sort-key="skor">Skor</th>
+                        <th data-sort-key="close">Close</th>
+                        <th data-sort-key="jarak_sup">Di atas support %</th>
+                        <th data-sort-key="desil">Desil</th>
+                        <th data-sort-key="dari_puncak">Dari puncak 52mg %</th>
+                        <th data-sort-key="stop">Stop %</th>
+                        <th data-sort-key="porsi">Porsi %</th>
+                        <th data-sort-key="nilai_m">Nilai/hari (M)</th>
+                        <th class="ap-left">Alasan Hakim</th>
+                    </tr>
+                </thead>
+                <tbody id="raRows"></tbody>
+            </table>
+        </div>
+        <div class="ap-note">Klik baris untuk membaca transkrip rapat. <strong>Skor</strong> cuma untuk mengurutkan:
+            argumen kuat +2, lemah +1, keberatan berat &minus;2, ringan &minus;1; veto langsung TOLAK.
+            <strong>Porsi</strong> = 1% modal &divide; jarak stop, maksimal 20%, dipotong untuk emiten liar.</div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Notulen &mdash; Jurnal Maju <span id="raJurnalInfo" class="ap-dim"></span></div>
+        <div id="raJurnal"></div>
+        <div class="ap-note">Masuk di close hari rapat. "Semua kandidat" = aturan murni tanpa rapat. Kalau AMBIL tidak
+            mengalahkan semua kandidat dan TOLAK tidak kalah, rapatnya cuma birokrasi. Angka belum berarti sebelum
+            ratusan baris matang.</div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var raData = null, raSort = { key: 'keputusan', dir: 'asc' }, raFilter = 'semua', raBuka = {};
+    var RA_URUT = { AMBIL: 0, PANTAU: 1, TOLAK: 2 };
+
+    function raEsc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+    function raNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="ap-dim">&mdash;</span>'; }
+        return Number(v).toLocaleString('id-ID', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
+    }
+    function raSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="ap-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'ap-up' : (v < 0 ? 'ap-down' : 'ap-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + raNum(v, d) + '</span>';
+    }
+
+    function raPasar(p) {
+        if (!p || p.available === false) {
+            $('#raPasarInfo').text('');
+            $('#raPasar').html('<span class="ap-dim">' + raEsc((p && p.message) || 'Tidak tersedia.') + '</span>');
+            return;
+        }
+        $('#raPasarInfo').text('— sesi final sejak close IDX ' + p.idx_terakhir);
+        var adaSesi = false;
+        var chips = Object.keys(p.seri).map(function (k) {
+            var s = p.seri[k];
+            if (s.ret === null || s.ret === undefined) {
+                return '<span class="ra-chip">' + raEsc(s.nama) + ': belum ada sesi final</span>';
+            }
+            adaSesi = true;
+            return '<span class="ra-chip' + (s.merah ? ' merah' : '') + '" title="Lampu merah kalau &le; ' + s.ambang
+                 + '% (20% malam terburuk 2020-2026)">' + raEsc(s.nama) + ' ' + (s.ret > 0 ? '+' : '') + raNum(s.ret, 2) + '%'
+                 + (s.merah ? ' &middot; merah' : '') + '</span>';
+        });
+        $('#raPasar').html(chips.join('') + (adaSesi ? '' : '<span class="ap-dim" style="align-self:center;">'
+            + 'Belum ada kabar luar negeri yang final sejak IDX tutup &mdash; cek lagi setelah jam 04:00 WIB.</span>'));
+    }
+
+    function raTranskrip(r) {
+        function daftar(xs, kosong) {
+            if (!xs.length) { return '<span class="ap-dim">' + kosong + '</span>'; }
+            return '<ul>' + xs.map(function (x) {
+                return '<li><span class="ra-b ra-b-' + x.bobot + '">' + x.bobot + '</span>' + raEsc(x.teks)
+                     + (x.teks !== x.bukti ? '<div class="ra-bukti">' + raEsc(x.bukti) + '</div>' : '') + '</li>';
+            }).join('') + '</ul>';
+        }
+        var rk = r.risiko || {};
+        var risiko = (r.keputusan === 'TOLAK' ? '<span class="ap-dim">Tidak menghitung porsi untuk yang ditolak.</span> ' : '')
+            + 'Stop ' + raNum(rk.stop) + ' (' + raNum(rk.jarak_stop, 1) + '% di bawah, ' + raEsc(rk.dasar_stop || '') + ')'
+            + (rk.porsi ? ' &middot; porsi ' + raNum(rk.porsi, 1) + '% modal' : '')
+            + (rk.label ? ' &middot; Takaran Risiko: ' + raEsc(rk.label) : '')
+            + (rk.resistance ? ' &middot; resistance ' + raNum(rk.resistance) : '')
+            + '<div class="ra-bukti">' + raEsc(rk.keluar) + '</div>';
+        var lampu = (r.lampu_pagi || []).length
+            ? '<ul>' + r.lampu_pagi.map(function (l) { return '<li class="ra-lampu">' + raEsc(l) + '</li>'; }).join('') + '</ul>'
+            : '<span class="ap-dim">Tidak ada lampu merah pagi ini.</span>';
+        return '<div class="ra-transkrip">'
+             + '<div class="ra-agen"><span>Pengumpul</span><div>Masuk dari: ' + r.sumber.map(raEsc).join(' + ') + '</div></div>'
+             + '<div class="ra-agen"><span>Analis</span><div>' + daftar(r.pro, 'Tidak punya argumen.') + '</div></div>'
+             + '<div class="ra-agen"><span>Pembantah</span><div>' + daftar(r.kontra, 'Tidak menemukan keberatan.') + '</div></div>'
+             + '<div class="ra-agen"><span>Manajer Risiko</span><div>' + risiko + '</div></div>'
+             + '<div class="ra-agen"><span>Pengamat Pasar</span><div>' + lampu + '</div></div>'
+             + '<div class="ra-agen"><span>Hakim</span><div><span class="ra-k ra-k-' + r.keputusan + '">' + r.keputusan
+             + '</span> ' + raEsc(r.alasan) + '</div></div>'
+             + '</div>';
+    }
+
+    function raRender() {
+        if (!raData) { return; }
+        var semua = raData.rows;
+        var n = { semua: semua.length, AMBIL: 0, PANTAU: 0, TOLAK: 0, dicicil: 0 };
+        semua.forEach(function (r) {
+            n[r.keputusan] += 1;
+            if (r.sumber.indexOf('dicicil') >= 0) { n.dicicil += 1; }
+            r.stop = (r.risiko || {}).jarak_stop; r.porsi = (r.risiko || {}).porsi;
+            r.urut_k = RA_URUT[r.keputusan];
+        });
+        var label = { semua: 'Semua', AMBIL: 'Ambil', PANTAU: 'Pantau', TOLAK: 'Tolak', dicicil: 'Dicicil insider' };
+        $('#raFilters').html(Object.keys(label).map(function (k) {
+            return '<button class="ra-filter' + (raFilter === k ? ' on' : '') + '" data-f="' + k + '">'
+                 + label[k] + ' ' + n[k] + '</button>';
+        }).join(''));
+        var rows = semua.filter(function (r) {
+            if (raFilter === 'semua') { return true; }
+            if (raFilter === 'dicicil') { return r.sumber.indexOf('dicicil') >= 0; }
+            return r.keputusan === raFilter;
+        });
+        var key = raSort.key === 'keputusan' ? 'urut_k' : raSort.key;
+        rows = window.sortRows(rows, key, raSort.dir);
+        $('#raCount').text('— ' + rows.length + ' emiten, rapat ' + raData.as_of
+            + (raData.from_cache ? ' (cache ' + raData.dibangun + ')' : ''));
+        if (!rows.length) {
+            $('#raRows').html('<tr><td colspan="11" class="ap-empty">Tidak ada emiten di kelompok ini.</td></tr>');
+            return;
+        }
+        $('#raRows').html(rows.map(function (r) {
+            var tags = r.sumber.map(function (s) { return '<span class="ra-tag">' + raEsc(s) + '</span>'; }).join('')
+                     + ((r.lampu_pagi || []).length ? '<span class="ra-tag ra-lampu" title="Lampu merah pagi">pagi</span>' : '');
+            var baris = '<tr class="ra-row" data-s="' + raEsc(r.stock) + '">'
+                + '<td class="ap-left"><a class="ap-ticker" href="/saham/' + raEsc(r.stock) + '">' + raEsc(r.stock) + '</a>' + tags + '</td>'
+                + '<td class="ap-left"><span class="ra-k ra-k-' + r.keputusan + '">' + r.keputusan + '</span></td>'
+                + '<td>' + raSigned(r.skor, 0) + '</td>'
+                + '<td>' + raNum(r.close) + '</td>'
+                + '<td>' + raNum(r.jarak_sup, 1) + '</td>'
+                + '<td>' + (r.desil === null || r.desil === undefined ? '<span class="ap-dim">&mdash;</span>' : r.desil) + '</td>'
+                + '<td>' + raSigned(r.dari_puncak, 1) + '</td>'
+                + '<td>' + raNum(r.stop, 1) + '</td>'
+                + '<td>' + raNum(r.porsi, 1) + '</td>'
+                + '<td>' + raNum(r.nilai_m, 2) + '</td>'
+                + '<td class="ap-left" style="white-space:normal; min-width:240px; font-size:11.5px;">' + raEsc(r.alasan) + '</td>'
+                + '</tr>';
+            if (raBuka[r.stock]) {
+                baris += '<tr class="ra-detail"><td colspan="11">' + raTranskrip(r) + '</td></tr>';
+            }
+            return baris;
+        }).join(''));
+    }
+
+    function raJurnal(j) {
+        if (!j || !j.available) {
+            $('#raJurnalInfo').text('');
+            $('#raJurnal').html('<span class="ap-dim">' + raEsc((j && j.message) || 'Belum ada.') + '</span>');
+            return;
+        }
+        $('#raJurnalInfo').text('— sejak ' + j.mulai + ', ' + j.n_hari + ' hari rapat, ' + j.n_baris + ' baris');
+        var html = j.horizon.map(function (h) {
+            if (!h.n_matang) {
+                return '<div class="ap-dim" style="margin-bottom:6px;">H+' + h.horizon + ': belum ada baris yang matang.</div>';
+            }
+            return '<div style="margin-bottom:10px;"><div style="font-weight:600; font-size:12px;">H+' + h.horizon
+                 + ' <span class="ap-dim">(' + h.n_matang + ' matang)</span></div>'
+                 + '<table class="ap-table"><thead><tr><th class="ap-left">Kelompok</th><th>n</th><th>Majemuk %</th><th>Win %</th></tr></thead><tbody>'
+                 + h.kelompok.map(function (k) {
+                       return '<tr><td class="ap-left">' + raEsc(k.nama) + '</td><td>' + k.n + '</td><td>'
+                            + raSigned(k.majemuk, 2) + '</td><td>' + raNum(k.win, 1) + '</td></tr>';
+                   }).join('') + '</tbody></table></div>';
+        }).join('');
+        $('#raJurnal').html(html);
+    }
+
+    function raLoad(force) {
+        $('#raLoading').show(); $('#raBody').hide(); $('#raMessage').hide();
+        $.post('/rapat-agen-data', force ? { force: '1' } : {}).done(function (d) {
+            $('#raLoading').hide();
+            if (!d || d.available === false) {
+                $('#raMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            raData = d;
+            raPasar(d.pasar);
+            raRender();
+            raJurnal(d.jurnal);
+            $('#raBody').show();
+        }).fail(function () {
+            $('#raLoading').hide();
+            $('#raMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}).
+    $(document).ready(function () {
+        raSort = window.makeSortable('#raThead', function (key, dir) {
+            raSort.key = key; raSort.dir = dir;
+            raRender();
+        }, raSort.key, raSort.dir);
+        $('#raFilters').on('click', '.ra-filter', function () { raFilter = $(this).data('f'); raRender(); });
+        $('#raRows').on('click', '.ra-row', function (e) {
+            if ($(e.target).closest('a').length) { return; }
+            var s = $(this).data('s'); raBuka[s] = !raBuka[s]; raRender();
+        });
+        $('#raUlang').on('click', function () { raLoad(true); });
+        raLoad(false);
+    });
+</script>
+{% endblock %}

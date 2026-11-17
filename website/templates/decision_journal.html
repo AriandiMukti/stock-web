@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}Jurnal Keputusan{% endblock %}
+{% block page_title %}Jurnal Keputusan{% endblock %}
+
+{% block content %}
+
+<style>
+    .dj-finding { background: var(--void); border: 1px solid var(--line); border-radius: 10px;
+                  padding: 14px 16px; }
+    .dj-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .dj-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .dj-finding strong { color: var(--text); }
+
+    .dj-table th { text-align: left; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .dj-table td { padding: 10px; border-bottom: 1px solid var(--line-soft); text-align: left;
+                   font-family: var(--font-ui); vertical-align: top; }
+    .dj-table tbody tr:hover { background: var(--raised); }
+    .dj-table td.dj-mono { font-family: var(--font-mono); white-space: nowrap; }
+    .dj-ticker { font-weight: 700; color: var(--accum); cursor: pointer; }
+    .dj-ticker:hover { text-decoration: underline; }
+    .dj-wl-tag { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 9px;
+                 font-weight: 600; color: var(--text-dim); border: 1px solid var(--line); }
+    .dj-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+    .dj-dim { color: var(--text-dim); font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+    .dj-stat-grid { display: flex; flex-wrap: wrap; gap: 26px; margin: 14px 0 4px; }
+    .dj-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.6px;
+                     text-transform: uppercase; color: var(--text-dim); }
+    .dj-stat-value { font-family: var(--font-mono); font-size: 18px; font-weight: 600; margin-top: 2px; }
+
+    .dj-note { font-size: 11.5px; color: var(--text-mid); line-height: 1.7;
+               border-top: 1px solid var(--line-soft); margin-top: 14px; padding-top: 12px; }
+    .dj-note strong { color: var(--text); }
+
+    .dj-belah-judul { font-size: 10px; font-weight: 700; letter-spacing: 0.6px;
+                      text-transform: uppercase; color: var(--text-dim); margin: 18px 0 6px; }
+    /* Sel yang sampelnya di bawah ambang baca tetap DITAMPILKAN, tapi
+       diredupkan dan diberi tanda. Menyembunyikannya bikin tabel terlihat
+       lebih meyakinkan dari keadaan sebenarnya; menampilkannya dengan warna
+       yang sama bikin angka 10 sampel terbaca seperti angka 100 sampel. */
+    .dj-belum td { color: var(--text-dim); }
+    .dj-belum .dj-up, .dj-belum .dj-down { color: var(--text-dim); }
+    .dj-tag-kecil { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 999px;
+                    font-size: 9px; font-weight: 600; color: var(--text-dim);
+                    border: 1px solid var(--line); }
+</style>
+
+<div id="djLoading"></div>
+<script>document.getElementById('djLoading').innerHTML = window.skeleton('tabel', 6, 'Memuat jurnal keputusan');</script>
+<div id="djMessage" class="dj-empty" style="display:none;"></div>
+
+<div id="djBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="dj-section-title">Tentang Halaman Ini</div>
+        <div class="dj-finding">
+            <h4>Ini bukan backtest pasar -- ini kalibrasi keputusan Anda sendiri.</h4>
+            <p>Setiap kali sebuah saham ditambahkan ke Portfolio/Best/Best Low/Pattern Up, kartu keputusannya
+            (skor pola, kesehatan arus, status Kering Screener) diambil snapshot-nya saat itu juga. Halaman ini
+            membandingkan snapshot itu dengan harga sekarang -- <strong>bukan untuk menilai apakah pasar bisa
+            diprediksi</strong> (modul lain sudah menjawab itu, dan hasilnya beragam), tapi untuk melihat pola:
+            apakah keputusan Anda cenderung lebih baik saat kartu keputusan menunjukkan lebih banyak hijau,
+            atau tidak ada bedanya sama sekali.</p>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="dj-section-title">Rekam Jejak <span id="djJejakMeta" class="dj-dim"></span></div>
+        <div class="dj-finding">
+            <h4>Tabel di bawah menampilkan keputusan satu per satu. Ini yang menjumlahkannya.</h4>
+            <p>Kolom &quot;harga masuk &rarr; sekarang&quot; tidak bisa dijumlahkan: entry umur 2 hari dan
+            entry umur 6 bulan masuk ke kolom yang sama, jadi rata-ratanya sebagian besar mengukur
+            <em>sudah berapa lama dicatat</em>. Bagian ini memakai <strong>horizon tetap dalam hari
+            bursa</strong>, sama seperti seluruh evaluasi lain di app ini, dan membandingkan tiap kelompok
+            dengan rata-rata keputusan Anda sendiri &mdash; bukan dengan pasar. Pertanyaannya bukan
+            &quot;lebih baik dari beli acak?&quot; tapi &quot;dari yang saya putuskan, mana yang lebih baik?&quot;</p>
+        </div>
+        <div class="dj-stat-grid" id="djJejakStats"></div>
+        <div id="djJejakIsi"></div>
+        <div class="dj-note" id="djJejakNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="dj-section-title">Riwayat Penambahan</div>
+        <div style="overflow-x:auto;">
+            <table class="dj-table">
+                <thead>
+                    <tr>
+                        <th style="width:44px;"></th>
+                        <th>Kode</th>
+                        <th>Ditambahkan</th>
+                        <th>Harga masuk &rarr; sekarang</th>
+                        <th>Skor pola saat itu</th>
+                        <th>Kesehatan arus saat itu</th>
+                    </tr>
+                </thead>
+                <tbody id="djTableBody"></tbody>
+            </table>
+        </div>
+        <div class="dj-note" id="djTableNote"></div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/stock_chart.js') }}"></script>
+<script>
+    function idNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d || 0, maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function esc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+    function signed(v, suffix, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="dj-flat">—</span>'; }
+        var cls = v > 0 ? 'dj-up' : (v < 0 ? 'dj-down' : 'dj-flat');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + idNum(v, d === undefined ? 2 : d) + (suffix || '') + '</span>';
+    }
+    function fmtDate(iso) {
+        if (!iso) { return '—'; }
+        return iso.slice(0, 10);
+    }
+
+    var TYPE_LABELS = { 'BestStocks': 'Best', 'BestLowStocks': 'Best Low', 'PatternUpStocks': 'Pattern Up', 'PortfolioStocks': 'Portfolio' };
+
+    function miniFlags(e) {
+        return [
+            DecisionCard.scoreVerdict(e.scanner).v,
+            DecisionCard.flowVerdict(e.flow ? { flow: [e.flow] } : null).v
+        ];
+    }
+
+    function renderTable(entries) {
+        var body = $('#djTableBody').empty();
+        if (!entries.length) {
+            body.append('<tr><td colspan="6" class="dj-empty">Belum ada saham yang ditambahkan sejak fitur ini ada.</td></tr>');
+            $('#djTableNote').text('');
+            return;
+        }
+        entries.forEach(function (e, i) {
+            var sv = DecisionCard.scoreVerdict(e.scanner);
+            var fv = DecisionCard.flowVerdict(e.flow ? { flow: [e.flow] } : null);
+            body.append('<tr>'
+                + '<td><div style="position:relative; width:28px; height:28px;"><canvas id="dj-ring-' + i + '"></canvas></div></td>'
+                + '<td class="dj-mono"><span class="dj-ticker" data-ticker="' + esc(e.stock) + '">' + esc(e.stock) + '</span>'
+                +   '<div class="dj-sub"><span class="dj-wl-tag">' + esc(TYPE_LABELS[e.listType] || e.listType) + '</span></div></td>'
+                + '<td class="dj-mono">' + fmtDate(e.timestamp) + '</td>'
+                + '<td class="dj-mono">' + idNum(e.entryPrice) + ' &rarr; ' + idNum(e.currentPrice)
+                +   '<div class="dj-sub">' + signed(e.pctChange, '%') + '</div></td>'
+                + '<td style="color:' + DecisionCard.VERDICT_COLOR[sv.v] + ';">' + esc(sv.text) + '</td>'
+                + '<td style="color:' + DecisionCard.VERDICT_COLOR[fv.v] + ';">' + esc(fv.text) + '</td>'
+                + '</tr>');
+        });
+        entries.forEach(function (e, i) {
+            DecisionCard.renderMiniRing('dj-ring-' + i, miniFlags(e));
+        });
+        $('#djTableNote').html('Menampilkan <strong>' + idNum(entries.length) + '</strong> penambahan. '
+            + 'Klik kode saham untuk membuka Halaman Saham-nya.');
+    }
+
+    function statSel(st, minBaca) {
+        if (!st) { return '<td class="dj-flat">&mdash;</td><td class="dj-flat">&mdash;</td>'; }
+        return '<td class="dj-mono">' + idNum(st.win, 1) + '% <span class="dj-sub">n=' + st.n + '</span></td>'
+             + '<td class="dj-mono">' + signed(st.vs_baseline, ' pp', 1) + '</td>';
+    }
+
+    function renderJejak(j) {
+        if (!j || !j.available) {
+            $('#djJejakMeta').text('— tidak tersedia');
+            $('#djJejakNote').text('Rekam jejak belum bisa dihitung.');
+            return;
+        }
+        var m = j.masuk, k = j.keluar;
+
+        $('#djJejakMeta').text('— ' + (m.mulai ? (m.mulai + ' s.d. ' + m.terakhir) : 'belum ada catatan'));
+
+        var matangTerpanjang = 0;
+        m.horizon.forEach(function (h) { if (m.matang[h] > 0) { matangTerpanjang = h; } });
+
+        var items = [
+            ['Keputusan masuk', idNum(m.n_keputusan), 'var(--text)'],
+            ['Episode masuk→keluar', idNum(k.n_episode), 'var(--text-mid)'],
+            ['Horizon terpanjang yang matang', matangTerpanjang ? ('H+' + matangTerpanjang) : '—',
+             matangTerpanjang ? 'var(--accum)' : 'var(--text-dim)'],
+            ['Lama pegang (median)', k.hari_median === null ? '—' : (k.hari_median + ' hari'), 'var(--warn)']
+        ];
+        $('#djJejakStats').html(items.map(function (it) {
+            return '<div><div class="dj-stat-label">' + it[0] + '</div>'
+                 + '<div class="dj-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+
+        // Horizon yang sama sekali belum punya baris matang tidak dibuatkan
+        // kolom -- kolom kosong sepenuhnya cuma bikin tabel lebih lebar
+        // tanpa menambah satu pun informasi.
+        var hidup = m.horizon.filter(function (h) { return m.matang[h] > 0; });
+        var html = '';
+
+        if (!hidup.length) {
+            html = '<div class="dj-finding" style="margin-top:14px;"><h4>Belum ada keputusan yang cukup tua.</h4>'
+                 + '<p>Horizon terpendek pun butuh satu hari bursa penuh setelah keputusan dicatat.</p></div>';
+        } else {
+            Object.keys(m.belah).forEach(function (dim) {
+                var baris = m.belah[dim].filter(function (b) { return Object.keys(b.per_horizon).length; });
+                if (!baris.length) { return; }
+                html += '<div class="dj-belah-judul">' + esc(dim) + '</div>'
+                     + '<div style="overflow-x:auto;"><table class="dj-table"><thead><tr>'
+                     + '<th>Kelompok</th><th>Keputusan</th>'
+                     + hidup.map(function (h) { return '<th>H+' + h + ' win</th><th>vs rata2</th>'; }).join('')
+                     + '</tr></thead><tbody>';
+                baris.forEach(function (b) {
+                    var cukup = hidup.some(function (h) { return b.per_horizon[h] && b.per_horizon[h].layak; });
+                    html += '<tr class="' + (cukup ? '' : 'dj-belum') + '">'
+                         + '<td>' + esc(b.nilai)
+                         + (cukup ? '' : '<span class="dj-tag-kecil">sampel kecil</span>') + '</td>'
+                         + '<td class="dj-mono">' + idNum(b.n_keputusan) + '</td>'
+                         + hidup.map(function (h) { return statSel(b.per_horizon[h], m.min_n_baca); }).join('')
+                         + '</tr>';
+                });
+                html += '</tbody></table></div>';
+            });
+
+            // Sisi keluar: satu baris, karena pertanyaannya cuma satu.
+            var hidupK = k.horizon.filter(function (h) { return k.matang[h] > 0; });
+            if (hidupK.length) {
+                html += '<div class="dj-belah-judul">Sesudah dibuang dari watchlist</div>'
+                     + '<div style="overflow-x:auto;"><table class="dj-table"><thead><tr><th>Ukuran</th>'
+                     + hidupK.map(function (h) { return '<th>H+' + h + '</th>'; }).join('')
+                     + '</tr></thead><tbody><tr><td>Rata-rata return sesudah keluar</td>'
+                     + hidupK.map(function (h) {
+                           var st = k.setelah_keluar[h];
+                           return '<td class="dj-mono">' + (st ? signed(st.mean, '%', 2)
+                                + ' <span class="dj-sub">n=' + st.n + '</span>' : '&mdash;') + '</td>';
+                       }).join('')
+                     + '</tr></tbody></table></div>';
+            }
+        }
+        $('#djJejakIsi').html(html);
+
+        var belum = m.horizon.filter(function (h) { return !m.matang[h]; });
+        $('#djJejakNote').html(
+            '<strong>Cara membaca:</strong> baris bertanda <em>sampel kecil</em> punya kurang dari '
+            + m.min_n_baca + ' keputusan matang &mdash; angkanya ditampilkan supaya tidak ada yang'
+            + ' disembunyikan, tapi belum boleh dibaca sebagai apa pun. Ada puluhan sel di halaman ini'
+            + ' (beberapa dimensi × beberapa kelompok × beberapa horizon), jadi sebagian pasti terlihat'
+            + ' mencolok murni karena kebetulan &mdash; alasan yang sama kenapa Penemu Pola memakai koreksi FDR.'
+            + (belum.length ? ' Horizon yang belum punya data sama sekali: <strong>H+'
+               + belum.join(', H+') + '</strong>.' : '')
+            + (k.saat_dipegang ? ' Selama dipegang, rata-rata <strong>'
+               + signed(k.saat_dipegang.mean, '%', 2) + '</strong> (median '
+               + idNum(k.saat_dipegang.median, 2) + '%) dari ' + k.saat_dipegang.n + ' episode.' : ''));
+    }
+
+    function load() {
+        $('#djBody').hide();
+        $('#djMessage').hide();
+        $('#djLoading').show();
+        $.get('/jurnal-keputusan-data').done(function (d) {
+            $('#djLoading').hide();
+            if (!d || !d.available) {
+                $('#djMessage').text((d && d.message) || 'Data tidak tersedia.').show();
+                return;
+            }
+            $('#djBody').show();
+            renderJejak(d.jejak);
+            renderTable(d.entries || []);
+        }).fail(function () {
+            $('#djLoading').hide();
+            $('#djMessage').text('Gagal memuat Jurnal Keputusan.').show();
+        });
+    }
+
+    $(document).ready(function () {
+        $('#djTableBody').on('click', '.dj-ticker', function () {
+            window.location.href = '/saham/' + encodeURIComponent($(this).data('ticker'));
+        });
+        load();
+    });
+</script>
+{% endblock %}

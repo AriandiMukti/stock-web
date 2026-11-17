@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block title %}Ringkasan Watchlist{% endblock %}
+{% block page_title %}Ringkasan Watchlist{% endblock %}
+
+{% block content %}
+
+<style>
+    .wd-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .wd-checks { display: flex; gap: 12px; flex-wrap: wrap; }
+    .wd-check { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-mid); }
+
+
+    .wd-finding:last-child { margin-bottom: 0; }
+    .wd-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .wd-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .wd-finding strong { color: var(--text); }
+
+    .wd-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+
+    .wd-table th { text-align: left; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .wd-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: left;
+                   font-family: var(--font-ui); vertical-align: top; }
+    .wd-table tbody tr:hover { background: var(--raised); }
+    .wd-table td.wd-mono { font-family: var(--font-mono); white-space: nowrap; }
+
+
+    .wd-ticker { font-weight: 700; color: var(--accum); cursor: pointer; }
+    .wd-ticker:hover { text-decoration: underline; }
+    .wd-wl-tag { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 9px;
+                 font-weight: 600; color: var(--text-dim); border: 1px solid var(--line); margin: 1px 3px 1px 0; white-space: nowrap; }
+
+    .wd-badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 9.5px;
+                font-weight: 600; white-space: nowrap; }
+
+    .wd-score-bar { width: 34px; height: 5px; border-radius: 3px; background: var(--raised); overflow: hidden;
+                    display: inline-block; vertical-align: middle; margin-right: 5px; }
+    .wd-score-fill { height: 100%; border-radius: 3px; }
+
+    .wd-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+    .wd-cell-empty { color: var(--text-dim); }
+
+</style>
+
+<div class="wd-controls">
+    <div class="wd-field">
+        <label>Watchlist</label>
+        <div class="wd-checks">
+            <label class="wd-check"><input type="checkbox" class="wd-wl-check" value="Portfolio" checked> Portfolio</label>
+            <label class="wd-check"><input type="checkbox" class="wd-wl-check" value="Best" checked> Best</label>
+            <label class="wd-check"><input type="checkbox" class="wd-wl-check" value="Best Low" checked> Best Low</label>
+            <label class="wd-check"><input type="checkbox" class="wd-wl-check" value="Pattern Up" checked> Pattern Up</label>
+        </div>
+    </div>
+    <div class="wd-field">
+        <label>Cari kode</label>
+        <input type="text" id="wdFilter" class="form-control form-control-sm"
+               placeholder="BBRI" style="width:120px; text-transform:uppercase;">
+    </div>
+    <label class="wd-field" style="flex-direction:row; align-items:center; gap:6px; font-size:11.5px; color:var(--text-mid); padding-bottom:6px;">
+        <input type="checkbox" id="wdOnlyEvents"> Hanya yang ada kejadian
+    </label>
+
+    <div style="flex:1 1 auto;"></div>
+
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="wdReload">Muat Ulang</button>
+</div>
+
+<div id="wdLoading" class="wd-empty">Menyilangkan watchlist dengan Scanner Lab, Kering Screener, Screen, Kesehatan Arus, dan Aktivitas Insider — pemanggilan pertama bisa memakan waktu...</div>
+<div id="wdMessage" class="wd-empty" style="display:none;"></div>
+
+<div id="wdBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="wd-section-title">Tentang Halaman Ini</div>
+        <div class="wd-finding">
+            <h4>Ini murni menyilangkan, bukan modul analisis baru.</h4>
+            <p>Setiap kolom memanggil fungsi yang sudah ada di Scanner Lab, Kering Screener, Screen, Kesehatan Arus,
+            dan Aktivitas Insider untuk tiap kode di watchlist yang dipilih. Tidak ada skor prioritas tunggal yang
+            digabungkan dari semuanya &mdash; sebagian screen di halaman ini <strong>terbukti kalah dari pasar</strong>
+            (lihat halaman Count/Screens), jadi menyatukannya jadi satu angka akan menyembunyikan itu di balik
+            angka yang terlihat meyakinkan. Yang ditampilkan adalah fakta per sumber; menimbangnya tetap di tangan Anda.</p>
+        </div>
+        <div id="wdRegime" style="margin-top:14px;"></div>
+        <div class="wd-stat-grid" style="margin-top:14px;" id="wdStats"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px; display:none;" id="wdDiffCard">
+        <div class="wd-section-title">Perubahan Sejak Kemarin</div>
+        <div id="wdDiffList"></div>
+        <div class="wd-note">Bendera yang berubah warna dari snapshot kemarin ke hari ini &mdash; bukan status
+            sekarang (itu ada di tabel di bawah), tapi apa yang BERUBAH semalam.</div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="wd-section-title" id="wdTableTitle">Watchlist</div>
+        <div style="overflow-x:auto;">
+            <table class="wd-table">
+                <thead>
+                    <tr>
+                        <th style="width:44px;"></th>
+                        <th>Kode</th>
+                        <th>Scanner Lab</th>
+                        <th>Kering Screener</th>
+                        <th>Screen</th>
+                        <th>Kesehatan Arus</th>
+                        <th>Insider (30h)</th>
+                    </tr>
+                </thead>
+                <tbody id="wdTableBody"></tbody>
+            </table>
+        </div>
+        <div class="wd-note" id="wdTableNote"></div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/stock_chart.js') }}"></script>
+<script>
+    var wdData = null;
+
+    function idNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d || 0, maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function esc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+
+    function rupiahShort(v) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        var abs = Math.abs(v);
+        var s = abs >= 1e12 ? idNum(v / 1e12, 2) + ' T'
+              : abs >= 1e9  ? idNum(v / 1e9, 2) + ' M'
+              : abs >= 1e6  ? idNum(v / 1e6, 1) + ' jt'
+              : idNum(v, 0);
+        return (v > 0 ? '+' : '') + s;
+    }
+
+    function signed(v, suffix, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="wd-flat">—</span>'; }
+        var cls = v > 0 ? 'wd-up' : (v < 0 ? 'wd-down' : 'wd-flat');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + idNum(v, d === undefined ? 2 : d) + (suffix || '') + '</span>';
+    }
+
+    function scoreColor(s) {
+        if (s >= 65) { return '#16E0AE'; }
+        if (s < 40) { return '#FF6076'; }
+        return '#93A2B6';
+    }
+
+    // Sama persis dengan Scanner Lab / Kering Screener supaya warnanya berarti sama.
+    var FLOW_COLOR = { akumulasi: 'hijau', netral: 'kuning', distribusi: 'merah' };
+
+    function scannerCell(r) {
+        var s = r.scanner;
+        if (!s) { return '<span class="wd-cell-empty">—</span>'; }
+        var right = s.pending
+            ? '<span class="wd-badge wd-badge-pending">' + s.forward_needed + 'h lagi</span>'
+            : '<span class="wd-score-bar"><span class="wd-score-fill" style="width:' + s.score + '%; background:' + scoreColor(s.score) + ';"></span></span>'
+              + '<span style="color:' + scoreColor(s.score) + '; font-family:var(--font-mono);">' + s.score + '</span>';
+        return esc(s.scanner_label) + '<div class="wd-sub">' + esc(s.signal_date) + ' &middot; ' + right + '</div>';
+    }
+
+    function keringCell(r) {
+        var k = r.kering;
+        if (!k) { return '<span class="wd-cell-empty">—</span>'; }
+        return 'skor ' + idNum(k.skor, 2) + ' <span class="wd-badge" style="border:1px solid var(--line); color:var(--text-dim);">K=' + k.K + '</span>'
+             + '<div class="wd-sub">' + esc(k.date) + '</div>';
+    }
+
+    function screenCell(r) {
+        var s = r.screen;
+        if (!s) { return '<span class="wd-cell-empty">—</span>'; }
+        var rec = s.record;
+        var track = rec
+            ? ' &middot; ' + signed(rec.vs_baseline, 'pp') + ' vs pasar (n=' + idNum(rec.n) + ')'
+            : '';
+        return (rec ? esc(rec.label) : esc(s.key))
+             + '<div class="wd-sub">' + s.streak_days + ' hari beruntun' + track + '</div>';
+    }
+
+    function flowCell(r) {
+        var f = r.flow;
+        if (!f) { return '<span class="wd-cell-empty">—</span>'; }
+        var cls = 'wd-badge-flow-' + (FLOW_COLOR[f.arah_arus] || 'kuning');
+        return '<span class="wd-badge ' + cls + '">H+' + f.horizon + ' ' + esc(f.label) + '</span>'
+             + '<div class="wd-sub">harga ' + signed(f.price_pct, '%')
+             + (f.low_sample ? ' &middot; sampel kecil' : '') + '</div>';
+    }
+
+    function insiderCell(r) {
+        var ins = r.insider;
+        if (!ins) { return '<span class="wd-cell-empty">—</span>'; }
+        var parts = [];
+        if (ins.n_buy) { parts.push('<span class="wd-badge" style="color:var(--accum); border:1px solid rgba(22,224,174,0.35); background:rgba(22,224,174,0.08);">' + ins.n_buy + ' beli</span>'); }
+        if (ins.n_sell) { parts.push('<span class="wd-badge" style="color:var(--distrib); border:1px solid rgba(255,96,118,0.35); background:rgba(255,96,118,0.08);">' + ins.n_sell + ' jual</span>'); }
+        var netCls = ins.net_value_idr > 0 ? 'wd-up' : (ins.net_value_idr < 0 ? 'wd-down' : 'wd-flat');
+        // Observasi pasif, bukan sinyal -- lihat insider_activity.buy_cluster_count().
+        var cluster = ins.buy_cluster_5d >= 2
+            ? '<div class="wd-sub" style="color:var(--text-dim);">' + ins.buy_cluster_5d + 'x beli dlm 5h (observasi, belum tervalidasi)</div>' : '';
+        return parts.join(' ')
+             + '<div class="wd-sub">net <span class="' + netCls + '">' + rupiahShort(ins.net_value_idr) + '</span>'
+             + ' &middot; ' + esc(ins.last_date) + '</div>' + cluster;
+    }
+
+    function watchlistTags(list) {
+        return (list || []).map(function (w) { return '<span class="wd-wl-tag">' + esc(w) + '</span>'; }).join('');
+    }
+
+    function selectedWatchlists() {
+        return $('.wd-wl-check:checked').map(function () { return $(this).val(); }).get();
+    }
+
+    function currentRows() {
+        if (!wdData) { return []; }
+        var q = ($('#wdFilter').val() || '').trim().toUpperCase();
+        var onlyEvents = $('#wdOnlyEvents').is(':checked');
+        return wdData.rows.filter(function (r) {
+            if (q && r.ticker.indexOf(q) === -1) { return false; }
+            if (onlyEvents && !r.has_anything) { return false; }
+            return true;
+        });
+    }
+
+    function renderStats(d) {
+        $('#wdStats').html(
+            '<div><div class="wd-stat-label">Total saham dipantau</div><div class="wd-stat-value">' + idNum(d.total) + '</div></div>'
+            + '<div><div class="wd-stat-label">Ada kejadian hari ini</div><div class="wd-stat-value wd-up">' + idNum(d.dengan_kejadian) + '</div></div>'
+            + '<div><div class="wd-stat-label">Diam (tidak ada apa-apa)</div><div class="wd-stat-value wd-flat">' + idNum(d.total - d.dengan_kejadian) + '</div></div>');
+    }
+
+    // 3 dimensi dari 6-nya DecisionCard (Skor pola, Kesehatan arus,
+    // Kering Screener) -- yang lain (volume, arus 5 hari, kepemilikan)
+    // butuh data yang tidak dikumpulkan build_digest() (harga/ownership
+    // per ticker), jadi sengaja tidak dipaksakan di sini supaya tidak
+    // menambah beban fetch per baris. Pakai fungsi verdict yang SAMA
+    // (diekspos dari DecisionCard) supaya warnanya berarti sama dengan
+    // Halaman Saham/Watchlist/Screens, bukan logika baru yang terpisah.
+    function miniFlags(r) {
+        return [
+            DecisionCard.scoreVerdict(r.scanner, wdData.as_of).v,
+            DecisionCard.flowVerdict(r.flow ? { flow: [r.flow] } : null).v,
+            DecisionCard.keringVerdict(r.kering, wdData.as_of).v
+        ];
+    }
+
+    // Konteks, BUKAN pengganti baseline historis tetap yang dipakai
+    // Scanner Lab/Screen Eval/Kering Screener -- lihat market_regime.py.
+    var REGIME_COLOR = { rally: 'var(--accum)', naik: 'var(--accum)', datar: 'var(--text-dim)',
+                         turun: 'var(--warn)', anjlok: 'var(--distrib)' };
+    function renderRegime(regime) {
+        if (!regime || !regime.available) { $('#wdRegime').html(''); return; }
+        var c = REGIME_COLOR[regime.key] || 'var(--text-dim)';
+        $('#wdRegime').html(
+            '<div style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-mid);">'
+            + '<span style="width:8px; height:8px; border-radius:50%; background:' + c + ';"></span>'
+            + '<span>Kondisi pasar ' + regime.window_days + ' hari terakhir: <strong style="color:' + c + ';">'
+            + esc(regime.label) + '</strong> (rata-rata ' + signed(regime.mean_pct, '%') + ', '
+            + idNum(regime.pct_up, 0) + '% saham naik, n=' + idNum(regime.n) + ') &mdash; '
+            + 'konteks, bukan pengganti baseline historis tetap di bawah.</span>'
+            + '</div>');
+    }
+
+    // Membandingkan verdict snapshot 'daily' hari ini vs kemarin (lihat
+    // decision_journal.daily_diff_for_tickers) -- hanya menampilkan yang
+    // BERUBAH, supaya tidak jadi tabel kedua yang isinya sama dengan yang
+    // di bawah.
+    function flagsFromSnapshot(snap) {
+        return {
+            skor: DecisionCard.scoreVerdict(snap.scanner),
+            arus: DecisionCard.flowVerdict(snap.flow ? { flow: [snap.flow] } : null),
+            kering: DecisionCard.keringVerdict(snap.kering, wdData.as_of)
+        };
+    }
+    function renderDiff(rows) {
+        var changes = [];
+        rows.forEach(function (r) {
+            if (!r.daily_diff) { return; }
+            var today = flagsFromSnapshot(r.daily_diff.today);
+            var yesterday = flagsFromSnapshot(r.daily_diff.yesterday);
+            ['skor', 'arus', 'kering'].forEach(function (dim) {
+                if (today[dim].v !== yesterday[dim].v) {
+                    changes.push({ ticker: r.ticker, dim: dim, from: yesterday[dim].v, to: today[dim].v, text: today[dim].text });
+                }
+            });
+        });
+        if (!changes.length) { $('#wdDiffCard').hide(); return; }
+        var DIM_LABEL = { skor: 'Skor pola', arus: 'Kesehatan arus', kering: 'Kering Screener' };
+        $('#wdDiffList').html(changes.map(function (c) {
+            return '<div class="wd-sub" style="font-size:12px; padding:5px 0; border-bottom:1px solid var(--line-soft);">'
+                 + '<span class="wd-ticker" data-ticker="' + esc(c.ticker) + '" style="cursor:pointer;">' + esc(c.ticker) + '</span> &middot; '
+                 + esc(DIM_LABEL[c.dim]) + ': <span style="color:' + DecisionCard.VERDICT_COLOR[c.from] + ';">' + c.from + '</span>'
+                 + ' &rarr; <span style="color:' + DecisionCard.VERDICT_COLOR[c.to] + ';">' + c.to + '</span> &mdash; ' + esc(c.text)
+                 + '</div>';
+        }).join(''));
+        $('#wdDiffCard').show();
+    }
+
+    function renderTable() {
+        var rows = currentRows();
+        var body = $('#wdTableBody').empty();
+        if (!rows.length) {
+            body.append('<tr><td colspan="7" class="wd-empty">Tidak ada saham yang cocok dengan filter ini.</td></tr>');
+            $('#wdTableNote').text('');
+            return;
+        }
+        rows.forEach(function (r, i) {
+            body.append('<tr>'
+                + '<td><div style="position:relative; width:32px; height:32px;"><canvas id="wd-ring-' + i + '"></canvas></div></td>'
+                + '<td class="wd-mono"><span class="wd-ticker" data-ticker="' + esc(r.ticker) + '">' + esc(r.ticker) + '</span>'
+                +   '<div style="margin-top:3px;">' + watchlistTags(r.watchlists) + '</div></td>'
+                + '<td>' + scannerCell(r) + '</td>'
+                + '<td>' + keringCell(r) + '</td>'
+                + '<td>' + screenCell(r) + '</td>'
+                + '<td>' + flowCell(r) + '</td>'
+                + '<td>' + insiderCell(r) + '</td>'
+                + '</tr>');
+        });
+        // Cincin digambar SETELAH baris masuk DOM (dan #wdBody sudah
+        // terlihat -- lihat load()) supaya Chart.js tidak mengukur 0x0.
+        rows.forEach(function (r, i) {
+            DecisionCard.renderMiniRing('wd-ring-' + i, miniFlags(r));
+        });
+        $('#wdTableNote').html('Menampilkan <strong>' + idNum(rows.length) + '</strong> saham. '
+            + 'Klik kode saham untuk membuka Halaman Saham-nya (detail lengkap tiap kolom ada di sana).');
+    }
+
+    function load() {
+        $('#wdBody').hide();
+        $('#wdMessage').hide();
+        $('#wdLoading').show();
+
+        $.post('/watchlist-digest-data', { watchlists: selectedWatchlists().join(',') })
+            .done(function (d) {
+                $('#wdLoading').hide();
+                if (!d || !d.available) {
+                    $('#wdMessage').text((d && d.message) || 'Data tidak tersedia.').show();
+                    return;
+                }
+                wdData = d;
+                $('#wdBody').show();
+                renderRegime(d.market_regime);
+                renderDiff(d.rows);
+                renderStats(d);
+                renderTable();
+            }).fail(function () {
+                $('#wdLoading').hide();
+                $('#wdMessage').text('Gagal memuat Ringkasan Watchlist.').show();
+            });
+    }
+
+    $(document).ready(function () {
+        $('#wdFilter').on('input', renderTable);
+        $('#wdOnlyEvents').on('change', renderTable);
+        $('.wd-wl-check').on('change', load);
+        $('#wdReload').on('click', load);
+
+        $('#wdTableBody, #wdDiffList').on('click', '.wd-ticker', function () {
+            window.location.href = '/saham/' + encodeURIComponent($(this).data('ticker'));
+        });
+
+        load();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Serapan Float{% endblock %}
+{% block page_title %}Serapan Float{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group btn-group-sm" role="group">
+    <button type="button" class="btn btn-outline-secondary sf-days active" data-days="20">20h</button>
+    <button type="button" class="btn btn-outline-secondary sf-days" data-days="60">60h</button>
+    <button type="button" class="btn btn-outline-secondary sf-days" data-days="120">120h</button>
+</div>
+<button type="button" class="btn btn-sm btn-outline-secondary" id="sfRefresh">Hitung Ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .sf-finding:last-child { margin-bottom: 0; }
+    .sf-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .sf-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .sf-finding strong { color: var(--text); }
+
+
+    .sf-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .sf-table th.sf-left { text-align: left; }
+    .sf-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .sf-table td.sf-left { text-align: left; font-family: var(--font-ui); }
+    .sf-table tbody tr:hover { background: var(--raised); }
+    .sf-ticker:hover { text-decoration: underline; }
+
+    .sf-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .sf-cal-note { font-size: 11px; color: var(--text-dim); margin-top: 10px; line-height: 1.6; }
+</style>
+
+<div class="sf-controls">
+    <div class="sf-field">
+        <label>Tampilkan</label>
+        <select id="sfBucket" class="form-select form-select-sm" style="width:210px;">
+            <option value="all">Semua</option>
+            <option value="distribusi" selected>Bandar melepas (paling buruk)</option>
+            <option value="ringan">Serapan ringan (terbaik)</option>
+            <option value="berat">Serapan berat</option>
+        </select>
+    </div>
+    <div class="sf-field">
+        <label>Cari kode</label>
+        <input type="text" id="sfFilter" class="form-control form-control-sm"
+               placeholder="BBRI" style="width:120px; text-transform:uppercase;">
+    </div>
+    <div class="sf-field">
+        <label>Hanya harga diam</label>
+        <select id="sfQuiet" class="form-select form-select-sm" style="width:150px;">
+            <option value="0">Tidak</option>
+            <option value="1">Ya (-10% s.d +10%)</option>
+        </select>
+    </div>
+</div>
+
+<div id="sfLoading"></div>
+<script>document.getElementById('sfLoading').innerHTML = window.skeleton('tabel', 8, 'Menghitung serapan float seluruh bursa');</script>
+<div id="sfMessage" class="sf-empty" style="display:none;"></div>
+
+<div id="sfBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="sf-section-title">Apa yang Diukur</div>
+        <div class="sf-finding">
+            <h4>Akumulasi bersih Top5 dibagi saham yang benar-benar beredar elektronik.</h4>
+            <p>Arus broker harian dan kepemilikan KSEI selama ini hidup di dua menu terpisah dan tidak pernah
+            dikalikan. &quot;Top5 net beli 2 juta lot&quot; tidak berarti apa-apa sampai dibandingkan dengan berapa
+            banyak saham yang sebenarnya ada untuk dibeli. Penyebutnya <strong>scripless</strong> (saham yang
+            tercatat elektronik di C-BEST), bukan saham tercatat &mdash; tersedia untuk seluruh emiten. Free float
+            resmi lebih tepat tapi cuma ada untuk 4% emiten, jadi angka di sini adalah <strong>batas bawah</strong>:
+            kalau tertulis 1%, kenyataannya bisa lebih tinggi.</p>
+        </div>
+        <div class="sf-finding">
+            <h4>Tesis awalnya salah, dan itu hasil utamanya.</h4>
+            <p>Halaman ini dibangun dengan hipotesis &quot;float mengering = bullish&quot;: makin besar porsi float
+            yang diserap, makin ketat suplainya. Hipotesis itu <strong>diuji lebih dulu dan ditolak datanya</strong>.
+            Yang berarti ternyata <strong>tandanya, bukan besarnya</strong> &mdash; Top5 net jual terhadap float
+            adalah kelompok dengan rekam jejak terburuk, sementara serapan ringan justru terbaik, dan serapan berat
+            tidak terbukti lebih baik dari serapan ringan.</p>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="sf-section-title">Rekam Jejak Historis <span id="sfCalMeta" class="sf-dim"></span></div>
+        <table class="sf-table">
+            <thead>
+                <tr>
+                    <th class="sf-left">Kelompok</th><th>n</th><th>Rata-rata</th><th>Median</th><th>Win rate</th>
+                </tr>
+            </thead>
+            <tbody id="sfCalBody"></tbody>
+        </table>
+        <div class="sf-cal-note">
+            Periode Jan&ndash;Sep 2026, ~8 bulan, didominasi pasar turun &mdash; semua angka absolut negatif, jadi
+            yang berarti adalah <strong>selisih antar kelompok</strong>, bukan tanda plus/minusnya. Ini rata-rata
+            KELOMPOK, bukan ramalan untuk satu saham. &quot;Top5&quot; juga bukan satu pihak: komposisi lima broker
+            teratas berganti tiap hari, jadi ini ukuran konsentrasi penyerapan, bukan identitas penyerapnya.
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="sf-section-title">Ringkasan</div>
+        <div class="sf-stat-grid" id="sfStats"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="sf-section-title">Daftar Emiten <span id="sfCount" class="sf-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="sf-table">
+                <thead id="sfThead">
+                    <tr>
+                        <th class="sf-left" data-sort-key="stock">Kode</th>
+                        <th class="sf-left" data-sort-key="label">Penilaian</th>
+                        <th data-sort-key="absorption_pct">Serapan %</th>
+                        <th data-sort-key="peak_pct">Puncak %</th>
+                        <th data-sort-key="retail_pct">Ritel %</th>
+                        <th data-sort-key="price_chg_pct">Harga %</th>
+                        <th data-sort-key="scripless_pct_of_listed">Scripless dari tercatat</th>
+                        <th data-sort-key="adv_value_juta">ADV (jt)</th>
+                        <th data-sort-key="days_to_cover">Hari setara volume</th>
+                    </tr>
+                </thead>
+                <tbody id="sfTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var sfData = null;
+    var sfDays = 20;
+    // Default urut: serapan paling negatif dulu -- sama dengan urutan dari
+    // server, karena kelompok "bandar melepas" yang paling perlu dilihat.
+    var sfSort = { key: 'absorption_pct', dir: 'asc' };
+
+    function sfNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+
+    function sfSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="sf-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'sf-up' : (v < 0 ? 'sf-down' : 'sf-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + sfNum(v, d) + '</span>';
+    }
+
+    var SF_COLOR = { hijau: 'var(--accum)', kuning: 'var(--warn)', merah: 'var(--distrib)', netral: 'var(--text-dim)' };
+
+    function sfRenderCal(kal) {
+        $('#sfCalMeta').text('— return ' + kal.horizon + ' hari, ' + kal.irisan);
+        $('#sfCalBody').html(kal.baris.map(function (b) {
+            var bold = b.kelompok.indexOf('baseline') === 0;
+            return '<tr' + (bold ? ' style="color:var(--text-dim);"' : '') + '>'
+                 + '<td class="sf-left">' + b.kelompok + '</td>'
+                 + '<td>' + sfNum(b.n) + '</td>'
+                 + '<td>' + sfNum(b.rata2, 2) + '%</td>'
+                 + '<td>' + sfNum(b.median, 2) + '%</td>'
+                 + '<td>' + sfNum(b.win, 1) + '%</td></tr>';
+        }).join(''));
+    }
+
+    function sfRenderStats(d) {
+        var c = d.counts || {};
+        var items = [
+            ['Emiten terukur', sfNum(d.total), 'var(--text)'],
+            ['Bandar melepas', sfNum(c.distribusi), 'var(--distrib)'],
+            ['Serapan ringan', sfNum(c.ringan), 'var(--accum)'],
+            ['Serapan berat', sfNum(c.berat), 'var(--warn)'],
+            ['Jendela', d.days + ' hari', 'var(--text-mid)']
+        ];
+        $('#sfStats').html(items.map(function (it) {
+            return '<div><div class="sf-stat-label">' + it[0] + '</div>'
+                 + '<div class="sf-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function sfRenderTable() {
+        if (!sfData) { return; }
+        var bucket = $('#sfBucket').val();
+        var q = ($('#sfFilter').val() || '').trim().toUpperCase();
+        var quietOnly = $('#sfQuiet').val() === '1';
+
+        var rows = sfData.rows.filter(function (r) {
+            if (bucket !== 'all' && r.bucket !== bucket) { return false; }
+            if (q && r.stock.indexOf(q) === -1) { return false; }
+            if (quietOnly && !r.quiet) { return false; }
+            return true;
+        });
+        rows = window.sortRows(rows, sfSort.key, sfSort.dir);
+
+        $('#sfCount').text('— ' + rows.length + ' baris');
+        if (!rows.length) {
+            $('#sfTableBody').html('<tr><td colspan="9" class="sf-empty">Tidak ada yang cocok.</td></tr>');
+            return;
+        }
+
+        $('#sfTableBody').html(rows.slice(0, 300).map(function (r) {
+            return '<tr>'
+                 + '<td class="sf-left"><a class="sf-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>'
+                 + '<td class="sf-left"><span class="sf-badge" style="color:' + SF_COLOR[r.verdict]
+                 +   '; border:1px solid ' + SF_COLOR[r.verdict] + '55; background:' + SF_COLOR[r.verdict] + '14;">'
+                 +   r.label + '</span></td>'
+                 + '<td>' + sfSigned(r.absorption_pct, 3) + '</td>'
+                 + '<td>' + sfNum(r.peak_pct, 3) + '</td>'
+                 + '<td>' + sfSigned(r.retail_pct, 3) + '</td>'
+                 + '<td>' + sfSigned(r.price_chg_pct, 1) + '</td>'
+                 + '<td>' + (r.scripless_pct_of_listed === null ? '<span class="sf-dim">&mdash;</span>'
+                             : sfNum(r.scripless_pct_of_listed, 1) + '%') + '</td>'
+                 + '<td>' + sfNum(r.adv_value_juta, 0) + '</td>'
+                 + '<td>' + sfNum(r.days_to_cover, 1) + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function sfLoad(force) {
+        $('#sfLoading').show().html(window.skeleton('tabel', 8, 'Menghitung serapan float seluruh bursa'));
+        $('#sfBody').hide();
+        $('#sfMessage').hide();
+        $.post('/serapan-float-data', { days: sfDays, force: force ? '1' : '0' }).done(function (d) {
+            if (!d || d.available === false) {
+                $('#sfLoading').hide();
+                $('#sfMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            sfData = d;
+            sfRenderCal(d.kalibrasi);
+            sfRenderStats(d);
+            sfRenderTable();
+            $('#sfLoading').hide();
+            $('#sfBody').show();
+        }).fail(function () {
+            $('#sfLoading').hide();
+            $('#sfMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}), jadi POST yang
+    // dipanggil lebih awal (saat script diparse) berangkat TANPA token dan
+    // ditolak CSRFProtect dengan 400.
+    $(document).ready(function () {
+        $('.sf-days').on('click', function () {
+            $('.sf-days').removeClass('active');
+            $(this).addClass('active');
+            sfDays = parseInt($(this).data('days'), 10);
+            sfLoad(false);
+        });
+        $('#sfRefresh').on('click', function () { sfLoad(true); });
+        $('#sfBucket, #sfQuiet').on('change', sfRenderTable);
+        $('#sfFilter').on('input', sfRenderTable);
+
+        sfSort = window.makeSortable('#sfThead', function (key, dir) {
+            sfSort.key = key; sfSort.dir = dir;
+            sfRenderTable();
+        }, sfSort.key, sfSort.dir);
+
+        sfLoad(false);
+    });
+</script>
+{% endblock %}

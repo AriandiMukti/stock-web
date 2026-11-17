@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Dicicil Insider{% endblock %}
+{% block page_title %}Dicicil Insider{% endblock %}
+
+{% block page_actions %}
+<a href="/radar-insider" class="btn btn-outline-secondary btn-sm">Radar Insider</a>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .di-flag {
+        display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+        color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08);
+        padding: 2px 8px; border-radius: 20px; margin-left: 8px; vertical-align: middle;
+    }
+    .di-controls { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+    .di-field label { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .di-check { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-mid); padding-bottom: 6px; }
+
+    /* Strip mingguan: satu kotak per minggu di jendela, terisi = ada beli. */
+    .di-strip { display: inline-flex; gap: 2px; vertical-align: middle; }
+    .di-strip span { width: 9px; height: 14px; border-radius: 2px; background: var(--raised); }
+    .di-strip span.on { background: var(--accum); }
+    .di-nowrap { white-space: nowrap; }
+
+    .di-buyers { font-size: 11px; color: var(--text-mid); line-height: 1.5; white-space: normal; min-width: 180px; }
+    .di-buyers .ap-dim { font-size: 10px; }
+    .di-tag { display: inline-block; font-size: 9.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 4px;
+              border: 1px solid var(--line); color: var(--text-dim); }
+    .di-tag-besar { color: var(--accum); border-color: rgba(22,224,174,0.35); background: var(--accum-glow); }
+    .di-tag-pindah { color: var(--text-dim); border-style: dashed; }
+    .di-besar { font-size: 10.5px; line-height: 1.55; white-space: normal; min-width: 190px; }
+    .di-besar .ok { color: var(--accum); }
+    .di-besar .netral { color: var(--text-dim); }
+    .di-tag-tipis { color: var(--text-dim); }
+</style>
+
+<div class="content-card">
+    <div class="ap-section-title">Siapa yang Sedang Mencicil<span class="di-flag">Deskriptif, belum teruji</span></div>
+    <div class="ap-finding">
+        <h4>Orang dalam yang membeli rutin &mdash; sedikit-sedikit, berminggu-minggu, nyaris tanpa jual.</h4>
+        <p>Beda pertanyaan dengan <a href="/radar-insider">Radar Insider</a>. Radar mencari <em>kapan</em> transaksi insider
+        berarti buat arah harga (cuma di konteks Jatuh Dalam atau Akumulasi Palsu &mdash; di luar itu insider BELI menang
+        49,5%, koin lempar). Halaman ini mencari <em>siapa</em> yang konsisten menambah posisi, tanpa memandang konteks
+        harga. Itu bahan pemantauan pemegang besar, <strong>bukan sinyal</strong>: belum pernah diuji apakah beli rutin
+        punya nilai lebih dari beli sekali.</p>
+    </div>
+    <div class="ap-note" id="diAturan"></div>
+</div>
+
+<div class="content-card">
+    <div class="di-controls">
+        <div class="di-field">
+            <label>Jendela</label>
+            <select id="diHari" class="form-select form-select-sm" style="width:120px;">
+                <option value="30">30 hari</option>
+                <option value="60" selected>60 hari</option>
+                <option value="90">90 hari</option>
+            </select>
+        </div>
+        <div class="di-field">
+            <label>Minimal minggu ada beli</label>
+            <select id="diMinggu" class="form-select form-select-sm" style="width:120px;">
+                <option value="3">3 minggu</option>
+                <option value="4" selected>4 minggu</option>
+                <option value="6">6 minggu</option>
+                <option value="8">8 minggu</option>
+            </select>
+        </div>
+        <label class="di-check"><input type="checkbox" id="diLikuid"> hanya likuid (&ge; Rp1 M/hari)</label>
+        <label class="di-check"><input type="checkbox" id="diBesar"> hanya yang ada beli besar</label>
+    </div>
+</div>
+
+<div id="diLoading" class="ap-empty">Menghitung cicilan insider&hellip;</div>
+<div id="diMessage" class="ap-empty" style="display:none;"></div>
+
+<div id="diBody" style="display:none;">
+    <div class="content-card">
+        <div class="ap-section-title">Sedang Dicicil <span id="diCount" class="ap-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="ap-table">
+                <thead id="diThead">
+                    <tr>
+                        <th class="ap-left" data-sort-key="ticker">Kode</th>
+                        <th class="ap-left" data-sort-key="minggu_beli">Minggu ada beli</th>
+                        <th data-sort-key="hari_beli">Hari beli</th>
+                        <th data-sort-key="hari_jual">Hari jual</th>
+                        <th data-sort-key="net_pct">Net posisi %</th>
+                        <th class="ap-left" data-sort-key="n_pembeli">Pembeli</th>
+                        <th class="ap-left" data-sort-key="n_besar">Transaksi besar</th>
+                        <th class="ap-left" data-sort-key="beli_terakhir">Beli terakhir</th>
+                        <th data-sort-key="ret_jendela">Harga 60 bar %</th>
+                        <th data-sort-key="dari_puncak">Dari puncak %</th>
+                        <th data-sort-key="nilai20_m">Nilai/hari (M)</th>
+                    </tr>
+                </thead>
+                <tbody id="diRows"></tbody>
+            </table>
+        </div>
+        <div class="ap-note">
+            <strong>Net posisi</strong> = perubahan kepemilikan para pembeli dari awal ke akhir jendela, dalam % saham tercatat
+            (dihitung per sumber KSEI/IDX supaya laporan dobel tidak terhitung dua kali).
+<strong>Transaksi besar</strong> = satu laporan &ge; 0,5% saham.
+            <span class="di-tag di-tag-pindah">pindah kantong</span> = punya pasangan: orang dalam lain bertransaksi berlawanan
+            dengan jumlah ~sama dalam &plusmn;3 hari, atau pemegang yang sama mencatat transfer internal sejumlah itu. Uangnya muter
+            di kantong yang sama, jadi <em>dikeluarkan</em> dari net posisi dan hitungan hari beli.
+            <span class="di-tag di-tag-besar">beli besar</span> = tanpa pasangan &mdash; ada yang membayar sungguhan untuk porsi
+            besar; premi dibandingkan close hari itu (kalau harga dilaporkan). Dianggap positif, tapi ukuran transaksi belum
+            pernah diuji di event study insider.
+            Harga dan nilai dari 60 bar Summary terakhir.
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var diData = null;
+    var diSort = { key: 'minggu_beli', dir: 'desc' };
+
+    function diEsc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+    function diNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
+    }
+    function diSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="ap-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'ap-up' : (v < 0 ? 'ap-down' : 'ap-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + diNum(v, d) + '</span>';
+    }
+
+    function diBesarList(r) {
+        var out = (r.beli_besar || []).map(function (b) {
+            var premi = (b.premi === null || b.premi === undefined) ? ''
+                : ' &middot; premi ' + (b.premi > 0 ? '+' : '') + diNum(b.premi, 1) + '%';
+            return '<span class="ok">&#9650; ' + diNum(b.pct, 2) + '%</span> ' + diEsc(b.nama)
+                 + ' <span class="ap-dim">' + diEsc(b.tanggal.slice(5)) + (b.harga ? ' @' + diNum(b.harga) : '') + premi + '</span>';
+        });
+        (r.pindah_kantong || []).forEach(function (b) {
+            out.push('<span class="netral">&#8644; ' + diNum(b.pct, 2) + '% ' + diEsc(b.nama) + ' ' + b.arah
+                   + ' &harr; ' + diEsc(b.pasangan) + ' ' + diEsc(b.tanggal.slice(5)) + '</span>');
+        });
+        return out.length ? out.join('<br>') : '<span class="ap-dim">&mdash;</span>';
+    }
+
+    function diRender() {
+        if (!diData) { return; }
+        var likuid = $('#diLikuid').is(':checked'), besar = $('#diBesar').is(':checked');
+        var rows = diData.rows.filter(function (r) {
+            r.n_besar = (r.beli_besar || []).length;
+            return (!likuid || r.likuid) && (!besar || r.n_besar);
+        });
+        rows = window.sortRows(rows, diSort.key, diSort.dir);
+        $('#diCount').text('— ' + rows.length + ' dari ' + diData.rows.length + ' emiten, transaksi s/d ' + diData.as_of);
+        if (!rows.length) {
+            $('#diRows').html('<tr><td colspan="11" class="ap-empty">Tidak ada emiten yang cocok.</td></tr>');
+            return;
+        }
+        $('#diRows').html(rows.map(function (r) {
+            var strip = '<span class="di-strip" title="' + diData.n_minggu + ' minggu, kiri = terlama">'
+                      + r.strip.map(function (x) { return '<span class="' + (x ? 'on' : '') + '"></span>'; }).join('') + '</span>';
+            var pembeli = r.pembeli.map(function (p) {
+                return diEsc(p.nama) + ' <span class="ap-dim">' + p.hari + ' hari</span>';
+            }).join('<br>') + (r.n_pembeli > r.pembeli.length ? '<br><span class="ap-dim">+' + (r.n_pembeli - r.pembeli.length) + ' lagi</span>' : '');
+            var tag = (r.n_besar ? '<span class="di-tag di-tag-besar">beli besar</span>' : '')
+                    + ((r.pindah_kantong || []).length ? '<span class="di-tag di-tag-pindah">pindah kantong</span>' : '')
+                    + (r.buyback ? '<span class="di-tag" title="Perusahaan juga buyback">buyback</span>' : '')
+                    + (!r.likuid ? '<span class="di-tag di-tag-tipis" title="Median nilai 20 hari < Rp1 M">tipis</span>' : '');
+            return '<tr>'
+                 + '<td class="ap-left"><a class="ap-ticker" href="/saham/' + diEsc(r.ticker) + '">' + diEsc(r.ticker) + '</a>' + tag
+                 + '<div class="ap-dim" style="font-size:10.5px;">' + diEsc(r.nama) + '</div></td>'
+                 + '<td class="ap-left di-nowrap">' + strip + ' <span style="margin-left:6px;">' + r.minggu_beli + '/' + diData.n_minggu + '</span></td>'
+                 + '<td>' + diNum(r.hari_beli) + '</td>'
+                 + '<td>' + (r.hari_jual ? diNum(r.hari_jual) : '<span class="ap-dim">0</span>') + '</td>'
+                 + '<td>' + diSigned(r.net_pct, 2) + '</td>'
+                 + '<td class="ap-left"><div class="di-buyers">' + pembeli + '</div></td>'
+                 + '<td class="ap-left"><div class="di-besar">' + diBesarList(r) + '</div></td>'
+                 + '<td class="ap-left ap-dim di-nowrap">' + diEsc(r.beli_terakhir) + '</td>'
+                 + '<td>' + diSigned(r.ret_jendela, 1) + '</td>'
+                 + '<td>' + diSigned(r.dari_puncak, 1) + '</td>'
+                 + '<td>' + diNum(r.nilai20_m, 2) + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function diLoad() {
+        $('#diLoading').show(); $('#diBody').hide(); $('#diMessage').hide();
+        $.post('/dicicil-insider-data', { hari: $('#diHari').val(), min_minggu: $('#diMinggu').val() }).done(function (d) {
+            $('#diLoading').hide();
+            if (!d || d.available === false) {
+                $('#diMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            diData = d;
+            var c = d.config;
+            $('#diAturan').html('Aturan: dalam ' + d.hari + ' hari (' + diEsc(d.mulai) + ' s/d ' + diEsc(d.as_of)
+                + '), beli di pasar di &ge; ' + d.min_minggu + ' minggu berbeda, hari jual &le; '
+                + Math.round(c.RASIO_JUAL * 100) + '% hari beli, posisi bersih naik, dan beli terakhir &le; '
+                + c.SEGAR_HARI + ' hari sebelum transaksi terbaru. Dari ' + diNum(d.n_emiten_beli)
+                + ' emiten yang punya beli insider di jendela ini. Dikeluarkan: ' + diNum(d.dibuang.nominee)
+                + ' transaksi rekening sekuritas/kustodian/nominee dan ' + diNum(d.dibuang.ltip)
+                + ' alokasi saham karyawan (harga lapor Rp1). Data insider ditarik kira-kira sebulan sekali, '
+                + 'jadi "terbaru" bisa berumur beberapa minggu.');
+            diRender();
+            $('#diBody').show();
+        }).fail(function () {
+            $('#diLoading').hide();
+            $('#diMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}).
+    $(document).ready(function () {
+        diSort = window.makeSortable('#diThead', function (key, dir) {
+            diSort.key = key; diSort.dir = dir;
+            diRender();
+        }, diSort.key, diSort.dir);
+        $('#diHari, #diMinggu').on('change', diLoad);
+        $('#diLikuid, #diBesar').on('change', diRender);
+        diLoad();
+    });
+</script>
+{% endblock %}

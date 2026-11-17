@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Kabar Semalam{% endblock %}
+{% block page_title %}Kabar Semalam{% endblock %}
+
+{% block page_actions %}
+<button id="ksUlang" class="btn btn-outline-secondary btn-sm">Muat ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .ks-flag { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+               color: var(--distrib); border: 1px solid var(--distrib-dim); padding: 2px 8px; border-radius: 20px; margin-left: 8px; vertical-align: middle; }
+    .ks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+    .ks-tile { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
+    .ks-tile .n { font-size: 11px; color: var(--text-dim); }
+    .ks-tile .v { font-size: 20px; font-weight: 600; font-family: var(--font-mono); margin-top: 2px; }
+    .ks-tile .s { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+    .ks-tile.merah { border-color: var(--distrib); background: var(--distrib-glow); }
+    .ks-tile.merah .n { color: var(--distrib); font-weight: 600; }
+    .ks-tile.info { opacity: .85; }
+    .ks-banner { border-radius: var(--radius-sm); padding: 12px 14px; font-size: 13px; line-height: 1.5; border: 1px solid var(--line); }
+    .ks-banner.merah { border-color: var(--distrib); background: var(--distrib-glow); }
+    .ks-banner.tenang { border-color: var(--line); }
+    .ks-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ks-chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+    .ks-chip a { color: inherit; text-decoration: none; }
+    .ks-chip.kom { border-color: var(--distrib); color: var(--distrib); }
+    .ks-sub { font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-dim); margin: 12px 0 6px; }
+</style>
+
+<div class="content-card">
+    <div class="ap-section-title">Sebelum Jam 9<span class="ks-flag">Cuma lampu merah</span></div>
+    <div class="ap-finding">
+        <h4>Yang sudah final di luar negeri sejak IDX tutup &mdash; dan saham yang sebaiknya tidak dibeli pagi ini.</h4>
+        <p>S&amp;P, Dow, Nasdaq, dan EIDO semalam memang menebak <em>gap</em> pembukaan IHSG, tapi setelah buka sisanya ~0:
+        sudah dibayar di harga buka. Jadi <strong>tidak ada lampu hijau</strong> di sini. Yang terbukti di 2013&ndash;2026:
+        S&amp;P jatuh dalam semalam &rarr; saham lapis tipis &amp; sedang masih turun 0,3&ndash;0,5% dari open ke close;
+        komoditas jatuh dalam &rarr; saham komoditasnya lanjut turun ~0,3&ndash;0,4% (negatif 13 dari 14 tahun).
+        "Jatuh dalam" = 20% malam terburuk 2020&ndash;2026. Lampu merah artinya: tunda beli pagi; kalau pegang, jual di open
+        lebih baik daripada menunggu.</p>
+    </div>
+</div>
+
+<div class="content-card"><div class="ap-section-title">Berita Global Penting</div><div id="ksBerita">Memuat berita global…</div><div class="ap-note">The Fed · NFP · Inflasi AS · MSCI · Risiko global. Diperiksa setiap 15 menit selama halaman terbuka. HP menerima snapshot saat Sync.</div></div>
+
+<div id="ksLoading" class="ap-empty">Membaca pasar luar negeri&hellip;</div>
+<div id="ksMessage" class="ap-empty" style="display:none;"></div>
+
+<div id="ksBody" style="display:none;">
+    <div class="content-card">
+        <div id="ksBanner" class="ks-banner"></div>
+        <div class="ks-sub">Diuji &mdash; bisa menyalakan lampu</div>
+        <div id="ksLampu" class="ks-grid"></div>
+        <div class="ks-sub">Info saja &mdash; arahnya ke gap pembukaan, bukan ke open&rarr;close</div>
+        <div id="ksInfo" class="ks-grid"></div>
+    </div>
+
+    <div class="content-card" id="ksKenaCard">
+        <div class="ap-section-title">Kena Lampu Merah <span id="ksKenaInfo" class="ap-dim"></span></div>
+        <div id="ksKena"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Penilaian Maju <span id="ksJurnalInfo" class="ap-dim"></span></div>
+        <div id="ksJurnal"></div>
+        <div class="ap-note">Aturan dikunci 9 Okt 2026. Lampu tiap hari bursa sejak itu dihitung ulang dari riwayat
+            (sesi luar negeri final + Open/Close Summary), jadi penilaiannya tidak bolong walau halaman ini tidak dibuka.
+            Open yang persis sama dengan close kemarin dibuang, sama seperti di riset.</div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Saham &amp; Komoditasnya</div>
+        <div id="ksKembar" class="ks-chips"></div>
+        <div class="ap-note">Batubara memakai Brent: batubara Rotterdam (MTF=F) berhenti di Yahoo Des 2025, dan di riset
+            Brent juga searah untuk ADRO/PTBA/ITMG.</div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function ksEsc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+    function ksNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
+    }
+    function ksSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="ap-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'ap-up' : (v < 0 ? 'ap-down' : 'ap-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + ksNum(v, d) + '</span>';
+    }
+
+    function ksTile(s) {
+        var kosong = s.ret === null || s.ret === undefined;
+        return '<div class="ks-tile' + (s.merah ? ' merah' : '') + (s.lampu ? '' : ' info') + '">'
+             + '<div class="n">' + ksEsc(s.nama) + (s.merah ? ' &middot; MERAH' : '') + '</div>'
+             + '<div class="v">' + (kosong ? '<span class="ap-dim" style="font-size:13px;">belum final</span>' : ksSigned(s.ret, 2) + '%') + '</div>'
+             + '<div class="s">' + (s.sesi ? 'sesi ' + ksEsc(s.sesi) : '&nbsp;')
+             + (s.ambang !== null && s.ambang !== undefined ? ' &middot; merah &le; ' + ksNum(s.ambang, 2) + '%' : '') + '</div></div>';
+    }
+
+    function ksRender(d) {
+        $('#ksLampu').html(d.seri.filter(function (s) { return s.lampu; }).map(ksTile).join(''));
+        $('#ksInfo').html(d.seri.filter(function (s) { return !s.lampu; }).map(ksTile).join(''));
+        var banner;
+        if (!d.ada_sesi) {
+            banner = '<span class="ap-dim">Belum ada sesi luar negeri yang final sejak IDX tutup ' + ksEsc(d.idx_terakhir)
+                   + '. Sesi AS selesai sekitar jam 03:00&ndash;04:00 WIB &mdash; buka lagi sebelum jam 9.</span>';
+            $('#ksBanner').attr('class', 'ks-banner tenang');
+        } else if (d.merah.length) {
+            var nama = d.seri.filter(function (s) { return s.merah; }).map(function (s) { return s.nama; });
+            banner = '<strong>Lampu merah: ' + nama.map(ksEsc).join(', ') + '.</strong> ' + d.n_kena
+                   + ' saham kena &mdash; tunda beli pagi.';
+            $('#ksBanner').attr('class', 'ks-banner merah');
+        } else {
+            banner = 'Tidak ada lampu merah pagi ini. Itu <em>bukan</em> lampu hijau &mdash; kabar baik semalam sudah '
+                   + 'dihargai di pembukaan.';
+            $('#ksBanner').attr('class', 'ks-banner tenang');
+        }
+        $('#ksBanner').html(banner + ' <span class="ap-dim">(IDX terakhir tutup ' + ksEsc(d.idx_terakhir)
+            + '; dibaca ' + ksEsc(d.dibangun) + ')</span>');
+
+        if (!d.kena.length) {
+            $('#ksKenaCard').hide();
+        } else {
+            $('#ksKenaCard').show();
+            $('#ksKenaInfo').text('— ' + d.n_kena + ' dari ' + d.n_likuid + ' emiten likuid');
+            var kom = d.kena.filter(function (k) { return k.alasan.some(function (a) { return a !== 'spx'; }); });
+            var spx = d.kena.filter(function (k) { return k.alasan.indexOf('spx') >= 0; });
+            var html = '';
+            if (kom.length) {
+                html += '<div class="ks-sub">Komoditas jatuh &mdash; jangan beli pagi, kalau pegang jual di open</div><div class="ks-chips">'
+                      + kom.map(function (k) {
+                            return '<span class="ks-chip kom"><a href="/saham/' + ksEsc(k.stock) + '">' + ksEsc(k.stock)
+                                 + '</a> <span class="ap-dim">' + ksEsc(k.komoditas) + '</span></span>';
+                        }).join('') + '</div>';
+            }
+            if (spx.length) {
+                html += '<div class="ks-sub">S&amp;P jatuh &mdash; lapis tipis &amp; sedang (' + spx.length + ')</div><div class="ks-chips">'
+                      + spx.map(function (k) {
+                            return '<span class="ks-chip"><a href="/saham/' + ksEsc(k.stock) + '">' + ksEsc(k.stock) + '</a></span>';
+                        }).join('') + '</div>';
+            }
+            $('#ksKena').html(html);
+        }
+
+        var j = d.jurnal || {};
+        if (!j.available) {
+            $('#ksJurnalInfo').text('');
+            $('#ksJurnal').html('<span class="ap-dim">' + ksEsc(j.message || 'Belum ada.') + '</span>');
+        } else {
+            $('#ksJurnalInfo').text('— sejak ' + j.mulai + ', ' + j.n_hari + ' hari bursa' + (j.cukup ? '' : ' (belum cukup untuk dibaca)'));
+            function baris(nama, g) {
+                return '<tr><td class="ap-left">' + nama + '</td><td>' + ksNum(g.merah.hari) + '</td><td>' + ksSigned(g.merah.oc, 2)
+                     + '</td><td>' + ksNum(g.biasa.hari) + '</td><td>' + ksSigned(g.biasa.oc, 2) + '</td><td class="ap-left ap-dim">'
+                     + ksEsc(g.harapan) + '</td></tr>';
+            }
+            $('#ksJurnal').html('<div style="overflow-x:auto;"><table class="ap-table"><thead><tr><th class="ap-left">Lampu</th>'
+                + '<th>Hari merah</th><th>Open&rarr;close merah %</th><th>Hari biasa</th><th>Open&rarr;close biasa %</th>'
+                + '<th class="ap-left">Harapan dari riset</th></tr></thead><tbody>'
+                + baris('S&amp;P &rarr; lapis tipis &amp; sedang', j.spx) + baris('Komoditas &rarr; saham komoditas', j.komoditas)
+                + '</tbody></table></div>');
+        }
+        $('#ksKembar').html((d.kembar || []).map(function (k) {
+            return '<span class="ks-chip"><a href="/saham/' + ksEsc(k.stock) + '">' + ksEsc(k.stock) + '</a> <span class="ap-dim">'
+                 + ksEsc(k.komoditas) + '</span></span>';
+        }).join(''));
+    }
+
+    function ksBeritaRender(b) {
+        b = b || {};
+        var h = '<p class="ap-dim">' + ksEsc(b.message || 'Berita belum tersedia.') +
+            (b.diperiksa ? ' Diperiksa: ' + ksEsc(new Date(b.diperiksa).toLocaleString('id-ID', {timeZone: 'Asia/Jakarta'})) + ' WIB' : '') + '</p>';
+        h += (b.items || []).map(function (n) {
+            var link = /^https:\/\//i.test(n.url || '') ? n.url : '#';
+            return '<div class="ks-tile" style="margin-bottom:8px"><div class="ks-sub">' + ksEsc(n.kategori) +
+                (n.kedaluwarsa ? ' · DATA LAMA' : '') + '</div><p>' + ksEsc(n.ringkasan || n.judul) +
+                '</p><p class="ap-note">' + ksEsc(n.dasar_ringkasan) + '</p><p><strong>Konteks pemantauan (umum): </strong>' + ksEsc(n.konteks) + '</p><div class="s">' + ksEsc(n.sumber) + ' · ' + ksEsc(new Date(n.terbit).toLocaleString('id-ID', {timeZone: 'Asia/Jakarta'})) + ' WIB</div></div>';
+        }).join('');
+        $('#ksBerita').html(h);
+    }
+    function ksLoad(force) {
+        $('#ksLoading').show(); $('#ksBody').hide(); $('#ksMessage').hide();
+        $.post('/kabar-semalam-data', force ? { force: '1' } : {}).done(function (d) {
+            $('#ksLoading').hide();
+            ksBeritaRender(d && d.berita_global);
+            if (!d || d.available === false) {
+                $('#ksMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            ksRender(d);
+            $('#ksBody').show();
+        }).fail(function () {
+            $('#ksLoading').hide();
+            $('#ksMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}).
+    $(document).ready(function () {
+        $('#ksUlang').on('click', function () { ksLoad(true); });
+        ksLoad(false);
+        setInterval(function () { if (!document.hidden) ksLoad(false); }, 900000);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% block title %}Audit Screener{% endblock %}
+{% block page_title %}Audit Screener{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="asRefresh">Hitung Ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .as-section-title { font-size: 9px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase;
+                        color: var(--text-dim); margin-bottom: 12px; }
+    .as-finding { background: var(--void); border: 1px solid var(--line); border-radius: 10px;
+                  padding: 14px 16px; margin-bottom: 14px; }
+    .as-finding:last-child { margin-bottom: 0; }
+    .as-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .as-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .as-finding strong { color: var(--text); }
+
+    .as-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+    .as-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-dim); }
+    .as-stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 600; margin-top: 4px; }
+
+    .as-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .as-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .as-table th.as-left { text-align: left; }
+    .as-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .as-table td.as-left { text-align: left; font-family: var(--font-ui); white-space: normal; }
+    .as-table tbody tr:hover { background: var(--raised); }
+    .as-ticker { font-family: var(--font-ui); font-weight: 600; color: var(--accum); text-decoration: none; }
+    .as-ticker:hover { text-decoration: underline; }
+
+    .as-bar-wrap { background: var(--raised); border-radius: 4px; height: 8px; overflow: hidden; min-width: 90px; }
+    .as-bar { height: 100%; background: var(--distrib); }
+    .as-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px;
+                font-weight: 600; font-family: var(--font-ui); white-space: nowrap; }
+    .as-up { color: var(--accum); }
+    .as-down { color: var(--distrib); }
+    .as-dim { color: var(--text-dim); }
+    .as-empty { color: var(--text-dim); text-align: center; padding: 30px; font-size: 12px; }
+
+    .as-controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px; }
+    .as-field { display: flex; flex-direction: column; gap: 3px; }
+    .as-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .as-note { font-size: 11px; color: var(--text-dim); margin-top: 10px; line-height: 1.6; }
+</style>
+
+<div class="as-controls">
+    <div class="as-field">
+        <label>Tampilkan</label>
+        <select id="asMode" class="form-select form-select-sm" style="width:220px;">
+            <option value="missed" selected>Rally yang terlewat</option>
+            <option value="caught">Rally yang tertangkap</option>
+        </select>
+    </div>
+    <div class="as-field">
+        <label>Cari kode</label>
+        <input type="text" id="asFilter" class="form-control form-control-sm"
+               placeholder="BBRI" style="width:120px; text-transform:uppercase;">
+    </div>
+    <div class="as-field">
+        <label>Sebab terlewat</label>
+        <select id="asSebab" class="form-select form-select-sm" style="width:230px;">
+            <option value="nyaris" selected>Nyaris kena (peluang hilang)</option>
+            <option value="lemah">Akumulasi lemah</option>
+            <option value="di_luar_tesis">Di luar tesis</option>
+            <option value="all">Semua sebab</option>
+        </select>
+    </div>
+    <div class="as-field">
+        <label>Likuiditas minimal</label>
+        <select id="asAdv" class="form-select form-select-sm" style="width:170px;">
+            <option value="0">Semua</option>
+            <option value="1000">&ge; Rp1 miliar/hari</option>
+            <option value="5000">&ge; Rp5 miliar/hari</option>
+        </select>
+    </div>
+</div>
+
+<div id="asLoading" class="as-empty">Memutar ulang kriteria screener terhadap seluruh riwayat&hellip; (~20 detik)</div>
+<div id="asMessage" class="as-empty" style="display:none;"></div>
+
+<div id="asBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="as-section-title">Pertanyaan yang Belum Pernah Ditanyakan</div>
+        <div class="as-finding">
+            <h4>Semua evaluasi screener di app ini mengukur presisi. Tidak ada yang mengukur recall.</h4>
+            <p>&quot;Dari yang ditandai, berapa yang benar?&quot; dan &quot;dari semua kenaikan besar yang
+            benar-benar terjadi, berapa yang tertangkap?&quot; bisa berjawab sangat berbeda. Screener yang cuma
+            menandai 3 saham setahun bisa saja presisinya 100% sambil melewatkan hampir semua peluang. Halaman ini
+            mengambil semua rally besar yang <strong>sudah terjadi</strong>, lalu memutar ulang kriteria Kering
+            Screener pada hari-hari <strong>sebelum</strong> rally itu mulai.</p>
+        </div>
+        <div class="as-finding">
+            <h4>Yang membuat hasilnya bisa ditindaklanjuti: tabel terdakwa.</h4>
+            <p>Untuk setiap rally yang terlewat, dicatat <strong>kriteria mana</strong> yang tidak pernah terpenuhi
+            sepanjang jendela sebelum rally. Kalau ternyata sebagian besar kandidat mati di satu kriteria, kriteria
+            itulah yang perlu ditinjau &mdash; bukan seluruh screener-nya.</p>
+        </div>
+    </div>
+
+    <div class="content-card" id="asSisiCard" style="border-left:3px solid var(--warn); display:none;">
+        <div class="as-section-title" style="color:var(--warn);">Sisi Mana yang Dipilih Screener
+            <span id="asSisiMeta" class="as-dim"></span></div>
+        <div class="as-finding">
+            <h4>Satu-satunya arah yang bertahan 10 tahun berlawanan dengan premis aplikasi ini.</h4>
+            <p>Uji luar sampel Penemu Pola (21 emiten, 2016&ndash;2025) menyisakan dua arah:
+            <strong>beli saat harga 20 hari turun</strong> (+1,37 pp, 7/10 tahun) mengalahkan
+            <strong>ikut Top5 saat harga sudah naik</strong> (&minus;0,95 pp, 7/10 tahun).
+            Karena itu aturan tiap screener diputar ulang ke seluruh riwayat, lalu tiap pilihannya
+            diklasifikasikan ke salah satu sisi.</p>
+        </div>
+        <div class="as-stat-grid" id="asSisiStats"></div>
+        <div style="overflow-x:auto; margin-top:12px;">
+            <table class="as-table">
+                <thead><tr>
+                    <th class="as-left">Screener</th>
+                    <th>n</th><th>Edge</th><th>vs sisi A saja</th>
+                    <th>% sisi A</th><th>% sisi B</th><th>% lain</th>
+                </tr></thead>
+                <tbody id="asSisiBody"></tbody>
+            </table>
+        </div>
+        <div class="as-note" id="asSisiNote"></div>
+        <div class="as-note" id="asSisiReturn" style="border-left:2px solid var(--distrib); padding-left:8px;"></div>
+        <div class="as-note">
+            <strong>Kenapa baseline dihitung per paruh:</strong> baseline paruh 1 adalah 15,6% dan paruh 2
+            adalah 67,2%. Kalau digabung jadi satu, jurang A-vs-B tampak 22 poin persen padahal sebenarnya
+            5,9. Versi pertama audit ini tertipu persis oleh itu.
+            <strong>Batas:</strong> replay hanya mencakup Mar&ndash;Jul 2026 (butuh 40 hari ke depan);
+            arahnya didukung uji 10 tahun, besarnya tidak. Kering Screener tidak ikut karena aturannya
+            bergantung folder eksternal.
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="as-section-title">Hasil Audit <span id="asMeta" class="as-dim"></span></div>
+        <div class="as-stat-grid" id="asStats"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="as-section-title">Terlewat Itu Belum Tentu Gagal &mdash; Ini Pemisahannya</div>
+        <div class="as-finding" style="margin-bottom:14px;">
+            <p>Menyamakan semua yang terlewat membuat daftarnya jadi tumpukan mentah. Sebagian besar rally yang
+            &quot;terlewat&quot; justru terjadi pada saham yang saat itu terukur <strong>distribusi</strong>, bukan
+            akumulasi &mdash; itu bukan kegagalan screener, melainkan <strong>batas dari pendekatannya</strong>.
+            Yang benar-benar mengukur peluang hilang cuma baris <em>Nyaris kena</em>.</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="as-table">
+                <thead>
+                    <tr>
+                        <th class="as-left">Sebab terlewat</th>
+                        <th>Jumlah</th>
+                        <th>%</th>
+                        <th class="as-left">Artinya</th>
+                    </tr>
+                </thead>
+                <tbody id="asSebabBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="as-section-title">Kriteria yang Paling Sering Menggagalkan</div>
+        <div style="overflow-x:auto;">
+            <table class="as-table">
+                <thead id="asBlameHead">
+                    <tr>
+                        <th class="as-left" data-sort-key="label">Kriteria</th>
+                        <th class="as-left" style="width:120px;">Porsi</th>
+                        <th data-sort-key="menggagalkan">Menggagalkan</th>
+                        <th data-sort-key="pct">% dari terlewat</th>
+                        <th data-sort-key="sendirian">Satu-satunya penghalang</th>
+                    </tr>
+                </thead>
+                <tbody id="asBlameBody"></tbody>
+            </table>
+        </div>
+        <div class="as-note">
+            &quot;Satu-satunya penghalang&quot; = kasus di mana semua kriteria lain sudah terpenuhi dan hanya
+            kriteria ini yang menggagalkan. Angka itulah yang paling berarti: melonggarkannya akan langsung
+            menambah recall, sementara kriteria dengan angka nol tidak akan mengubah apa pun.
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="as-section-title">Daftar Rally <span id="asCount" class="as-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="as-table">
+                <thead id="asThead">
+                    <tr>
+                        <th class="as-left" data-sort-key="stock">Kode</th>
+                        <th class="as-left" data-sort-key="date">Tanggal mulai</th>
+                        <th data-sort-key="gain_pct">Kenaikan %</th>
+                        <th data-sort-key="close">Harga</th>
+                        <th data-sort-key="adv_juta">ADV (jt)</th>
+                        <th data-sort-key="skor">Skor akumulasi</th>
+                        <th class="as-left" data-sort-key="sebab_label">Sebab</th>
+                        <th class="as-left">Gagal di kriteria</th>
+                    </tr>
+                </thead>
+                <tbody id="asTableBody"></tbody>
+            </table>
+        </div>
+        <div class="as-note">
+            Data harian app ini hanya ~8 bulan, jadi jumlah rally terbatas dan jendela lihat-ke-belakang pendek
+            &mdash; recall di sini indikatif, bukan angka final. Sebagian rally juga saham gorengan yang memang
+            tidak ingin ditangkap screener akumulasi; kolom ADV membantu memisahkannya.
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var asData = null;
+    // Default urut: kenaikan terbesar dulu -- yang paling menyakitkan
+    // untuk dilewatkan ada di atas.
+    var asSort = { key: 'gain_pct', dir: 'desc' };
+    var asBlameSort = { key: 'menggagalkan', dir: 'desc' };
+
+    function asNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+
+    var AS_COLOR = { hijau: 'var(--accum)', kuning: 'var(--warn)',
+                     merah: 'var(--distrib)', netral: 'var(--text-dim)' };
+
+    function asRenderSisi(d) {
+        if (!d || !d.available) { $('#asSisiCard').hide(); return; }
+        var A = d.sisi.a.edge, B = d.sisi.b.edge;
+        function warna(v) { return v > 0 ? 'var(--accum)' : (v < 0 ? 'var(--distrib)' : 'var(--text)'); }
+        function sgn(v) { return (v === null || v === undefined) ? '—' : (v > 0 ? '+' : '') + v.toFixed(2); }
+        $('#asSisiMeta').text(d.periode.dari + ' s.d. ' + d.periode.sampai + ' · '
+            + d.n_pilihan.toLocaleString('id-ID') + ' pilihan · ' + d.n_emiten + ' emiten · horizon '
+            + d.horizon + ' hari');
+        $('#asSisiStats').html(
+            '<div class="as-stat"><div class="as-stat-label">Sisi A — harga turun</div>'
+          + '<div class="as-stat-value" style="color:' + warna(A) + '">' + sgn(A) + ' pp</div>'
+          + '<div class="as-stat-sub">pembanding · luar sampel +1,37</div></div>'
+          + '<div class="as-stat"><div class="as-stat-label">Sisi B — ikut bandar</div>'
+          + '<div class="as-stat-value" style="color:' + warna(B) + '">' + sgn(B) + ' pp</div>'
+          + '<div class="as-stat-sub">luar sampel −0,95</div></div>'
+          + '<div class="as-stat"><div class="as-stat-label">Jurang A − B</div>'
+          + '<div class="as-stat-value">' + d.sisi.jurang.toFixed(2) + ' pp</div>'
+          + '<div class="as-stat-sub">luar sampel 2,3 pp</div></div>');
+        $('#asSisiBody').html((d.rows || []).map(function (r) {
+            return '<tr>'
+                 + '<td class="as-left">' + r.layar + '</td>'
+                 + '<td>' + r.n.toLocaleString('id-ID') + '</td>'
+                 + '<td style="color:' + warna(r.edge) + '">' + sgn(r.edge) + '</td>'
+                 + '<td style="color:' + warna(r.vs_sisi_a) + '; font-weight:600;">' + sgn(r.vs_sisi_a) + '</td>'
+                 + '<td>' + r.pct_a.toFixed(1) + '%</td>'
+                 + '<td>' + r.pct_b.toFixed(1) + '%</td>'
+                 + '<td>' + r.pct_lain.toFixed(1) + '%</td>'
+                 + '</tr>';
+        }).join(''));
+        $('#asSisiNote').html('<strong>' + d.kesimpulan + '</strong>');
+        var R = d.uji_return;
+        if (R) {
+            $('#asSisiReturn').html(
+                '<strong style="color:var(--distrib);">Semua angka di atas adalah win rate, bukan uang.</strong> '
+              + 'Diperiksa ulang dalam satuan rata-rata return di luar sampel (21 emiten, 2016&ndash;2025), '
+              + 'urutannya <strong>berbalik</strong>: pasar ' + R.pasar.toFixed(2) + '%, '
+              + 'sisi A ' + R.sisi_a.ret.toFixed(2) + '% (' + R.sisi_a.vs_pasar.toFixed(2) + '), '
+              + 'sisi B ' + R.sisi_b.ret.toFixed(2) + '% (+' + R.sisi_b.vs_pasar.toFixed(2) + '). '
+              + 'Sisi A lebih sering menang tapi menangnya lebih kecil (rata menang +'
+              + R.sisi_a.menang.toFixed(2) + '% vs +' + R.sisi_b.menang.toFixed(2) + '%). '
+              + 'Per tahun, sisi A hanya unggul di ' + R.tahun_positif + ' dari ' + R.tahun_total
+              + ' tahun, rata-rata +' + R.tahun_rata2.toFixed(2) + '% &mdash; nol. '
+              + '<strong>Perbandingan antar screener tetap sah</strong> (dalam satuan return pun semuanya '
+              + 'kalah dari aturan sederhana), tapi aturan sederhana itu sendiri belum terbukti '
+              + 'menghasilkan uang.');
+        }
+        $('#asSisiCard').show();
+    }
+
+    function asRenderStats(d) {
+        $('#asMeta').text('— ' + asNum(d.n_emiten) + ' emiten, rally = naik ≥' + d.config.RALLY_PCT
+            + '% dalam ' + d.config.RALLY_WINDOW + ' hari, dicari sinyal ' + d.config.LEAD_DAYS + ' hari sebelumnya');
+        var recallColor = d.recall >= 50 ? 'var(--accum)' : (d.recall >= 25 ? 'var(--warn)' : 'var(--distrib)');
+        var items = [
+            ['Rally besar', asNum(d.n_rally), 'var(--text)'],
+            ['Tertangkap', asNum(d.n_caught), 'var(--accum)'],
+            ['Nyaris kena', asNum(d.n_nyaris), 'var(--distrib)'],
+            ['Recall mentah', asNum(d.recall, 1) + '%', recallColor],
+            ['Recall dalam tesis', asNum(d.recall_tesis, 1) + '%', 'var(--warn)']
+        ];
+        $('#asStats').html(items.map(function (it) {
+            return '<div><div class="as-stat-label">' + it[0] + '</div>'
+                 + '<div class="as-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function asRenderSebab(d) {
+        $('#asSebabBody').html((d.sebab || []).map(function (s) {
+            var color = AS_COLOR[s.verdict] || 'var(--text-dim)';
+            return '<tr>'
+                 + '<td class="as-left"><span class="as-badge" style="color:' + color
+                 +   '; border:1px solid ' + color + '55; background:' + color + '14;">' + s.label + '</span></td>'
+                 + '<td>' + asNum(s.n) + '</td>'
+                 + '<td>' + asNum(s.pct, 1) + '%</td>'
+                 + '<td class="as-left as-dim">' + s.penjelasan + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function asRenderBlame(d) {
+        var max = Math.max.apply(null, d.blame.map(function (b) { return b.menggagalkan; })) || 1;
+        var baris = window.sortRows(d.blame, asBlameSort.key, asBlameSort.dir);
+        $('#asBlameBody').html(baris.map(function (b) {
+            var w = Math.round(b.menggagalkan / max * 100);
+            var dim = b.menggagalkan === 0 ? ' class="as-dim"' : '';
+            return '<tr>'
+                 + '<td class="as-left"' + dim + '>' + b.label + '</td>'
+                 + '<td class="as-left"><div class="as-bar-wrap"><div class="as-bar" style="width:' + w + '%;"></div></div></td>'
+                 + '<td>' + asNum(b.menggagalkan) + '</td>'
+                 + '<td>' + asNum(b.pct, 1) + '%</td>'
+                 + '<td>' + asNum(b.sendirian) + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function asRenderTable() {
+        if (!asData) { return; }
+        var mode = $('#asMode').val();
+        var q = ($('#asFilter').val() || '').trim().toUpperCase();
+        var minAdv = parseFloat($('#asAdv').val()) || 0;
+        var sebab = $('#asSebab').val();
+        var isMissed = mode !== 'caught';
+        var src = isMissed ? asData.missed : asData.caught;
+        $('#asSebab').prop('disabled', !isMissed);
+
+        var rows = src.filter(function (r) {
+            if (q && r.stock.indexOf(q) === -1) { return false; }
+            if (minAdv && !(r.adv_juta >= minAdv)) { return false; }
+            if (isMissed && sebab !== 'all' && r.sebab !== sebab) { return false; }
+            return true;
+        });
+        rows = window.sortRows(rows, asSort.key, asSort.dir);
+
+        $('#asCount').text('— ' + rows.length + ' baris');
+        if (!rows.length) {
+            $('#asTableBody').html('<tr><td colspan="8" class="as-empty">Tidak ada yang cocok.</td></tr>');
+            return;
+        }
+
+        $('#asTableBody').html(rows.slice(0, 300).map(function (r) {
+            var gagal = (r.gagal_label && r.gagal_label.length)
+                ? r.gagal_label.join(', ')
+                : '<span class="as-dim">' + (isMissed ? 'semua kriteria pernah terpenuhi, tapi tidak bersamaan' : 'tertangkap') + '</span>';
+            var color = AS_COLOR[r.sebab_verdict] || 'var(--text-dim)';
+            var sebabCell = r.sebab_label
+                ? '<span class="as-badge" style="color:' + color + '; border:1px solid ' + color
+                  + '55; background:' + color + '14;">' + r.sebab_label + '</span>'
+                  + (r.disaring_likuiditas ? ' <span class="as-dim">&middot; likuiditas</span>' : '')
+                : '<span class="as-dim">&mdash;</span>';
+            return '<tr>'
+                 + '<td class="as-left"><a class="as-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>'
+                 + '<td class="as-left as-dim">' + r.date + '</td>'
+                 + '<td class="as-up">+' + asNum(r.gain_pct, 1) + '</td>'
+                 + '<td>' + asNum(r.close, 0) + '</td>'
+                 + '<td>' + asNum(r.adv_juta, 0) + '</td>'
+                 + '<td>' + (r.skor === null ? '<span class="as-dim">&mdash;</span>' : asNum(r.skor, 3)) + '</td>'
+                 + '<td class="as-left">' + sebabCell + '</td>'
+                 + '<td class="as-left">' + gagal + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function asLoad(force) {
+        $('#asLoading').show();
+        $('#asBody').hide();
+        $('#asMessage').hide();
+        $.post('/audit-screener-data', { force: force ? '1' : '0' }).done(function (d) {
+            if (!d || d.available === false) {
+                $('#asLoading').hide();
+                $('#asMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            asData = d;
+            asRenderStats(d);
+            $.post('/audit-sisi-data', { force: force ? '1' : '0' }).done(asRenderSisi);
+            asRenderSebab(d);
+            asRenderBlame(d);
+            asRenderTable();
+            $('#asLoading').hide();
+            $('#asBody').show();
+        }).fail(function () {
+            $('#asLoading').hide();
+            $('#asMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}), jadi POST yang
+    // dipanggil lebih awal (saat script diparse) berangkat TANPA token dan
+    // ditolak CSRFProtect dengan 400.
+    $(document).ready(function () {
+        $('#asMode, #asAdv, #asSebab').on('change', asRenderTable);
+        $('#asFilter').on('input', asRenderTable);
+        $('#asRefresh').on('click', function () { asLoad(true); });
+
+        asSort = window.makeSortable('#asThead', function (key, dir) {
+            asSort.key = key; asSort.dir = dir;
+            asRenderTable();
+        }, asSort.key, asSort.dir);
+
+        asBlameSort = window.makeSortable('#asBlameHead', function (key, dir) {
+            asBlameSort.key = key; asBlameSort.dir = dir;
+            if (asData) { asRenderBlame(asData); }
+        }, asBlameSort.key, asBlameSort.dir);
+
+        asLoad(false);
+    });
+</script>
+{% endblock %}

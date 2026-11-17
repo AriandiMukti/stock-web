@@ -1,0 +1,21 @@
+# Screener: which stocks look oversold today while big brokers are buying?
+# Runs the same lines once per stock in the universe.
+#
+#   python -m stocklang stocklang/examples/screener.stk
+
+universe all
+
+rsi14     = rsi(close, 14)
+vol_ratio = volume / sma(volume, 20)
+big_flow  = total(net_top5, 5)        # net lots bought by the top 5 brokers, last 5 days
+
+oversold    = rsi14 < 35
+accumulated = big_flow > 0 and total(retail, 5) < 0
+liquid      = sma(volume * close, 20) > 1B   # avg daily value above Rp 1 billion
+
+screen(oversold and accumulated and liquid,
+       rsi = round(rsi14, 1),
+       vol_x = round(vol_ratio, 2),
+       top5_lots_5d = big_flow,
+       close = close,
+       sort = "rsi", desc = false)

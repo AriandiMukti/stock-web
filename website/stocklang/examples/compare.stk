@@ -1,0 +1,14 @@
+# Run one strategy over several stocks and compare.
+# User-defined functions keep the rules in one place.
+#
+#   python -m stocklang stocklang/examples/compare.stk
+
+universe [BBCA, BBRI, BMRI, BBNI, TLKM, ASII, ADRO, ANTM, UNVR, ICBP]
+
+fn breakout(n) = close > highest(high, n)[1]       # close above the prior n-day high
+fn volume_spike(k) = volume > sma(volume, 20) * k
+
+buy  = breakout(20) and volume_spike(1.5)
+sell = close < lowest(low, 10)[1]
+
+backtest(buy, sell, capital = 10M, stop_loss = 7%, take_profit = 20%)

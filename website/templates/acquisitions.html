@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Akuisisi{% endblock %}
+{% block page_title %}Akuisisi{% endblock %}
+
+{% block content %}
+
+<style>
+    .history-table { width: 100%; }
+    .history-table th {
+        font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+        letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim);
+        text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    }
+    .history-table td {
+        font-family: var(--font-mono); font-size: 12.5px;
+        padding: 9px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text);
+        vertical-align: top;
+    }
+    .history-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    .history-empty { color: var(--text-dim); font-size: 13px; padding: 18px 4px; }
+    .history-stock-link { color: var(--accum); text-decoration: none; font-weight: 600; }
+    .history-stock-link:hover { text-decoration: underline; }
+    .acq-note {
+        font-size: 12.5px; color: var(--text-dim); margin-bottom: 14px; line-height: 1.5;
+    }
+    .acq-desc { font-family: var(--font-sans, inherit); font-size: 12px; color: var(--text-dim); max-width: 360px; }
+</style>
+
+<div class="acq-note" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <span>
+        Berita akuisisi/pengambilalihan saham nyata (bukan hasil scan harga/volume). Backtesting beberapa pattern
+        teknikal (sideways+spike, retail crossover, foreign/domestic divergence) tidak menemukan prediktor yang
+        reliabel untuk rally besar; rally terbesar di watchlist ini ternyata memang dipicu berita M&A nyata atau
+        aktivitas spekulatif yang diawasi bursa — jadi menu ini melacak berita itu langsung, bukan pola harga.
+    </span>
+    <span style="flex-shrink:0; display:flex; gap:8px;">
+        <a href="/akuisisi/search?saved=1" class="btn btn-sm btn-outline-secondary">Berita Tersimpan</a>
+        <a href="/akuisisi/search" class="btn btn-sm btn-primary">Cari Berita Baru</a>
+    </span>
+</div>
+
+<div class="content-card">
+    {% if signals %}
+    <div class="table-responsive">
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Tanggal</th>
+                    <th>Stock</th>
+                    <th>Pengendali Baru</th>
+                    <th>Saham (%)</th>
+                    <th>Nilai (B)</th>
+                    <th>Keterangan</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in signals %}
+                <tr>
+                    <td>{{ s.announcement_date }}</td>
+                    <td><a href="/akuisisi/chart?index={{ loop.index0 }}" class="history-stock-link" title="View {{ s.stock }} chart at announcement date">{{ s.stock }}</a></td>
+                    <td>{{ s.new_controller if s.new_controller is not none else '—' }}</td>
+                    <td>{{ s.stake_pct if s.stake_pct is not none else '—' }}</td>
+                    <td>{{ s.value_idr_b if s.value_idr_b is not none else '—' }}</td>
+                    <td class="acq-desc">{{ s.description }}</td>
+                    <td><a href="/akuisisi/chart?index={{ loop.index0 }}" class="btn btn-sm btn-outline-secondary">View chart</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="history-empty">Belum ada data akuisisi. Tambahkan ke acquisition_signals.csv.</div>
+    {% endif %}
+</div>
+
+{% endblock %}

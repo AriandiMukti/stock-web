@@ -1,0 +1,689 @@
+{% extends "base.html" %}
+{% block title %}Research{% endblock %}
+{% block page_title %}Research{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="rsRiwayatBtn">Riwayat Run</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .rs-title { font-size: 9px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase;
+                color: var(--text-dim); margin-bottom: 12px; }
+    .rs-note { background: var(--void); border: 1px solid var(--line); border-radius: 10px;
+               padding: 14px 16px; margin-bottom: 12px; }
+    .rs-note:last-child { margin-bottom: 0; }
+    .rs-note h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .rs-note p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0 0 6px; }
+    .rs-note p:last-child { margin-bottom: 0; }
+    .rs-note strong { color: var(--text); }
+    .rs-note code { font-family: var(--font-mono); font-size: 11px; color: var(--accum); }
+
+    .rs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 16px; }
+    .rs-field { display: flex; flex-direction: column; gap: 4px; }
+    .rs-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                      text-transform: uppercase; color: var(--text-dim); }
+    .rs-field .rs-help { font-size: 10.5px; color: var(--text-dim); line-height: 1.5; }
+    .rs-check { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-mid); }
+    .rs-check input { accent-color: var(--accum); }
+
+    .rs-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+    .rs-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.6px;
+                     text-transform: uppercase; color: var(--text-dim); }
+    .rs-stat-value { font-family: var(--font-mono); font-size: 21px; font-weight: 600; margin-top: 4px; }
+    .rs-stat-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+
+    .rs-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .rs-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .rs-table th.rs-left, .rs-table td.rs-left { text-align: left; }
+    .rs-table td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .rs-table td.rs-left { font-family: var(--font-ui); }
+    .rs-table tbody tr:hover { background: var(--raised); }
+    .rs-up { color: var(--accum); }
+    .rs-down { color: var(--distrib); }
+    .rs-dim { color: var(--text-dim); }
+    .rs-empty { color: var(--text-dim); text-align: center; padding: 28px; font-size: 12px; }
+
+    .rs-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px;
+                border-radius: 20px; font-size: 10.5px; font-weight: 600;
+                font-family: var(--font-ui); }
+    .rs-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .rs-dot.rs-live { animation: rsPulse 1.1s ease-in-out infinite; }
+    @keyframes rsPulse { 0%,100% { opacity: 1; transform: scale(1); }
+                         50% { opacity: 0.35; transform: scale(0.75); } }
+
+    .rs-bar-wrap { background: var(--raised); border-radius: 4px; height: 6px; overflow: hidden; }
+    .rs-bar { height: 100%; background: var(--accum); transition: width 0.4s ease; }
+
+    .rs-log { background: #02050A; border: 1px solid var(--line); border-radius: 10px;
+              font-family: var(--font-mono); font-size: 11px; line-height: 1.65;
+              padding: 12px 14px; max-height: 340px; overflow-y: auto; white-space: pre-wrap;
+              word-break: break-word; }
+    .rs-log-baris { display: flex; gap: 10px; }
+    .rs-log-t { color: #3E4C60; flex-shrink: 0; width: 52px; text-align: right; }
+    .rs-log-info { color: var(--text-mid); }
+    .rs-log-tahap { color: var(--info); font-weight: 600; }
+    .rs-log-ok { color: var(--accum); }
+    .rs-log-warn { color: var(--warn); }
+    .rs-log-error { color: var(--distrib); }
+    .rs-log-dim { color: var(--text-dim); }
+
+    .rs-vonis { border-left: 3px solid var(--line); padding: 14px 16px; border-radius: 8px;
+                background: var(--void); }
+    .rs-vonis.gagal { border-left-color: var(--distrib); }
+    .rs-vonis.lemah { border-left-color: var(--warn); }
+    .rs-vonis.diam { border-left-color: var(--info); }
+    .rs-vonis.menjanjikan { border-left-color: var(--accum); }
+    .rs-vonis h4 { font-size: 13px; margin: 0 0 6px; }
+    .rs-vonis p { font-size: 12px; color: var(--text-mid); line-height: 1.7; margin: 0; }
+
+    .rs-sebaran { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; }
+    .rs-sb-row { display: grid; grid-template-columns: 78px 1fr 42px; align-items: center;
+                 gap: 8px; font-size: 11.5px; margin-bottom: 5px; }
+    .rs-sb-row span:first-child { font-family: var(--font-mono); color: var(--text-mid); }
+    .rs-sb-row span:last-child { font-family: var(--font-mono); color: var(--text-dim);
+                                 text-align: right; }
+    .rs-riwayat-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px;
+                      border-bottom: 1px solid var(--line-soft); font-size: 12px; cursor: pointer; }
+    .rs-riwayat-row:hover { background: var(--raised); }
+    .rs-riwayat-row .rs-rw-id { font-family: var(--font-mono); color: var(--text-dim);
+                                font-size: 11px; flex-shrink: 0; }
+    .rs-riwayat-row .rs-rw-cfg { color: var(--text-mid); flex: 1; }
+</style>
+
+<!-- ==================================================================== -->
+<div class="content-card">
+    <div class="rs-title">Apa yang Dikerjakan Halaman Ini</div>
+    <div class="rs-note">
+        <h4>Satu kebijakan yang memutuskan tujuh hal sekaligus.</h4>
+        <p>Semua modul lain di app ini menghasilkan <em>sinyal</em> &mdash; daftar saham yang menarik.
+        Tidak ada satu pun yang menjawab pertanyaan sesudahnya: berapa besar dibeli, di mana stop-nya,
+        kapan dilepas. Halaman ini melatih satu agen <em>reinforcement learning</em> yang memutuskan
+        semuanya bersamaan: <strong>saham mana</strong>, <strong>berapa banyak sekaligus</strong>,
+        <strong>porsi per transaksi</strong>, <strong>take profit</strong>, <strong>stop loss</strong>,
+        dan <strong>berapa lama ditahan</strong>.</p>
+        <p>&quot;Kondisi beli dan jual ketika apa&quot; sengaja <strong>tidak</strong> dijadikan tombol
+        yang bisa diatur &mdash; itu justru yang dipelajari. Tabel <em>Profil Kondisi Beli</em> di bawah
+        membacanya balik dari kebijakan yang sudah terlatih.</p>
+    </div>
+    <div class="rs-note">
+        <h4>TP dan SL dinyatakan dalam kelipatan ATR, bukan persen tetap.</h4>
+        <p>Stop 3% itu sangat longgar untuk BBCA dan sangat ketat untuk saham gorengan. Dalam satuan
+        ATR (rata-rata rentang harian), satu kebijakan yang sama bisa dipakai lintas emiten dengan
+        volatilitas jauh berbeda.</p>
+    </div>
+    <div class="rs-note">
+        <h4>Data harga dari Yahoo Finance; sinyal app ini cuma pendukung.</h4>
+        <p>Seluruh OHLCV dan simulasi transaksi bersandar pada Yahoo Finance, yang menyediakan
+        belasan tahun ke belakang. Berkas <code>Daily/Summary</code> dan modul-modul lain
+        (Net Top5, arus ritel) masuk sebagai <strong>fitur pendukung opsional</strong> &mdash;
+        cakupannya cuma ~161 hari bursa, jadi default-nya mati.</p>
+    </div>
+    <div class="rs-note">
+        <h4>Tidak berdagang adalah jawaban yang sah &mdash; dan karena itu harus terukur.</h4>
+        <p>Reward yang dioptimalkan adalah <strong>keuntungan absolut</strong>, bukan selisih
+        terhadap IHSG. Artinya memegang kas bernilai nol dan agen boleh menyimpulkan bahwa tidak ada
+        peluang yang menutupi biaya transaksi. Supaya kesimpulan itu bisa dibedakan dari optimizer
+        yang kolaps, setiap fold melaporkan <strong>modal terpakai rata-rata</strong>, persen hari
+        portofolio terisi, dan rentetan kosong terpanjang &mdash; dan ada vonis tersendiri untuk agen
+        yang memilih diam.</p>
+        <p><strong>Universe tidak dibatasi:</strong> bisa seluruh daftar emiten app ini. Yang membuatnya
+        muat adalah latihan mengambil sampel acak beberapa puluh emiten per episode sementara evaluasi
+        tetap memakai universe penuh. Efek sampingnya menguntungkan &mdash; jaringan tidak punya satu
+        pun parameter per-emiten, jadi ia tidak bisa menghafal &quot;BBRI biasanya naik&quot;.</p>
+    </div>
+    <div class="rs-note" style="border-left:3px solid var(--warn);">
+        <h4>Pelindung yang membuat angkanya boleh dibaca &mdash; dan yang membuatnya tidak boleh dipercaya bulat-bulat.</h4>
+        <p><strong>Walk-forward:</strong> agen dilatih di jendela beberapa tahun lalu diuji di tahun
+        <em>berikutnya</em> yang belum pernah dilihat, kemudian jendelanya digeser. Tidak ada satu pun
+        angka utama di halaman ini yang berasal dari periode latih.
+        <strong>Eksekusi hari berikutnya:</strong> keputusan dari data sampai penutupan hari&nbsp;t,
+        order jadi di <em>pembukaan</em> hari&nbsp;t+1.
+        <strong>Biaya nyata:</strong> fee beli 0,15%, fee jual 0,25%, plus slippage dua arah, plus
+        pembulatan ke lot 100 lembar, plus batas order terhadap likuiditas harian saham itu.</p>
+        <p><strong>Yang tetap tidak bisa dihilangkan:</strong> emiten yang sudah delisting tidak ada di
+        Yahoo Finance, jadi universe apa pun yang dipilih hari ini otomatis berisi perusahaan yang
+        selamat (<em>bias bertahan hidup</em>). Sinyal arus broker dari folder <code>Daily/Summary</code>
+        cuma ada ~161 hari bursa, terlalu pendek untuk melatih RL &mdash; opsinya ada tapi default mati.
+        Dan RL punya kecenderungan kuat menghafal: itu sebabnya pembanding <strong>kebijakan acak</strong>
+        dan <strong>sebaran antar-seed</strong> ditampilkan di setiap fold, bukan disembunyikan.</p>
+    </div>
+</div>
+
+<!-- ==================================================================== -->
+<div class="content-card">
+    <div class="rs-title">Konfigurasi</div>
+    <div id="rsForm"><div class="rs-empty">Memuat&hellip;</div></div>
+    <div style="display:flex; gap:10px; align-items:center; margin-top:16px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm btn-primary" id="rsJalankan">Jalankan Riset</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="rsReset">Kembalikan Default</button>
+        <span class="rs-dim" style="font-size:11.5px;" id="rsEstimasi"></span>
+    </div>
+    <div id="rsPesan" class="rs-dim" style="font-size:12px; margin-top:10px; display:none;"></div>
+</div>
+
+<!-- ==================================================================== -->
+<div class="content-card" id="rsJalanCard" style="display:none;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span class="rs-badge" id="rsStatusBadge"><span class="rs-dot"></span><span id="rsStatusText">&mdash;</span></span>
+            <span style="font-size:12.5px; color:var(--text);" id="rsTahap">&mdash;</span>
+            <span class="rs-dim" style="font-family:var(--font-mono); font-size:11.5px;" id="rsWaktu"></span>
+        </div>
+        <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-sm btn-outline-danger" id="rsHentikan" style="display:none;">Hentikan</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="rsTutupLog">Sembunyikan Log</button>
+        </div>
+    </div>
+    <div class="rs-bar-wrap" style="margin:12px 0 14px;"><div class="rs-bar" id="rsBar" style="width:0%;"></div></div>
+    <div class="rs-log" id="rsLog"></div>
+</div>
+
+<!-- ==================================================================== -->
+<div id="rsHasil" style="display:none;">
+
+    <div class="content-card">
+        <div class="rs-title">Vonis Luar Sampel</div>
+        <div class="rs-vonis" id="rsVonis"><h4 id="rsVonisJudul"></h4><p id="rsVonisTeks"></p></div>
+        <div class="rs-stat-grid" id="rsStats" style="margin-top:18px;"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="rs-title">Kurva Ekuitas Gabungan &mdash; Hanya Periode Uji</div>
+        <p style="font-size:11.5px; color:var(--text-dim); line-height:1.6; margin:0 0 10px;">
+            Kurva ini menyambung periode <strong>uji</strong> tiap fold, jadi setiap titiknya berasal
+            dari kebijakan yang belum pernah melihat hari itu. Yang dipakai adalah <strong>seed
+            pertama</strong>, bukan seed terbaik &mdash; memilih seed terbaik setelah melihat hasil
+            ujinya adalah bentuk halus dari melihat masa depan.
+        </p>
+        <div id="rsKurva" style="height:300px;"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="rs-title">Hasil per Fold</div>
+        <div style="overflow-x:auto;">
+            <table class="rs-table">
+                <thead><tr>
+                    <th class="rs-left">Tahun uji</th><th class="rs-left">Periode latih</th>
+                    <th>Agen</th><th>Sebaran semua run</th><th>Beli-tahan</th><th>Acak</th>
+                    <th>Alfa</th><th>Sharpe</th><th>DD maks</th><th>Trade</th><th>Modal terpakai</th>
+                </tr></thead>
+                <tbody id="rsFoldBody"></tbody>
+            </table>
+        </div>
+        <p style="font-size:11.5px; color:var(--text-dim); line-height:1.6; margin:12px 0 0;">
+            <strong>Acak</strong> adalah kebijakan dengan ruang aksi yang persis sama tapi keputusan
+            acak, dijalankan 5 kali dan dirata-rata. Kalau agen tidak mengalahkan kolom ini, yang
+            terukur cuma efek pasar dan efek ukuran posisi &mdash; bukan hasil belajar.
+            <strong>Sebaran semua run</strong> mencakup seluruh rollout evaluasi dari seluruh seed:
+            kebijakannya stokastik, jadi dua jalan uji dari jaringan yang <em>sama</em> bisa berbeda
+            puluhan poin persen. Kalau lebar sebaran itu melebihi alfanya, angka alfanya belum berarti
+            apa-apa.
+        </p>
+    </div>
+
+    <div class="content-card">
+        <div class="rs-title">Kombinasi yang Dipilih Agen</div>
+        <p style="font-size:11.5px; color:var(--text-dim); line-height:1.6; margin:0 0 14px;">
+            Sebaran pilihan pada transaksi luar sampel. Kalau satu kolom terkonsentrasi di satu nilai,
+            di situlah kebijakan mengerucut; kalau merata, agen tidak menemukan alasan untuk memilih.
+        </p>
+        <div class="rs-sebaran" id="rsSebaran"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="rs-title">Profil Kondisi Beli &mdash; Apa yang Membuat Agen Masuk</div>
+        <p style="font-size:11.5px; color:var(--text-dim); line-height:1.6; margin:0 0 12px;">
+            Rata-rata nilai fitur saat agen memutuskan <strong>masuk</strong> dibanding saat ia
+            <strong>melewatkan</strong> kandidat, diurutkan menurut selisih dalam satuan simpangan baku.
+            Ini pembacaan balik kebijakan &mdash; bukan aturan yang diketikkan ke dalamnya.
+        </p>
+        <div style="overflow-x:auto;">
+            <table class="rs-table">
+                <thead><tr>
+                    <th class="rs-left">Fitur</th><th>Saat masuk</th><th>Saat lewat</th>
+                    <th>Selisih (SD)</th><th class="rs-left">Arah</th>
+                </tr></thead>
+                <tbody id="rsProfilBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="rs-title">Bagaimana Posisi Berakhir</div>
+        <div style="overflow-x:auto;">
+            <table class="rs-table">
+                <thead><tr><th class="rs-left">Alasan keluar</th><th>Jumlah</th><th>Rata-rata return</th></tr></thead>
+                <tbody id="rsAlasanBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="rs-title">Emiten yang Paling Sering Dipegang</div>
+        <div style="overflow-x:auto;">
+            <table class="rs-table">
+                <thead><tr>
+                    <th class="rs-left">Kode</th><th>Trade</th><th>Rata-rata return</th>
+                    <th>Win rate</th><th>Kontribusi</th>
+                </tr></thead>
+                <tbody id="rsKodeBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="rs-title">40 Transaksi Terakhir</div>
+        <div style="overflow-x:auto; max-height:420px;">
+            <table class="rs-table">
+                <thead><tr>
+                    <th class="rs-left">Kode</th><th class="rs-left">Masuk</th><th class="rs-left">Keluar</th>
+                    <th>Hari</th><th>Porsi</th><th>TP</th><th>SL</th><th>Return</th>
+                    <th class="rs-left">Alasan</th>
+                </tr></thead>
+                <tbody id="rsTradeBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ==================================================================== -->
+<div class="content-card" id="rsRiwayatCard" style="display:none;">
+    <div class="rs-title">Riwayat Run</div>
+    <div id="rsRiwayatBody"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script>
+    var rsEksperimen = null;
+    var rsRunId = null;
+    var rsBaris = 0;
+    var rsTimer = null;
+    var rsMulaiMs = null;
+
+    function rsAngka(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
+    }
+    function rsWarna(v) { return v > 0 ? 'rs-up' : (v < 0 ? 'rs-down' : 'rs-dim'); }
+    function rsTanda(v, d) { return (v > 0 ? '+' : '') + rsAngka(v, d === undefined ? 2 : d); }
+
+    // ---- formulir dibangun dari registry, bukan ditulis tangan di template,
+    //      supaya menambah eksperimen baru cukup di sisi Python.
+    function rsBangunForm() {
+        var e = rsEksperimen;
+        var html = '<p style="font-size:12px; color:var(--text-mid); line-height:1.65; margin:0 0 16px;">'
+                 + e.ringkas + '</p><div class="rs-grid">';
+        e.fields.forEach(function (f) {
+            var nilai = e.defaults[f.k];
+            var id = 'rsF_' + f.k;
+            var gaya = f.hanya_jika ? ' data-jika="' + f.hanya_jika + '"' : '';
+            html += '<div class="rs-field"' + gaya + '>';
+            if (f.tipe === 'centang') {
+                html += '<label>&nbsp;</label><div class="rs-check">'
+                      + '<input type="checkbox" id="' + id + '"' + (nilai ? ' checked' : '') + '>'
+                      + '<label for="' + id + '" style="font-size:12px; text-transform:none; '
+                      + 'letter-spacing:0; font-weight:400; color:var(--text-mid);">'
+                      + f.label + '</label></div>';
+            } else if (f.tipe === 'pilih') {
+                html += '<label>' + f.label + '</label><select class="form-select form-select-sm" id="' + id + '">';
+                f.opsi.forEach(function (o) {
+                    html += '<option value="' + o[0] + '"' + (o[0] === nilai ? ' selected' : '')
+                          + '>' + o[1] + '</option>';
+                });
+                html += '</select>';
+            } else if (f.tipe === 'teks') {
+                html += '<label>' + f.label + '</label>'
+                      + '<input type="text" class="form-control form-control-sm" id="' + id
+                      + '" value="' + (nilai || '') + '" style="text-transform:uppercase;">';
+            } else {
+                html += '<label>' + f.label + '</label>'
+                      + '<input type="number" class="form-control form-control-sm" id="' + id
+                      + '" value="' + nilai + '"'
+                      + (f.step ? ' step="' + f.step + '"' : '')
+                      + (f.min !== undefined ? ' min="' + f.min + '"' : '')
+                      + (f.max !== undefined ? ' max="' + f.max + '"' : '') + '>';
+            }
+            if (f.bantu) { html += '<div class="rs-help">' + f.bantu + '</div>'; }
+            html += '</div>';
+        });
+        html += '</div>';
+        $('#rsForm').html(html);
+        $('#rsF_universe').on('change', rsToggleKustom);
+        $('#rsForm input, #rsForm select').on('change input', rsEstimasi);
+        rsToggleKustom();
+        rsEstimasi();
+    }
+
+    function rsToggleKustom() {
+        var u = $('#rsF_universe').val();
+        $('#rsForm [data-jika]').each(function () {
+            $(this).toggle($(this).data('jika') === u);
+        });
+    }
+
+    function rsBacaForm() {
+        var cfg = {};
+        rsEksperimen.fields.forEach(function (f) {
+            var el = $('#rsF_' + f.k);
+            if (!el.length) { return; }
+            cfg[f.k] = (f.tipe === 'centang') ? (el.is(':checked') ? 1 : 0) : el.val();
+        });
+        return cfg;
+    }
+
+    // Perkiraan waktu dari pengukuran nyata: ~0,8 detik per (iterasi x episode)
+    // per fold pada 40 emiten/episode, plus ~70 detik unduhan awal kalau
+    // universe penuh belum ter-cache. Kasar, tapi cukup untuk mencegah
+    // seseorang menekan Jalankan dengan setelan yang butuh dua jam.
+    function rsEstimasi() {
+        var c = rsBacaForm();
+        var tahunData = (new Date()).getFullYear() - parseInt(c.mulai_tahun, 10);
+        var nFold = Math.max(1, Math.floor((tahunData - parseInt(c.latih_tahun, 10))
+                                           / Math.max(1, parseInt(c.uji_tahun, 10))));
+        var kerja = nFold * parseInt(c.n_seed, 10) * parseInt(c.iterasi, 10)
+                    * parseInt(c.episode_per_iterasi, 10);
+        var detik = Math.round(kerja * 0.8 + 25 + (c.universe === 'semua' ? 70 : 5));
+        $('#rsEstimasi').html('Perkiraan: <strong>' + nFold + ' fold</strong>, sekitar '
+            + (detik < 90 ? detik + ' detik' : Math.round(detik / 60) + ' menit') + '.');
+    }
+
+    // ---- siklus run
+    function rsMulai() {
+        var cfg = rsBacaForm();
+        $('#rsPesan').hide();
+        $('#rsJalankan').prop('disabled', true).text('Memulai...');
+        $.post('/research-mulai', { key: rsEksperimen.key, config: JSON.stringify(cfg) })
+            .done(function (d) {
+                $('#rsJalankan').prop('disabled', false).text('Jalankan Riset');
+                if (!d.ok) {
+                    $('#rsPesan').show().css('color', 'var(--warn)').text(d.message);
+                    return;
+                }
+                rsPasangRun(d.run_id, true);
+            })
+            .fail(function () {
+                $('#rsJalankan').prop('disabled', false).text('Jalankan Riset');
+                $('#rsPesan').show().css('color', 'var(--distrib)').text('Gagal menghubungi server.');
+            });
+    }
+
+    function rsPasangRun(runId, kosongkan) {
+        rsRunId = runId;
+        if (kosongkan) { rsBaris = 0; $('#rsLog').empty(); $('#rsHasil').hide(); }
+        rsMulaiMs = Date.now();
+        $('#rsJalanCard').show();
+        $('#rsLog').show();
+        $('#rsTutupLog').text('Sembunyikan Log');
+        if (rsTimer) { clearInterval(rsTimer); }
+        rsPoll();
+        rsTimer = setInterval(rsPoll, 1500);
+    }
+
+    function rsPoll() {
+        if (!rsRunId) { return; }
+        $.post('/research-status', { run_id: rsRunId, sejak: rsBaris }).done(function (d) {
+            if (!d || !d.ok) { return; }
+            var s = d.status;
+            (s.baris_baru || []).forEach(rsTambahLog);
+            rsBaris = s.total_baris;
+            $('#rsTahap').text(s.tahap || '');
+            $('#rsBar').css('width', Math.round((s.progress || 0) * 100) + '%');
+            $('#rsWaktu').text(rsDurasi(s.durasi));
+
+            var peta = {
+                berjalan: ['var(--accum)', 'SEDANG BERJALAN', true],
+                selesai: ['var(--accum)', 'SELESAI', false],
+                gagal: ['var(--distrib)', 'GAGAL', false],
+                dihentikan: ['var(--warn)', 'DIHENTIKAN', false]
+            };
+            var p = peta[s.status] || ['var(--text-dim)', s.status, false];
+            $('#rsStatusBadge').css({ color: p[0], border: '1px solid ' + p[0] + '55',
+                                      background: p[0] + '14' });
+            $('#rsStatusText').text(p[1]);
+            $('#rsStatusBadge .rs-dot').toggleClass('rs-live', p[2]);
+            $('#rsHentikan').toggle(p[2]);
+            $('#rsJalankan').prop('disabled', p[2]);
+
+            if (s.status !== 'berjalan') {
+                clearInterval(rsTimer); rsTimer = null;
+                $('#rsBar').css('background', s.status === 'selesai' ? 'var(--accum)'
+                                : (s.status === 'gagal' ? 'var(--distrib)' : 'var(--warn)'));
+                if (s.hasil) { rsRender(s.hasil); }
+                rsMuatRiwayat();
+            } else {
+                $('#rsBar').css('background', 'var(--accum)');
+            }
+        });
+    }
+
+    function rsDurasi(det) {
+        if (!det) { return ''; }
+        det = Math.round(det);
+        var m = Math.floor(det / 60), s = det % 60;
+        return m ? (m + 'm ' + (s < 10 ? '0' : '') + s + 's') : (s + 's');
+    }
+
+    function rsTambahLog(b) {
+        var kelas = 'rs-log-' + (b.level || 'info');
+        var teks = $('<div>').text(b.pesan).html();
+        $('#rsLog').append('<div class="rs-log-baris"><span class="rs-log-t">'
+            + b.t.toFixed(1) + '</span><span class="' + kelas + '">' + teks + '</span></div>');
+        var el = document.getElementById('rsLog');
+        el.scrollTop = el.scrollHeight;
+    }
+
+    // ---- hasil
+    function rsRender(h) {
+        if (!h || !h.ringkas) { return; }
+        var r = h.ringkas;
+        $('#rsHasil').show();
+
+        $('#rsVonis').attr('class', 'rs-vonis ' + h.vonis);
+        $('#rsVonisJudul').text({
+            gagal: 'Tidak mengalahkan beli-tahan.',
+            lemah: 'Positif tapi belum bisa dibedakan dari kebetulan.',
+            diam: 'Agen memilih tidak berdagang.',
+            menjanjikan: 'Bertahan lintas fold — layak dilanjutkan, belum layak dipakai.'
+        }[h.vonis] || '');
+        $('#rsVonisTeks').text(h.vonis_teks);
+
+        var stats = [
+            ['Alfa rata-rata / fold', rsTanda(r.alfa_rata) + ' pp',
+             r.fold_menang + ' dari ' + r.n_fold + ' fold positif', rsWarna(r.alfa_rata)],
+            // t besar tapi NEGATIF berarti kalah secara meyakinkan -- itu bukan
+            // kabar baik dan tidak boleh diberi warna hijau "signifikan".
+            ['t-statistik alfa', rsAngka(r.alfa_t, 2),
+             Math.abs(r.alfa_t) < 2 ? 'belum signifikan'
+               : (r.alfa_t > 0 ? 'signifikan, unggul' : 'signifikan, kalah'),
+             Math.abs(r.alfa_t) < 2 ? 'rs-dim' : (r.alfa_t > 0 ? 'rs-up' : 'rs-down')],
+            ['Agen kumulatif', rsTanda(r.agen_kumulatif, 1) + '%', 'seluruh periode uji', rsWarna(r.agen_kumulatif)],
+            ['Beli-tahan kumulatif', rsTanda(r.bh_kumulatif, 1) + '%', 'pembanding pasar', rsWarna(r.bh_kumulatif)],
+            ['Kebijakan acak', rsTanda(r.acak_kumulatif, 1) + '%', 'ruang aksi sama, pilihan acak', rsWarna(r.acak_kumulatif)],
+            ['Transaksi', rsAngka(r.n_trade), 'win rate ' + rsAngka(r.win_rate, 1) + '% (dari '
+             + rsAngka(r.n_trade_sampel) + ' sampel rollout)', ''],
+            ['Rata-rata per transaksi', rsTanda(r.rata_trade) + '%',
+             'tahan ' + rsAngka(r.rata_hari, 1) + ' hari', rsWarna(r.rata_trade)],
+            ['Drawdown maksimum', rsAngka(r.maks_dd, 1) + '%', 'Sharpe ' + rsAngka(r.sharpe, 2), 'rs-down'],
+            // Dengan reward absolut, "tidak berdagang" adalah keluaran yang sah --
+            // jadi eksposur harus berdiri sejajar dengan return, bukan jadi catatan
+            // kaki. Return +3% dengan modal terpakai 90% dan dengan 10% adalah dua
+            // hasil yang sama sekali berbeda.
+            ['Modal terpakai rata-rata', rsAngka(r.eksposur, 1) + '%',
+             'portofolio terisi ' + rsAngka(r.hari_terisi, 1) + '% hari',
+             r.eksposur < 5 ? 'rs-dim' : ''],
+            ['Kosong terpanjang', rsAngka(r.flat_terpanjang) + ' hari',
+             'tanpa satu pun posisi', r.flat_terpanjang > 120 ? 'rs-dim' : '']
+        ];
+        $('#rsStats').html(stats.map(function (s) {
+            return '<div><div class="rs-stat-label">' + s[0] + '</div>'
+                 + '<div class="rs-stat-value ' + s[3] + '">' + s[1] + '</div>'
+                 + '<div class="rs-stat-sub">' + s[2] + '</div></div>';
+        }).join(''));
+
+        $('#rsFoldBody').html((h.folds || []).map(function (f) {
+            return '<tr>'
+                 + '<td class="rs-left" style="font-family:var(--font-mono);">' + f.tahun + '</td>'
+                 + '<td class="rs-left rs-dim" style="font-size:11px;">' + f.latih + '</td>'
+                 + '<td class="' + rsWarna(f.agen_rata) + '">' + rsTanda(f.agen_rata) + '%</td>'
+                 + '<td class="rs-dim" style="font-size:11px;">' + rsTanda(f.agen_min, 1) + ' .. '
+                 +   rsTanda(f.agen_maks, 1) + ' <span style="opacity:.6;">(' + (f.agen_n_run || 1)
+                 +   ' run)</span></td>'
+                 + '<td class="' + rsWarna(f.beli_tahan) + '">' + rsTanda(f.beli_tahan) + '%</td>'
+                 + '<td class="rs-dim">' + rsTanda(f.acak) + '%</td>'
+                 + '<td class="' + rsWarna(f.alfa) + '"><strong>' + rsTanda(f.alfa) + '</strong></td>'
+                 + '<td>' + rsAngka(f.sharpe, 2) + '</td>'
+                 + '<td class="rs-down">' + rsAngka(f.maks_dd, 1) + '%</td>'
+                 + '<td>' + rsAngka(f.n_trade) + '</td>'
+                 + '<td class="' + (f.eksposur < 5 ? 'rs-dim' : '') + '">'
+                 +   rsAngka(f.eksposur, 0) + '%</td>'
+                 + '</tr>';
+        }).join(''));
+
+        var judul = { porsi: 'Porsi per transaksi', tp: 'Take profit', sl: 'Stop loss', hold: 'Batas hold' };
+        $('#rsSebaran').html(Object.keys(judul).map(function (k) {
+            var maks = Math.max.apply(null, (h.sebaran[k] || []).map(function (b) { return b.pct; })) || 1;
+            return '<div><div class="rs-title">' + judul[k] + '</div>'
+                 + (h.sebaran[k] || []).map(function (b) {
+                     return '<div class="rs-sb-row"><span>' + b.nilai + '</span>'
+                          + '<span class="rs-bar-wrap"><span class="rs-bar" style="display:block; width:'
+                          + Math.round(b.pct / maks * 100) + '%;"></span></span>'
+                          + '<span>' + rsAngka(b.pct, 1) + '%</span></div>';
+                 }).join('') + '</div>';
+        }).join(''));
+
+        $('#rsProfilBody').html((h.profil_masuk || []).map(function (p) {
+            var arah = p.z > 0 ? 'lebih tinggi saat masuk' : 'lebih rendah saat masuk';
+            return '<tr><td class="rs-left">' + p.fitur + '</td>'
+                 + '<td>' + rsAngka(p.saat_masuk, 4) + '</td>'
+                 + '<td class="rs-dim">' + rsAngka(p.saat_lewat, 4) + '</td>'
+                 + '<td class="' + rsWarna(p.z) + '">' + rsTanda(p.z) + '</td>'
+                 + '<td class="rs-left rs-dim">' + arah + '</td></tr>';
+        }).join('') || '<tr><td colspan="5" class="rs-empty">Tidak ada transaksi untuk diprofilkan.</td></tr>');
+
+        $('#rsAlasanBody').html((h.alasan_keluar || []).map(function (a) {
+            return '<tr><td class="rs-left">' + a.alasan + '</td><td>' + rsAngka(a.n) + '</td>'
+                 + '<td class="' + rsWarna(a.rata) + '">' + rsTanda(a.rata) + '%</td></tr>';
+        }).join(''));
+
+        $('#rsKodeBody').html((h.per_kode || []).map(function (k) {
+            return '<tr><td class="rs-left"><a href="/saham/' + k.kode
+                 +   '" style="color:var(--accum); font-weight:600; text-decoration:none;">'
+                 +   k.kode + '</a></td>'
+                 + '<td>' + rsAngka(k.n) + '</td>'
+                 + '<td class="' + rsWarna(k.rata) + '">' + rsTanda(k.rata) + '%</td>'
+                 + '<td>' + rsAngka(k.win, 1) + '%</td>'
+                 + '<td class="' + rsWarna(k.jml) + '">' + rsTanda(k.jml, 1) + '</td></tr>';
+        }).join(''));
+
+        $('#rsTradeBody').html((h.trade_contoh || []).slice().reverse().map(function (t) {
+            return '<tr><td class="rs-left">' + t.kode + '</td>'
+                 + '<td class="rs-left rs-dim" style="font-size:11px;">' + t.masuk + '</td>'
+                 + '<td class="rs-left rs-dim" style="font-size:11px;">' + t.keluar + '</td>'
+                 + '<td>' + t.hari + '</td>'
+                 + '<td>' + Math.round(t.porsi * 100) + '%</td>'
+                 + '<td>' + t.tp + 'x</td><td>' + t.sl + 'x</td>'
+                 + '<td class="' + rsWarna(t.return_pct) + '">' + rsTanda(t.return_pct) + '%</td>'
+                 + '<td class="rs-left rs-dim">' + t.alasan + '</td></tr>';
+        }).join(''));
+
+        rsGambarKurva(h);
+    }
+
+    function rsGambarKurva(h) {
+        if (!h.kurva || !h.kurva.tanggal || !h.kurva.tanggal.length) { return; }
+        var garis = { x: h.kurva.tanggal, y: h.kurva.agen, type: 'scatter', mode: 'lines',
+                      name: 'Agen RL', line: { color: '#16E0AE', width: 2 } };
+        var dasar = { x: h.kurva.tanggal, y: h.kurva.tanggal.map(function () { return 1; }),
+                      type: 'scatter', mode: 'lines', name: 'Modal awal',
+                      line: { color: '#38455A', width: 1, dash: 'dot' }, hoverinfo: 'skip' };
+        Plotly.newPlot('rsKurva', [dasar, garis], {
+            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+            font: { color: '#B3C0D1', family: 'JetBrains Mono, monospace', size: 10 },
+            margin: { l: 48, r: 14, t: 10, b: 34 },
+            xaxis: { gridcolor: '#232D3C', zeroline: false },
+            yaxis: { gridcolor: '#232D3C', zeroline: false, title: 'x modal awal' },
+            showlegend: true,
+            legend: { orientation: 'h', y: 1.12, x: 0, font: { size: 10 } },
+            hovermode: 'x unified'
+        }, { displayModeBar: false, responsive: true });
+    }
+
+    // ---- riwayat
+    function rsMuatRiwayat() {
+        $.post('/research-riwayat').done(function (d) {
+            if (!d || !d.ok) { return; }
+            var baris = d.riwayat || [];
+            if (!baris.length) {
+                $('#rsRiwayatBody').html('<div class="rs-empty">Belum ada run tersimpan.</div>');
+                return;
+            }
+            $('#rsRiwayatBody').html(baris.map(function (r) {
+                var m = r.metrik || {};
+                var warna = { selesai: 'var(--accum)', gagal: 'var(--distrib)',
+                              berjalan: 'var(--info)', dihentikan: 'var(--warn)' }[r.status]
+                            || 'var(--text-dim)';
+                var ringkas = (m.alfa_rata !== undefined)
+                    ? ('alfa ' + rsTanda(m.alfa_rata) + ' pp · ' + m.fold_menang + '/' + m.n_fold
+                       + ' fold · ' + rsAngka(m.n_trade) + ' trade')
+                    : '&mdash;';
+                return '<div class="rs-riwayat-row" data-run="' + r.id + '">'
+                     + '<span class="rs-rw-id">' + r.id + '</span>'
+                     + '<span class="rs-badge" style="color:' + warna + '; border:1px solid '
+                     +   warna + '55; background:' + warna + '14;">' + r.status + '</span>'
+                     + '<span class="rs-rw-cfg">' + (r.judul_config || r.label || '') + '</span>'
+                     + '<span class="rs-dim" style="font-family:var(--font-mono); font-size:11px;">'
+                     +   ringkas + '</span>'
+                     + '<span class="rs-dim" style="font-size:11px;">' + (r.mulai_str || '') + '</span>'
+                     + '</div>';
+            }).join(''));
+        });
+    }
+
+    $(document).ready(function () {
+        $.post('/research-eksperimen').done(function (d) {
+            if (!d || !d.ok || !d.eksperimen.length) {
+                $('#rsForm').html('<div class="rs-empty">Gagal memuat daftar eksperimen.</div>');
+                return;
+            }
+            rsEksperimen = d.eksperimen[0];
+            rsBangunForm();
+            if (d.run_aktif) {
+                // Halaman dibuka ulang saat riset masih jalan: sambungkan lagi
+                // ke run itu, bukan menampilkan formulir kosong seolah tidak
+                // ada apa-apa. Log lengkapnya ikut ditarik dari awal.
+                rsPasangRun(d.run_aktif, true);
+            }
+            rsMuatRiwayat();
+        });
+
+        $('#rsJalankan').on('click', rsMulai);
+        $('#rsReset').on('click', function () { rsBangunForm(); });
+        $('#rsHentikan').on('click', function () {
+            $(this).prop('disabled', true).text('Menghentikan...');
+            var btn = $(this);
+            $.post('/research-hentikan', { run_id: rsRunId }).always(function () {
+                btn.prop('disabled', false).text('Hentikan');
+            });
+        });
+        $('#rsTutupLog').on('click', function () {
+            var log = $('#rsLog');
+            log.toggle();
+            $(this).text(log.is(':visible') ? 'Sembunyikan Log' : 'Tampilkan Log');
+        });
+        $('#rsRiwayatBtn').on('click', function () { $('#rsRiwayatCard').toggle(); });
+        $(document).on('click', '.rs-riwayat-row', function () {
+            rsPasangRun($(this).data('run'), true);
+            $('html, body').animate({ scrollTop: $('#rsJalanCard').offset().top - 80 }, 250);
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block title %}Radar Insider{% endblock %}
+{% block page_title %}Radar Insider{% endblock %}
+
+{% block page_actions %}
+<a href="/status-bukti" class="btn btn-outline-secondary btn-sm">Status Bukti</a>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .ri-reason-jatuh_dalam { color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08); }
+    .ri-reason-akumulasi_palsu { color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08); }
+    .ri-insiders { font-size: 10.5px; color: var(--text-mid); line-height: 1.5; }
+    .ri-insiders .ri-badge-tag { color: var(--text-dim); }
+    .ri-kalibrasi-flag {
+        display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+        color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08);
+        padding: 2px 8px; border-radius: 20px; margin-left: 8px; vertical-align: middle;
+    }
+    .ri-momentum-table td, .ri-momentum-table th { text-align: right; padding: 7px 10px; font-family: var(--font-mono); font-size: 11.5px; border-bottom: 1px solid var(--line-soft); }
+    .ri-momentum-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line); font-family: var(--font-ui); }
+    .ri-momentum-table td.ri-left, .ri-momentum-table th.ri-left { text-align: left; font-family: var(--font-ui); }
+</style>
+
+<div id="riLoading" class="ap-empty">Menyilangkan insider dengan konteks harga&hellip;</div>
+<div id="riMessage" class="ap-empty" style="display:none;"></div>
+
+<div id="riBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="ap-section-title">Insider Sendirian = Nol Informasi<span class="ri-kalibrasi-flag">Kalibrasi, bukan teruji</span></div>
+        <div class="ap-finding">
+            <h4>Insider BELI polos: 75,8% kejadian, win rate 49,5% &mdash; koin lempar murni.</h4>
+            <p>Dari 1.546 event insider BELI bersih (H+40, April-Sep 2026, 409 emiten), 1.172 di antaranya
+            terjadi di LUAR dua konteks di bawah: rata-rata return &plus;0,21%, menang 49,5% dari waktu.
+            Insider BELI sendirian, tanpa konteks harga, tidak membawa informasi apa pun di data ini.</p>
+        </div>
+        <div class="ap-finding">
+            <h4>Nilainya muncul kalau disilang sama Jatuh Dalam atau Akumulasi Palsu.</h4>
+            <p>Kombo <strong>Jatuh Dalam + insider BELI</strong>: win 57,1% (H+20) / 67,6% (H+40), vs zona
+            sendirian 50,6%/54,2%. Kombo <strong>Akumulasi Palsu (turun + Top5 beli) + insider BELI</strong>:
+            win 58,8% (H+40) vs &plus;insider JUAL di sel yang sama cuma 36,2%. Dua kombo ini largely BEDA
+            SAHAM (overlap cuma 33 dari 374 kejadian) &mdash; saling melengkapi, tapi numpuk keduanya
+            TIDAK lebih kuat dari Jatuh Dalam sendirian (60,6% vs 68,7%).</p>
+        </div>
+        <div class="ap-finding">
+            <h4>Insider JUAL: bukan konfirmasi, tapi peringatan dini.</h4>
+            <p>Dibalik arah pertanyaannya &mdash; bukan "insider jual, lalu harga turun?" tapi "insider jual,
+            saham ini lebih mungkin masuk zona Jatuh Dalam ke depan?". Baseline P(masuk zona dalam 40 hari)
+            25,3%, dengan insider JUAL 20 hari terakhir naik jadi 52,0%. Dikontrol ganda (level dari_puncak
+            SAMA dan momentum 20 hari SAMA), efeknya bertahan di ketujuh kelompok momentum, &plus;15,6pp
+            sampai &plus;33,7pp &mdash; bukan sekadar insider ikut tren yang sudah jalan.</p>
+        </div>
+        <div class="ap-note">
+            Ketiga temuan ini cuma diukur di SATU periode (April-Sep 2026). Kombo Jatuh Dalam sempat dicek
+            ke potongan Agustus-September (n=17, arah konfirmasi tapi kelewat kecil buat jadi bukti).
+            Kombo Akumulasi Palsu dan peringatan dini JUAL belum pernah dicek ke periode terpisah sama
+            sekali &mdash; yang terakhir malah TIDAK BISA dicek dengan data yang ada (forward 40 hari
+            menghabiskan seluruh 6 bulan yang tersedia). Baca sebagai observasi terarah, bukan rekomendasi
+            beli/jual. Detail lengkap di <a href="/status-bukti">Status Bukti</a>.
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Ringkasan Hari Ini <span id="riAsOf" class="ap-dim"></span></div>
+        <div class="ap-stat-grid" id="riStats"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">BELI Terkonfirmasi <span id="riBeliCount" class="ap-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="ap-table">
+                <thead id="riBeliThead">
+                    <tr>
+                        <th class="ap-left" data-sort-key="ticker">Kode</th>
+                        <th class="ap-left" data-sort-key="alasan_label">Alasan</th>
+                        <th data-sort-key="dari_puncak">Dari puncak 60h %</th>
+                        <th data-sort-key="trail_pct">Tren 20h %</th>
+                        <th data-sort-key="n_insiders">Insider</th>
+                        <th class="ap-left" data-sort-key="last_action_date">Transaksi terakhir</th>
+                    </tr>
+                </thead>
+                <tbody id="riBeliBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">JUAL &mdash; Peringatan Dini <span id="riJualCount" class="ap-dim"></span></div>
+        <div class="ap-note" style="margin-top:0; margin-bottom:14px;">
+            Dibatasi ke saham yang sudah di pita &minus;20% s/d &minus;40% dari puncak 60 hari &mdash;
+            satu-satunya pita yang sudah dikontrol ganda (level + momentum). Kolom "P(jatuh dalam)" pakai
+            angka historis dari kelompok momentum yang sama, BUKAN ramalan untuk saham ini secara khusus.
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="ap-table">
+                <thead id="riJualThead">
+                    <tr>
+                        <th class="ap-left" data-sort-key="ticker">Kode</th>
+                        <th data-sort-key="dari_puncak">Dari puncak 60h %</th>
+                        <th class="ap-left" data-sort-key="momentum_bucket">Momentum 20h</th>
+                        <th data-sort-key="baseline_p">Baseline P %</th>
+                        <th data-sort-key="sell_p">+Insider jual P %</th>
+                        <th data-sort-key="uplift">Selisih pp</th>
+                        <th data-sort-key="n_insiders">Insider</th>
+                        <th class="ap-left" data-sort-key="last_action_date">Transaksi terakhir</th>
+                    </tr>
+                </thead>
+                <tbody id="riJualBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card" style="border-left:3px solid var(--accum);">
+        <div class="ap-section-title" style="color:var(--accum);">Jurnal Maju &mdash; Apakah Peringatan JUAL Bertahan ke Depan?</div>
+        <div class="ap-finding">
+            <h4>Kalibrasinya membaca transaksi di HARI TRANSAKSINYA. App ini baru melihatnya berminggu-minggu kemudian.</h4>
+            <p>Kolom tanggal di data Stockbit adalah tanggal transaksi. Laporan insider terbit sampai ~10 hari sesudahnya,
+            dan data di sini ditarik kira-kira sebulan sekali &mdash; jadi sebagian jendela 40 hari sudah lewat sebelum
+            peringatannya muncul di layar. Jurnal ini mencatat tiap transaksi <strong>pada hari ia pertama kali
+            terlihat</strong>, bersama keadaan sahamnya hari itu, lalu menunggu 40 hari bursa. Itu satu-satunya cara
+            menguji klaim ini di luar periode tempat ia ditemukan.</p>
+        </div>
+        <div class="ap-note" id="riJurnalCakupan" style="margin-top:0; margin-bottom:12px;"></div>
+        <div style="overflow-x:auto;">
+            <table class="ri-momentum-table">
+                <thead><tr>
+                    <th class="ri-left">Kejadian JUAL (terlihat sejak jurnal mulai)</th><th>Kejadian</th><th>Matang</th>
+                    <th>P(masuk zona) JUAL</th><th>Pembanding</th><th>Selisih</th>
+                </tr></thead>
+                <tbody id="riJurnalBody"></tbody>
+            </table>
+        </div>
+        <div class="ap-note">Pembanding = emiten di pita &minus;20%~&minus;40% yang sama, di hari yang sama, tanpa insider
+        JUAL 20 hari terakhir, dicocokkan per kelompok momentum 20 hari. Angka baru ditampilkan setelah minimal 30
+        kejadian matang. Klaim kalibrasi: 52,0% vs 25,3% (+26,7pp, emiten-hari tumpang tindih).</div>
+
+        <div class="ap-section-title" style="margin-top:18px;">Pratinjau: Kalau Infonya Telat <span class="ri-kalibrasi-flag">In-sample, bukan bukti</span></div>
+        <div style="overflow-x:auto;">
+            <table class="ri-momentum-table">
+                <thead><tr>
+                    <th class="ri-left">Tanggal "terlihat"</th><th>Jeda median</th><th>Kejadian</th>
+                    <th>P(masuk zona) JUAL</th><th>Pembanding</th><th>Selisih</th>
+                </tr></thead>
+                <tbody id="riPratinjauBody"></tbody>
+            </table>
+        </div>
+        <div class="ap-note">Aturan yang sama di data April&ndash;September 2026, tanggal terlihat digeser. Kejadian tidak
+        tumpang tindih, pembanding dicocokkan hari + momentum &mdash; makanya baris pertama lebih kecil dari klaim kasar
+        +26,7pp. n kecil (galat baku ~6&ndash;8pp per baris): urutannya indikasi. Tapi arahnya masuk akal &mdash; info yang
+        telat 2&ndash;3 minggu sudah memakan separuh jendela 40 hari. Menarik data insider lebih sering akan menguji
+        versi yang lebih cepat di jurnal yang sama.</div>
+
+        <div class="ap-section-title" style="margin-top:18px;">JUAL yang Baru Terlihat <span id="riJurnalBaruCount" class="ap-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="ap-table">
+                <thead><tr>
+                    <th class="ap-left">Kode</th><th class="ap-left">Terlihat</th><th class="ap-left">Transaksi</th>
+                    <th>Jeda</th><th>Dari puncak 60h %</th><th class="ap-left">Insider</th>
+                </tr></thead>
+                <tbody id="riJurnalBaru"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Tabel Kontrol Ganda &mdash; Peringatan Dini JUAL (H+40, pita &minus;20%~&minus;40%)</div>
+        <div style="overflow-x:auto;">
+            <table class="ri-momentum-table">
+                <thead>
+                    <tr><th class="ri-left">Momentum 20h sebelumnya</th><th>Baseline P(jatuh dalam)</th><th>+Insider jual P</th><th>Selisih</th></tr>
+                </thead>
+                <tbody id="riMomentumTable"></tbody>
+            </table>
+        </div>
+        <div class="ap-note">Horizon 40 hari bursa, lookback insider 20 hari kalender, semesta 409 emiten April-Sep 2026.</div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var riData = null;
+    var riBeliSort = { key: 'dari_puncak', dir: 'asc' };
+    var riJualSort = { key: 'uplift', dir: 'desc' };
+
+    var RI_REASON_LABEL = { jatuh_dalam: 'Jatuh Dalam', akumulasi_palsu: 'Akumulasi Palsu' };
+
+    function riNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function riSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="ap-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'ap-up' : (v < 0 ? 'ap-down' : 'ap-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + riNum(v, d) + '</span>';
+    }
+    function riInsiderList(insiders) {
+        if (!insiders || !insiders.length) { return '<span class="ap-dim">&mdash;</span>'; }
+        return '<div class="ri-insiders">' + insiders.slice(0, 3).map(function (p) {
+            var badge = (p.badges && p.badges.length) ? ' <span class="ri-badge-tag">(' + p.badges.join(', ') + ')</span>' : '';
+            return p.name + badge;
+        }).join('<br>') + (insiders.length > 3 ? '<br><span class="ap-dim">+' + (insiders.length - 3) + ' lagi</span>' : '') + '</div>';
+    }
+
+    function riRenderStats(d) {
+        var items = [
+            ['BELI terkonfirmasi', riNum(d.n_beli), 'var(--accum)'],
+            ['JUAL peringatan dini', riNum(d.n_jual), 'var(--distrib)'],
+        ];
+        $('#riStats').html(items.map(function (it) {
+            return '<div><div class="ap-stat-label">' + it[0] + '</div>'
+                 + '<div class="ap-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function riRenderBeli() {
+        var rows = window.sortRows(riData.beli.slice(), riBeliSort.key, riBeliSort.dir);
+        $('#riBeliCount').text('— ' + rows.length + ' saham');
+        if (!rows.length) {
+            $('#riBeliBody').html('<tr><td colspan="6" class="ap-empty">Tidak ada saham yang cocok hari ini.</td></tr>');
+            return;
+        }
+        $('#riBeliBody').html(rows.map(function (r) {
+            var badges = r.alasan.map(function (a) {
+                return '<span class="ap-badge ri-reason-' + a + '">' + RI_REASON_LABEL[a] + '</span>';
+            }).join(' ');
+            return '<tr>'
+                 + '<td class="ap-left"><a class="ap-ticker" href="/saham/' + r.ticker + '">' + r.ticker + '</a></td>'
+                 + '<td class="ap-left">' + badges + '</td>'
+                 + '<td>' + riSigned(r.dari_puncak, 1) + '</td>'
+                 + '<td>' + riSigned(r.trail_pct, 1) + '</td>'
+                 + '<td>' + riNum(r.n_insiders) + '</td>'
+                 + '<td class="ap-left ap-dim">' + r.last_action_date + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function riRenderJual() {
+        var rows = window.sortRows(riData.jual_peringatan.slice(), riJualSort.key, riJualSort.dir);
+        $('#riJualCount').text('— ' + rows.length + ' saham');
+        if (!rows.length) {
+            $('#riJualBody').html('<tr><td colspan="8" class="ap-empty">Tidak ada saham yang cocok hari ini.</td></tr>');
+            return;
+        }
+        $('#riJualBody').html(rows.map(function (r) {
+            return '<tr>'
+                 + '<td class="ap-left"><a class="ap-ticker" href="/saham/' + r.ticker + '">' + r.ticker + '</a></td>'
+                 + '<td>' + riSigned(r.dari_puncak, 1) + '</td>'
+                 + '<td class="ap-left ap-dim">' + (r.momentum_bucket || '&mdash;') + '</td>'
+                 + '<td>' + riNum(r.baseline_p, 1) + '</td>'
+                 + '<td>' + riNum(r.sell_p, 1) + '</td>'
+                 + '<td>' + riSigned(r.uplift, 1) + '</td>'
+                 + '<td>' + riNum(r.n_insiders) + '</td>'
+                 + '<td class="ap-left ap-dim">' + r.last_action_date + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function riRenderMomentumTable(d) {
+        var rows = d.bukti.jual_peringatan_dini.kontrol_ganda;
+        $('#riMomentumTable').html(rows.map(function (r) {
+            return '<tr><td class="ri-left">' + r.momentum + '</td><td>' + riNum(r.baseline, 1)
+                 + '%</td><td>' + riNum(r.sell, 1) + '%</td><td>' + riSigned(r.sell - r.baseline, 1) + 'pp</td></tr>';
+        }).join(''));
+    }
+
+    function riEsc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+
+    function riRenderJurnal(d) {
+        var j = d.jurnal || {};
+        if (!j.available) {
+            $('#riJurnalCakupan').text(j.message || 'Jurnal maju tidak tersedia.');
+            return;
+        }
+        var c = j.cakupan || {}, di = j.data_insider || {};
+        var terlewat = c.terlewat || [];
+        var umur = di.umur_hari;
+        $('#riJurnalCakupan').html('Dicatat sejak <strong>' + riEsc(c.mulai || '-') + '</strong> (' + riNum(c.n_hari)
+            + ' hari bursa). ' + riNum(c.n_awal) + ' transaksi yang sudah ada saat jurnal dipasang ditandai <em>awal</em> dan '
+            + 'tidak dinilai. JUAL baru terlihat sejak itu: <strong>' + riNum(j.n_jual) + '</strong>'
+            + (j.jeda_median !== null && j.jeda_median !== undefined ? ' (jeda median transaksi&rarr;terlihat ' + riNum(j.jeda_median) + ' hari)' : '')
+            + '. Data insider terakhir ditarik <strong>' + riEsc(di.tarik_terakhir || '-') + '</strong>'
+            + (umur !== undefined && umur !== null ? ' (' + riNum(umur) + ' hari lalu)' : '')
+            + ', transaksi terbaru ' + riEsc(di.transaksi_terbaru || '-') + '. '
+            + (terlewat.length ? '<span class="ap-down">' + terlewat.length + ' hari bursa terlewat (' + riEsc(terlewat.slice(-5).join(', ')) + ').</span>'
+                               : '<span class="ap-up">Tidak ada hari yang terlewat.</span>'));
+
+        var baris = [];
+        if (j.semua) {
+            baris.push($.extend({ label: 'Semua' }, j.semua));
+            (j.per_jeda || []).forEach(function (r) { baris.push($.extend({ label: '&nbsp;&nbsp;jeda ' + riEsc(r.jeda) }, r)); });
+        }
+        if (!baris.length) {
+            $('#riJurnalBody').html('<tr><td colspan="6" class="ri-left ap-dim">Belum ada JUAL baru yang terlihat sejak jurnal dimulai.</td></tr>');
+        } else {
+            $('#riJurnalBody').html(baris.map(function (r) {
+                var cukup = (r.n_matang || 0) >= ((j.config || {}).MIN_N || 30);
+                var isi = cukup
+                    ? '<td>' + riNum(r.p_jual, 1) + '%</td><td>' + riNum(r.p_pembanding, 1) + '%</td><td>' + riSigned(r.selisih, 1) + 'pp</td>'
+                    : '<td colspan="3" class="ap-dim" style="text-align:center;">' + (r.n_matang ? riNum(r.n_matang) + ' matang, belum cukup' : 'belum matang')
+                      + (j.sisa_hari && r.label === 'Semua' ? ' &mdash; kejadian tertua matang ' + riNum(j.sisa_hari) + ' hari bursa lagi' : '') + '</td>';
+                return '<tr><td class="ri-left">' + r.label + '</td><td>' + riNum(r.n) + '</td><td>' + riNum(r.n_matang) + '</td>' + isi + '</tr>';
+            }).join(''));
+        }
+
+        $('#riPratinjauBody').html((j.pratinjau || []).map(function (r) {
+            return '<tr><td class="ri-left">' + riEsc(r.versi) + '</td><td>' + riNum(r.jeda_median) + ' hari</td><td>' + riNum(r.n_matang)
+                 + '</td><td>' + riNum(r.p_jual, 1) + '%</td><td>' + riNum(r.p_pembanding, 1) + '%</td><td>' + riSigned(r.selisih, 1) + 'pp</td></tr>';
+        }).join(''));
+
+        var baru = j.terbaru || [];
+        $('#riJurnalBaruCount').text('— ' + baru.length + ' terakhir');
+        $('#riJurnalBaru').html(baru.length ? baru.map(function (r) {
+            return '<tr><td class="ap-left"><a class="ap-ticker" href="/saham/' + riEsc(r.stock) + '">' + riEsc(r.stock) + '</a></td>'
+                 + '<td class="ap-left">' + riEsc(r.tanggal) + '</td><td class="ap-left ap-dim">' + riEsc(r.tanggal_transaksi) + '</td>'
+                 + '<td>' + riNum(r.jeda) + ' hari</td><td>' + riSigned(r.dari_puncak, 1) + '</td>'
+                 + '<td class="ap-left ri-insiders">' + riEsc(r.nama) + (r.jabatan ? ' <span class="ri-badge-tag">(' + riEsc(r.jabatan) + ')</span>' : '') + '</td></tr>';
+        }).join('') : '<tr><td colspan="6" class="ap-empty">Belum ada JUAL baru sejak jurnal dimulai. Baris muncul begitu data insider berikutnya ditarik.</td></tr>');
+    }
+
+    function riLoad() {
+        $('#riLoading').show();
+        $('#riBody').hide();
+        $('#riMessage').hide();
+        $.post('/radar-insider-data', {}).done(function (d) {
+            if (!d || d.available === false) {
+                $('#riLoading').hide();
+                $('#riMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            riData = d;
+            $('#riAsOf').text(d.as_of ? '— transaksi terbaru ' + d.as_of : '');
+            riRenderStats(d);
+            riRenderBeli();
+            riRenderJual();
+            riRenderMomentumTable(d);
+            riRenderJurnal(d);
+            $('#riLoading').hide();
+            $('#riBody').show();
+        }).fail(function () {
+            $('#riLoading').hide();
+            $('#riMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}).
+    $(document).ready(function () {
+        riBeliSort = window.makeSortable('#riBeliThead', function (key, dir) {
+            riBeliSort.key = key; riBeliSort.dir = dir;
+            riRenderBeli();
+        }, riBeliSort.key, riBeliSort.dir);
+
+        riJualSort = window.makeSortable('#riJualThead', function (key, dir) {
+            riJualSort.key = key; riJualSort.dir = dir;
+            riRenderJual();
+        }, riJualSort.key, riJualSort.dir);
+
+        riLoad();
+    });
+</script>
+{% endblock %}

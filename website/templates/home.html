@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}{{ sapaan or 'Halo' }}{% if user.firstName %}, {{ user.firstName }}{% endif %}{% endblock %}
+{% block page_subtitle %}{% set hi = hari_ini or {} %}{% if hi.data_sampai_id %}Data s/d <b class="mono">{{ hi.data_sampai_id }}</b> &middot; {{ hi.n_emiten }} emiten{% if hi.jurnal %} &middot; {{ hi.jurnal_terkini }} dari {{ hi.jurnal|length }} jurnal maju terkini{% endif %}{% endif %}{% endblock %}
+{% block page_actions %}
+<a class="btn btn-sm btn-outline-secondary" href="/apa-berubah"><i data-feather="git-compare"></i> Apa berubah</a>
+<a class="btn btn-sm btn-outline-secondary" href="/status-bukti"><i data-feather="award"></i> Status bukti</a>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    /* Dashboard. Urutannya mengikuti pertanyaan pagi hari: pasar sedang
+       apa, ada sinyal baru apa, datanya bisa dipercaya atau belum -- baru
+       watchlist. Semua angka dibaca dari cache (lihat _ringkasan_dashboard
+       dan _hari_ini di views.py); tidak ada yang dihitung saat halaman
+       dibuka. */
+    .page-sub b { color: var(--text-mid); font-weight: 600; }
+
+    .db-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 28px; }
+    @media (max-width: 1240px) { .db-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .db-kpis { grid-template-columns: minmax(0, 1fr); } }
+
+    .db-tile {
+        position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 8px;
+        padding: 17px 18px 15px; border-radius: var(--radius); color: inherit;
+        border: 1px solid var(--line-soft);
+        background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 120px), var(--surface);
+        box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255,255,255,0.04);
+        transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .db-tile::after {
+        content: ''; position: absolute; width: 190px; height: 190px; right: -70px; top: -90px; border-radius: 50%;
+        background: radial-gradient(circle, var(--glow, rgba(22,224,174,0.12)), transparent 70%);
+        pointer-events: none;
+    }
+    a.db-tile:hover { color: inherit; transform: translateY(-2px); border-color: var(--line); box-shadow: 0 16px 36px -18px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.05); }
+    .db-k { display: flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
+    .db-k .ic {
+        width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0;
+        background: var(--icbg, var(--accum-glow)); color: var(--icfg, var(--accum));
+    }
+    .db-k .ic svg { width: 14px; height: 14px; }
+    .db-k .db-chip { margin-left: auto; }
+    .db-v { font-size: 27px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.1; margin-top: 4px; }
+    .db-v.mono { font-family: var(--font-mono); font-weight: 600; letter-spacing: -0.02em; }
+    .db-s { font-size: 12.5px; color: var(--text-mid); line-height: 1.45; }
+    .db-s .mono { font-size: 12px; }
+    .db-foot {
+        margin-top: auto; padding-top: 6px; display: flex; justify-content: space-between; gap: 10px;
+        font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+    }
+    .db-chip { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+    .db-chip.warn { color: var(--warn); background: rgba(255,195,82,0.12); }
+    .db-chip.ok { color: var(--accum); background: var(--accum-glow); }
+    .db-split { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--distrib); margin-top: 2px; }
+    .db-split span { display: block; background: var(--accum); }
+
+    .db-sec { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+    .db-sec h2 { font-size: 15.5px; font-weight: 700; margin: 0; letter-spacing: -0.015em; }
+    .db-sec span, .db-sec a { font-size: 12px; color: var(--text-dim); }
+    .db-sec a:hover { color: var(--accum); }
+
+    /* ---- Watchlist: kartu hitung + flow meter ---- */
+    .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 28px; }
+    @media (max-width: 1100px) { .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .stat-grid { grid-template-columns: minmax(0, 1fr); } }
+    .stat-card {
+        position: relative; overflow: hidden; display: block; color: inherit;
+        padding: 16px 18px 14px; border-radius: var(--radius);
+        border: 1px solid var(--line-soft);
+        background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 120px), var(--surface);
+        box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255,255,255,0.04);
+        transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), border-color 0.2s ease, box-shadow 0.2s ease;
+        opacity: 0; animation: statCardIn 0.4s cubic-bezier(0.4,0,0.2,1) forwards;
+    }
+    .stat-card:nth-child(1) { animation-delay: 0.02s; }
+    .stat-card:nth-child(2) { animation-delay: 0.08s; }
+    .stat-card:nth-child(3) { animation-delay: 0.14s; }
+    .stat-card:nth-child(4) { animation-delay: 0.20s; }
+    @keyframes statCardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .stat-card:hover {
+        color: inherit; transform: translateY(-2px); border-color: rgba(22,224,174,0.35);
+        box-shadow: 0 16px 36px -18px rgba(0,0,0,0.9), 0 0 0 1px var(--accum-glow);
+    }
+    .stat-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .stat-label { font-size: 13px; font-weight: 600; color: var(--text-mid); }
+    .stat-icon {
+        width: 30px; height: 30px; border-radius: 9px;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--accum-glow); color: var(--accum); flex-shrink: 0;
+    }
+    .stat-icon svg { width: 15px; height: 15px; }
+    .stat-num {
+        font-size: 32px; font-weight: 600; line-height: 1;
+        color: var(--text); letter-spacing: -0.03em; margin-bottom: 14px;
+        font-family: var(--font-mono);
+    }
+    .stat-card .flow-meter { height: 4px; }
+
+    .visit-recap {
+        margin-bottom: 20px; padding: 14px 18px 14px 16px; border-radius: var(--radius);
+        border: 1px solid rgba(22,224,174,0.22);
+        background: linear-gradient(90deg, rgba(22,224,174,0.08), rgba(22,224,174,0.02));
+        font-size: 13px; display: none;
+    }
+    .visit-recap-title { font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+    .visit-recap-title::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accum); box-shadow: 0 0 0 4px var(--accum-glow); }
+    .visit-recap ul { margin: 0; padding-left: 34px; color: var(--text-mid); }
+    .visit-recap li { margin-bottom: 3px; }
+    .visit-recap .new-signal { color: var(--accum); font-weight: 700; }
+
+    /* ---- Bawah: sinyal per detektor + jurnal & pintasan ---- */
+    .db-grid2 { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+    @media (max-width: 1100px) { .db-grid2 { grid-template-columns: minmax(0, 1fr); } }
+    .db-panel {
+        padding: 18px 20px; border-radius: var(--radius); border: 1px solid var(--line-soft);
+        background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 120px), var(--surface);
+        box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .db-panel + .db-panel { margin-top: 14px; }
+    .db-big { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
+    .db-big strong { font-family: var(--font-mono); font-size: 30px; font-weight: 600; line-height: 1; letter-spacing: -0.02em; }
+    .db-big span { color: var(--text-dim); font-size: 13px; }
+
+    .det-list { display: flex; flex-direction: column; gap: 4px; }
+    .det { display: grid; grid-template-columns: 128px 1fr 48px; gap: 12px; align-items: center; padding: 6px 8px; margin: 0 -8px; border-radius: 8px; color: inherit; }
+    .det:hover { background: rgba(255,255,255,0.04); color: inherit; }
+    .det .n { font-size: 12.5px; color: var(--text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .det .bar { height: 7px; border-radius: 4px; background: var(--line-soft); position: relative; overflow: hidden; }
+    .det .bar i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; display: block; }
+    .det .v { font-family: var(--font-mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+    @media (max-width: 560px) { .det { grid-template-columns: 96px 1fr 40px; } }
+
+    .db-jurnal { display: flex; flex-direction: column; }
+    .db-jrow { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; color: inherit; }
+    .db-jrow + .db-jrow { border-top: 1px solid var(--line-soft); }
+    .db-jrow:hover { color: inherit; }
+    .db-jrow:hover .n { color: var(--accum); }
+    .db-jrow .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .db-jrow .dot.ok { background: var(--accum); box-shadow: 0 0 0 3px var(--accum-glow); }
+    .db-jrow .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(255,195,82,0.14); }
+    .db-jrow .n { font-size: 13px; font-weight: 600; transition: color 0.15s ease; }
+    .db-jrow .d { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); }
+    .db-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.55; margin: 10px 0 0; }
+
+    .db-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .db-links a {
+        display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-radius: 10px;
+        border: 1px solid var(--line-soft); background: rgba(255,255,255,0.02);
+        font-size: 12.5px; font-weight: 600; color: var(--text-mid);
+        transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+    }
+    .db-links a:hover { border-color: rgba(22,224,174,0.3); background: var(--accum-glow); color: var(--text); }
+    .db-links svg { width: 15px; height: 15px; color: var(--accum); flex-shrink: 0; }
+    .db-empty { color: var(--text-dim); font-size: 13px; padding: 18px 0 6px; }
+</style>
+
+<div class="visit-recap" id="visitRecap">
+    <div class="visit-recap-title" id="visitRecapTitle"></div>
+    <ul id="visitRecapList"></ul>
+</div>
+
+{% set rk = ringkas or {} %}
+{% set hi = hari_ini or {} %}
+
+<div class="db-kpis">
+    {% set rg = rk.regime %}
+    {% if rg %}
+    {# Label regime ditentukan RATA-RATA return (market_regime.py). Rata-rata
+       bisa naik karena segelintir saham terbang sementara mayoritas turun --
+       kalau arah label dan sebaran (% emiten naik) tidak sepakat, labelnya
+       tidak diwarnai seolah pasar kuat/lemah merata, dan diberi tanda. #}
+    {% set naik_rg = rg.label in ['Rally kencang', 'Naik'] %}
+    {% set turun_rg = rg.label in ['Turun', 'Anjlok'] %}
+    {% set sempit = (naik_rg and rg.pct_up < 50) or (turun_rg and rg.pct_up > 50) %}
+    {% set warna_rg = 'var(--warn)' if sempit else ('var(--accum)' if naik_rg else ('var(--distrib)' if turun_rg else 'var(--text)')) %}
+    <div class="db-tile" style="--glow: {{ 'rgba(255,195,82,0.10)' if sempit else ('rgba(22,224,174,0.12)' if naik_rg else ('rgba(255,96,118,0.12)' if turun_rg else 'rgba(132,171,255,0.10)')) }};">
+        <div class="db-k">
+            <span class="ic" style="--icbg: rgba(132,171,255,0.13); --icfg: var(--info);"><i data-feather="bar-chart-2"></i></span>
+            Regime pasar &middot; {{ rg.window_days }} hari
+            {% if rg.basi %}<span class="db-chip warn" title="Ada Summary yang lebih baru dari cache ini. Dibangun ulang oleh pemeriksaan kesehatan malam.">basi</span>
+            {% elif sempit %}<span class="db-chip warn" title="Label dari rata-rata return, tapi {{ 'kurang' if naik_rg else 'lebih' }} dari separuh emiten yang naik: {{ 'kenaikannya ditopang' if naik_rg else 'penurunannya ditarik' }} segelintir saham.">sempit</span>{% endif %}
+        </div>
+        <div class="db-v" style="color: {{ warna_rg }};">{{ rg.label }}</div>
+        <div class="db-s">{{ rg.pct_up }}% emiten naik &middot; rata-rata <span class="mono" style="color: {{ 'var(--accum)' if rg.mean_pct >= 0 else 'var(--distrib)' }};">{{ '%+.2f'|format(rg.mean_pct) }}%</span> &middot; median <span class="mono" style="color: {{ 'var(--accum)' if rg.median_pct >= 0 else 'var(--distrib)' }};">{{ '%+.2f'|format(rg.median_pct) }}%</span></div>
+        <div class="db-split" title="{{ rg.pct_up }}% naik, {{ '%.1f'|format(100 - rg.pct_up) }}% turun/datar"><span style="width: {{ rg.pct_up }}%;"></span></div>
+        <div class="db-foot"><span>{{ rg.n }} emiten</span><span>{{ rg.as_of_id }}</span></div>
+    </div>
+    {% else %}
+    <div class="db-tile">
+        <div class="db-k"><span class="ic" style="--icbg: rgba(132,171,255,0.13); --icfg: var(--info);"><i data-feather="bar-chart-2"></i></span>Regime pasar</div>
+        <div class="db-v">&mdash;</div>
+        <div class="db-s">Cache regime belum ada. Dibangun oleh pemeriksaan kesehatan malam.</div>
+    </div>
+    {% endif %}
+
+    {% set tb = hi.tembus %}
+    <a class="db-tile" href="/tembus-basis">
+        <div class="db-k">
+            <span class="ic"><i data-feather="trending-up"></i></span>
+            Tembus Basis hari ini
+            {% if tb and hi.data_sampai and tb.as_of and tb.as_of < hi.data_sampai %}<span class="db-chip warn" title="Pindaian terakhir {{ tb.as_of_id }}, data sudah sampai {{ hi.data_sampai_id }}.">basi</span>{% endif %}
+        </div>
+        {% if tb %}
+        {% set h = tb.hitung or {} %}
+        <div class="db-v mono">{{ (h.keduanya or 0) + (h.basis or 0) + (h.puncak or 0) }}</div>
+        <div class="db-s">{{ h.keduanya or 0 }} keduanya &middot; {{ h.basis or 0 }} basis &middot; {{ h.puncak or 0 }} puncak 52 mgg</div>
+        <div class="db-foot"><span>{{ tb.n_layak }} emiten layak</span><span>{{ tb.as_of_id }}</span></div>
+        {% else %}
+        <div class="db-v">&mdash;</div>
+        <div class="db-s">Belum dipindai. Buka halamannya untuk memindai.</div>
+        {% endif %}
+    </a>
+
+    {% set sg = rk.sinyal %}
+    <a class="db-tile" href="/scanner-lab" style="--glow: rgba(255,195,82,0.10);">
+        <div class="db-k"><span class="ic" style="--icbg: rgba(255,195,82,0.12); --icfg: var(--warn);"><i data-feather="radio"></i></span>Sinyal 14 hari</div>
+        {% if sg and sg.total %}
+        <div class="db-v mono">{{ sg.total }}</div>
+        <div class="db-s">{{ sg.pending }} masih pending &middot; {{ sg.per_detektor|length }} detektor</div>
+        <div class="db-foot"><span>Scanner Lab</span><span>{{ sg.as_of_id }}</span></div>
+        {% else %}
+        <div class="db-v">&mdash;</div>
+        <div class="db-s">Cache pindaian 14 hari belum hangat.</div>
+        {% endif %}
+    </a>
+
+    {% set cc = rk.cache %}
+    {% set cache_ok = cc and not cc.basi and not cc.hilang %}
+    <div class="db-tile" style="--glow: {{ 'rgba(22,224,174,0.10)' if cache_ok else 'rgba(255,195,82,0.10)' }};">
+        <div class="db-k">
+            <span class="ic" {% if not cache_ok %}style="--icbg: rgba(255,195,82,0.12); --icfg: var(--warn);"{% endif %}><i data-feather="{{ 'check-circle' if cache_ok else 'alert-triangle' }}"></i></span>
+            Kesehatan data
+        </div>
+        {% if cc %}
+        <div class="db-v mono">{{ cc.segar }}<span style="color: var(--text-dim); font-size: 18px;">/{{ cc.total }}</span></div>
+        <div class="db-s">
+            cache segar{% if cc.basi %} &middot; <span style="color: var(--warn);" title="{{ cc.basi|join(', ') }}">{{ cc.basi|length }} basi &gt;24 jam</span>{% endif %}{% if cc.hilang %} &middot; <span style="color: var(--distrib);" title="{{ cc.hilang|join(', ') }}">{{ cc.hilang|length }} belum ada</span>{% endif %}
+        </div>
+        {% else %}
+        <div class="db-v">&mdash;</div>
+        <div class="db-s">Status cache tidak terbaca.</div>
+        {% endif %}
+        {% if hi.jurnal %}
+        <div class="db-foot"><span>jurnal maju</span><span>{{ hi.jurnal_terkini }}/{{ hi.jurnal|length }} terkini</span></div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="db-sec">
+    <h2>Watchlist</h2>
+    <span>{{ total_watchlist_count }} saham &middot; bar = porsi yang ritelnya net jual</span>
+</div>
+<div class="stat-grid">
+    {% for label, url, ikon in [('Portfolio', '/display-stock-list?type=PortfolioStocks', 'briefcase'),
+                               ('Best', '/display-stock-list?type=BestStocks', 'star'),
+                               ('Best Low', '/display-stock-list?type=BestLowStocks', 'trending-down'),
+                               ('Pattern Up', '/display-stock-list?type=PatternUpStocks', 'activity')] %}
+    <a href="{{ url }}" class="stat-card">
+        <div class="stat-top">
+            <span class="stat-label">{{ label }}</span>
+            <span class="stat-icon"><i data-feather="{{ ikon }}"></i></span>
+        </div>
+        <div class="stat-num count-up" data-target="{{ stats[label] }}">0</div>
+        <div class="flow-meter"><div class="accum-fill" style="width: {{ flow[label] }}%"></div></div>
+        <div class="flow-legend"><span>ACCUM {{ flow[label] }}%</span><span>DISTRIB {{ 100 - flow[label] }}%</span></div>
+    </a>
+    {% endfor %}
+</div>
+
+<div class="db-grid2">
+    <div class="db-panel">
+        <div class="db-sec">
+            <h2>Sinyal 14 hari per detektor</h2>
+            <a href="/scanner-lab">Scanner Lab &rarr;</a>
+        </div>
+        {% if sg and sg.total %}
+        <div class="db-big">
+            <strong>{{ sg.total }}</strong>
+            <span>sinyal &middot; {{ sg.pending }} masih pending</span>
+        </div>
+        <div class="det-list">
+            {% for d in sg.per_detektor %}
+            <a class="det" href="/scanner-lab">
+                <span class="n" title="{{ d.nama }}">{{ d.nama }}</span>
+                <span class="bar"><i style="width: {{ d.pct }}%; background: {{ ['var(--accum)', 'var(--info)', 'var(--warn)', 'var(--warn)', 'var(--text-dim)'][loop.index0 % 5] }};"></i></span>
+                <span class="v">{{ d.n }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="db-empty">Belum ada sinyal di cache pindaian 14 hari. Cache ini dipanaskan saat server menyala.</div>
+        {% endif %}
+    </div>
+
+    <div>
+        {% if hi.jurnal %}
+        <div class="db-panel">
+            <div class="db-sec">
+                <h2>Jurnal maju</h2>
+                <span>{{ hi.jurnal_terkini }}/{{ hi.jurnal|length }} terkini</span>
+            </div>
+            <div class="db-jurnal">
+                {% for j in hi.jurnal %}
+                <a class="db-jrow" href="{{ j.url }}" title="{{ 'Sudah mencatat sampai data terakhir' if j.terkini else 'Belum mencatat hari bursa terakhir' }}">
+                    <span class="dot {{ 'ok' if j.terkini else 'warn' }}"></span>
+                    <span class="n">{{ j.nama }}</span>
+                    <span class="d">{{ j.terakhir_id or 'belum ada' }}</span>
+                </a>
+                {% endfor %}
+            </div>
+            <p class="db-note">Sinyal ditulis sebelum hasilnya ada, lalu diukur puluhan hari bursa kemudian &mdash; satu-satunya uji yang tidak bisa dicurangi data lama.</p>
+        </div>
+        {% endif %}
+
+        <div class="db-panel">
+            <div class="db-sec"><h2>Pintasan</h2><span><kbd class="kbd">Ctrl K</kbd> untuk semuanya</span></div>
+            <div class="db-links">
+                <a href="/tembus-basis"><i data-feather="trending-up"></i>Tembus Basis</a>
+                <a href="/radar-insider"><i data-feather="crosshair"></i>Radar Insider</a>
+                <a href="/takaran-risiko"><i data-feather="activity"></i>Takaran Risiko</a>
+                <a href="/kepemilikan-saham"><i data-feather="pie-chart"></i>Kepemilikan</a>
+                <a href="/sidik-jari-broker"><i data-feather="users"></i>Sidik Jari Broker</a>
+                <a href="/jurnal-keputusan"><i data-feather="book-open"></i>Jurnal Keputusan</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Counts each stat card up from 0 to its real value instead of just
+    // printing the number — a small bit of life on the page you land on
+    // most often.
+    document.querySelectorAll('.count-up').forEach(function (el, i) {
+        var target = parseInt(el.getAttribute('data-target'), 10) || 0;
+        var duration = 500;
+        var start = null;
+        var delay = 20 + i * 60;
+        setTimeout(function () {
+            requestAnimationFrame(function step(ts) {
+                if (start === null) { start = ts; }
+                var progress = Math.min((ts - start) / duration, 1);
+                var eased = 1 - Math.pow(1 - progress, 3);
+                el.textContent = Math.round(eased * target);
+                if (progress < 1) { requestAnimationFrame(step); }
+            });
+        }, delay);
+    });
+
+    // Compares today's signal list + watchlist count against a snapshot
+    // saved in localStorage from the last time this page was opened, so
+    // the dashboard can surface "what changed" instead of a static count.
+    (function () {
+        var SNAPSHOT_KEY = 'dashboardSnapshot';
+        var currentSignals = {{ current_signals|tojson }};
+        var currentTotal = {{ total_watchlist_count }};
+
+        var raw = null;
+        try { raw = JSON.parse(localStorage.getItem(SNAPSHOT_KEY)); } catch (e) {}
+
+        if (raw && raw.signals) {
+            var newSignals = currentSignals.filter(function (t) { return raw.signals.indexOf(t) === -1; });
+            var goneSignals = raw.signals.filter(function (t) { return currentSignals.indexOf(t) === -1; });
+            var totalDiff = currentTotal - raw.total;
+            var daysAgo = Math.round((Date.now() - raw.timestamp) / 86400000);
+
+            var items = [];
+            if (newSignals.length) {
+                items.push('<span class="new-signal">' + newSignals.length + ' saham baru</span> masuk kriteria akumulasi: ' + newSignals.join(', '));
+            }
+            if (goneSignals.length) {
+                items.push(goneSignals.length + ' saham gak lagi match kriteria akumulasi: ' + goneSignals.join(', '));
+            }
+            if (totalDiff !== 0) {
+                items.push('Total saham di watchlist ' + (totalDiff > 0 ? '+' : '') + totalDiff + ' dari kunjungan terakhir.');
+            }
+
+            if (items.length) {
+                var when = daysAgo === 0 ? 'hari ini juga' : (daysAgo === 1 ? 'kemarin' : daysAgo + ' hari lalu');
+                $('#visitRecapTitle').text('Sejak terakhir kamu buka (' + when + ')');
+                $('#visitRecapList').html(items.map(function (t) { return '<li>' + t + '</li>'; }).join(''));
+                $('#visitRecap').show();
+            }
+        }
+
+        try {
+            localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
+                signals: currentSignals, total: currentTotal, timestamp: Date.now()
+            }));
+        } catch (e) {}
+    })();
+</script>
+{% endblock %}

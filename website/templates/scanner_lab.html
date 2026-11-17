@@ -1,0 +1,593 @@
+{% extends "base.html" %}
+{% block title %}Scanner Lab{% endblock %}
+{% block page_title %}Scanner Lab{% endblock %}
+
+{% block content %}
+
+<style>
+    .sl-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+
+
+    /* Ringkasan temuan: kartu naratif, bukan sekadar angka telanjang --
+       skor di tabel bawah tidak berarti apa-apa tanpa konteks ini. */
+    .sl-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .sl-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .sl-finding strong { color: var(--text); }
+
+    .sl-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .sl-table th:first-child, .sl-table th.sl-left { text-align: left; }
+    .sl-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .sl-table td:first-child, .sl-table td.sl-left { text-align: left; }
+    .sl-table tbody tr:hover { background: var(--raised); }
+
+
+    .sl-ticker { font-family: var(--font-ui); font-weight: 600; color: var(--accum); cursor: pointer; }
+    .sl-ticker:hover { text-decoration: underline; }
+
+    .sl-badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 9.5px;
+                font-family: var(--font-ui); font-weight: 600; white-space: nowrap; }
+    .sl-badge-warn { color: #FFB454; border: 1px solid rgba(255,180,84,0.35); background: rgba(255,180,84,0.08); }
+
+    /* Skor: bilah warna supaya terbaca sekilas tanpa membaca angkanya. */
+    .sl-score { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
+    .sl-score-bar { width: 42px; height: 5px; border-radius: 3px; background: var(--raised); overflow: hidden; flex: 0 0 auto; }
+    .sl-score-fill { height: 100%; border-radius: 3px; }
+    .sl-score-num { font-family: var(--font-mono); font-size: 12px; min-width: 22px; }
+
+    .sl-reasons { display: none; }
+    .sl-reasons td { background: var(--void); font-family: var(--font-ui); white-space: normal;
+                     text-align: left; padding: 10px 14px 12px; }
+    .sl-reason { font-size: 11.5px; line-height: 1.7; }
+    .sl-reason-baik::before { content: '+ '; color: var(--accum); font-family: var(--font-mono); }
+    .sl-reason-buruk::before { content: '- '; color: var(--distrib); font-family: var(--font-mono); }
+    .sl-reason-netral::before { content: '· '; color: var(--text-dim); font-family: var(--font-mono); }
+    .sl-expand { cursor: pointer; }
+
+
+    .sl-warn { border-color: rgba(255,180,84,0.3); background: rgba(255,180,84,0.04); }
+
+    /* Toggle mode: dua pilihan yang saling meniadakan, jadi dibuat sebagai
+       segmented control -- bukan dropdown, supaya kedua pilihan (dan
+       konsekuensinya) selalu terlihat sekaligus. */
+    .sl-modes { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .sl-mode { padding: 7px 14px; font-size: 11.5px; font-family: var(--font-ui); font-weight: 600;
+               color: var(--text-dim); background: transparent; border: 0; cursor: pointer; white-space: nowrap; }
+    .sl-mode:hover { color: var(--text); background: var(--raised); }
+    .sl-mode.active { color: var(--void); background: var(--accum); }
+
+
+    /* Verdict kesehatan arus pasca-sinyal (flow_health.py): hijau = arus
+       masih akumulasi, kuning = arah tidak jelas, merah = arus berbalik.
+       Warna sama persis dengan Kering Screener supaya artinya konsisten
+       lintas halaman. */
+    .sl-flow-row { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px;
+                  line-height: 1.7; padding: 3px 0; flex-wrap: wrap; }
+    .sl-flow-h { font-family: var(--font-mono); color: var(--text-dim); flex: 0 0 42px; }
+    .sl-mode-note { font-size: 11.5px; color: var(--text-mid); line-height: 1.6; margin-top: 10px; }
+
+    /* Modal chart: menutupi layar penuh karena chart-nya padat (4 panel
+       bertumpuk) dan tidak terbaca kalau dikecilkan. */
+    .sl-modal { position: fixed; inset: 0; z-index: 1200; display: none;
+                background: rgba(4, 7, 13, 0.82); backdrop-filter: blur(3px); }
+    .sl-modal.open { display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .sl-modal-box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+                    width: 100%; max-width: 1180px; height: 100%; max-height: 92vh;
+                    display: flex; flex-direction: column; overflow: hidden; }
+    .sl-modal-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+                     border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+    .sl-modal-title { font-family: var(--font-ui); font-size: 17px; font-weight: 700; color: var(--text); }
+    .sl-modal-sub { font-size: 11.5px; color: var(--text-dim); font-family: var(--font-mono); }
+    .sl-modal-close { margin-left: auto; background: transparent; border: 1px solid var(--line);
+                      color: var(--text-mid); border-radius: 8px; width: 30px; height: 30px;
+                      cursor: pointer; font-size: 15px; line-height: 1; }
+    .sl-modal-close:hover { color: var(--text); background: var(--raised); }
+    .sl-modal-body { flex: 1 1 auto; overflow: auto; padding: 10px 14px 16px; }
+    .sl-modal-chart { width: 100%; height: 640px; }
+    .sl-modal-foot { padding: 10px 18px 14px; border-top: 1px solid var(--line); flex: 0 0 auto;
+                     display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+</style>
+
+<div class="sl-controls">
+    <div class="sl-field">
+        <label>Mode</label>
+        <div class="sl-modes">
+            <button type="button" class="sl-mode active" data-mode="backtest">Backtest (ada hasilnya)</button>
+            <button type="button" class="sl-mode" data-mode="live">Sinyal berjalan</button>
+        </div>
+    </div>
+    <div class="sl-field">
+        <label>Scanner</label>
+        <select id="slScanner" class="form-select form-select-sm" style="width:230px;">
+            <option value="">Semua scanner</option>
+        </select>
+    </div>
+    <div class="sl-field">
+        <label>Cari kode</label>
+        <input type="text" id="slFilter" class="form-control form-control-sm"
+               placeholder="BBRI" style="width:120px; text-transform:uppercase;">
+    </div>
+    <div class="sl-field">
+        <label>Urut</label>
+        <select id="slSort" class="form-select form-select-sm" style="width:180px;">
+            <option value="signal_date">Tanggal sinyal</option>
+            <option value="score">Skor pola</option>
+            <option value="vol_mult">Volume relatif</option>
+            <option value="adv_juta">Nilai transaksi (ADV)</option>
+            <option value="fwd20">Hasil 20 hari</option>
+        </select>
+    </div>
+    <label class="sl-field" id="slRetroWrap" style="flex-direction:row; align-items:center; gap:6px; font-size:11.5px; color:var(--text-mid); padding-bottom:6px;">
+        <input type="checkbox" id="slHideRetro" checked> Sembunyikan scanner retrospektif
+    </label>
+
+    <div style="flex:1 1 auto;"></div>
+
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="slRescan"
+            style="display:none;" title="Pindai ulang seluruh emiten dari data Summary terbaru">Pindai Ulang</button>
+</div>
+
+<div class="sl-mode-note" id="slModeNote"></div>
+
+<div id="slLoading"></div>
+<script>document.getElementById('slLoading').innerHTML = window.skeleton('tabel', 9, 'Memuat sinyal dan menghitung konteksnya');</script>
+<div id="slMessage" class="sl-empty" style="display:none;"></div>
+
+<div id="slBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="sl-section-title">Apa yang ditemukan dari backtest</div>
+        <div id="slFindings"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="sl-section-title">Rekam jejak tiap scanner (horizon 20 hari)</div>
+        <div style="overflow-x:auto;">
+            <table class="sl-table">
+                <thead>
+                    <tr>
+                        <th class="sl-left">Scanner</th>
+                        <th>Sinyal</th>
+                        <th>Rata-rata</th>
+                        <th>Median</th>
+                        <th>Win rate</th>
+                        <th>vs Baseline</th>
+                    </tr>
+                </thead>
+                <tbody id="slStatsBody"></tbody>
+            </table>
+        </div>
+        <div class="sl-note" id="slStatsNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="sl-section-title" id="slSignalTitle">Sinyal Terbaru</div>
+        <div style="overflow-x:auto;">
+            <table class="sl-table">
+                <thead>
+                    <tr>
+                        <th class="sl-left">Tanggal</th>
+                        <th class="sl-left">Kode</th>
+                        <th class="sl-left">Scanner</th>
+                        <th>Skor pola</th>
+                        <th>Volume</th>
+                        <th title="Nilai transaksi rata-rata 20 hari (Open+Close)/2 x Volume, dalam jutaan rupiah. Saham likuiditas tipis punya slippage yang bisa memakan habis edge sinyal.">ADV (jt)</th>
+                        <th title="Bucket &quot;Individu&quot; KSEI apa adanya. BUKAN ritel: pemegang perorangan besar ikut terhitung di sini. Angka ritel yang sudah dipisahkan ada di halaman Kepemilikan Saham.">% Individu (KSEI)</th>
+                        <th title="Perubahan bucket Individu KSEI dibanding bulan lalu.">&Delta; Individu</th>
+                        <th>% Asing</th>
+                        <th>&Delta; Asing</th>
+                        <th id="slLastCol">Hasil 20h</th>
+                        <th class="sl-left">Kesehatan Arus</th>
+                    </tr>
+                </thead>
+                <tbody id="slSignalBody"></tbody>
+            </table>
+        </div>
+        <div class="sl-note">
+            <strong>Kesehatan Arus</strong>: setelah sinyal ini muncul, apakah arus Top5/Retail yang memicunya
+            masih bertahan atau sudah berbalik -- diukur dari data SETELAH tanggal sinyal, terpisah dari kolom
+            skor pola (yang diukur SAAT sinyal). Klik baris untuk detail per checkpoint (H+5/H+10/H+21 hari bursa).
+        </div>
+        <div class="sl-note" id="slSignalNote"></div>
+    </div>
+
+</div>
+
+<div class="sl-modal" id="slModal">
+    <div class="sl-modal-box">
+        <div class="sl-modal-head">
+            <span class="sl-modal-title" id="slModalTicker">—</span>
+            <span class="sl-modal-sub" id="slModalSub"></span>
+            <button type="button" class="sl-modal-close" id="slModalClose" aria-label="Tutup">&times;</button>
+        </div>
+        <div class="sl-modal-body">
+            <div class="sl-modal-chart" id="slModalChart"></div>
+        </div>
+        <div class="sl-modal-foot">
+            <a class="btn btn-sm btn-primary" id="slModalHub" href="#">Buka Halaman Saham</a>
+            <a class="btn btn-sm btn-outline-secondary" id="slModalOwnership" href="#">Kepemilikan Saham</a>
+            <span class="sl-note" style="margin:0;" id="slModalReasons"></span>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="{{ url_for('static', filename='js/stock_chart.js') }}"></script>
+<script>
+    var slData = null, slStats = null, slMode = 'backtest';
+
+    function idNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d || 0,
+            maximumFractionDigits: d === undefined ? 0 : d
+        });
+    }
+    function pct(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return idNum(v, d === undefined ? 2 : d) + '%';
+    }
+    function esc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+
+    function signed(v, suffix) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="sl-flat">—</span>'; }
+        var cls = v > 0 ? 'sl-up' : (v < 0 ? 'sl-down' : 'sl-flat');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + idNum(v, 2) + (suffix || '') + '</span>';
+    }
+
+    // Warna skor: hijau di atas 65, merah di bawah 40, abu di antaranya.
+    // Ambangnya mengikuti sebaran skor, bukan angka bulat sembarangan.
+    function scoreColor(s) {
+        if (s >= 65) { return '#16E0AE'; }
+        if (s < 40) { return '#FF6076'; }
+        return '#93A2B6';
+    }
+
+    // Sama persis dengan Kering Screener (kering_screener.html) --
+    // dipertahankan identik di kedua halaman supaya warna berarti sama.
+    var FLOW_COLOR = { akumulasi: 'hijau', netral: 'kuning', distribusi: 'merah' };
+
+    function bestFlowCheckpoint(flow) {
+        var available = (flow || []).filter(function (f) { return f.available; });
+        if (!available.length) { return null; }
+        return available.reduce(function (best, f) { return f.horizon > best.horizon ? f : best; });
+    }
+
+    function flowBadge(flow) {
+        var best = bestFlowCheckpoint(flow);
+        if (!best) { return '<span class="sl-flat">—</span>'; }
+        var cls = 'sl-badge-flow-' + (FLOW_COLOR[best.arah_arus] || 'kuning');
+        return '<span class="sl-badge ' + cls + '">' + esc(best.label) + '</span>';
+    }
+
+    function flowDetailHtml(flow) {
+        var lines = (flow || []).map(function (f) {
+            if (!f.available) {
+                return '<div class="sl-flow-row"><span class="sl-flow-h">H+' + f.horizon + '</span>'
+                     + '<span class="sl-flat">' + esc(f.message) + '</span></div>';
+            }
+            var cls = 'sl-badge-flow-' + (FLOW_COLOR[f.arah_arus] || 'kuning');
+            return '<div class="sl-flow-row">'
+                 + '<span class="sl-flow-h">H+' + f.horizon + '</span>'
+                 + '<span class="sl-badge ' + cls + '">' + esc(f.label) + '</span>'
+                 + '<span>harga ' + signed(f.price_pct, '%')
+                 +   ' &middot; skor arus ' + (f.skor_post > 0 ? '+' : '') + f.skor_post.toFixed(2)
+                 +   (f.low_sample ? ' <span class="sl-badge sl-badge-warn">sampel kecil</span>' : '')
+                 + '</span>'
+                 + '</div>';
+        });
+        return lines.join('') || '<div class="sl-flat">Belum ada checkpoint yang tersedia.</div>';
+    }
+
+    function renderFindings(stats) {
+        var buckets = stats.volume_buckets || [];
+        var rows = buckets.map(function (b) {
+            return '<tr><td class="sl-left">' + esc(b.label) + '</td>'
+                 + '<td>' + idNum(b.n) + '</td>'
+                 + '<td>' + signed(b.mean, '%') + '</td>'
+                 + '<td>' + pct(b.win_rate, 1) + '</td></tr>';
+        }).join('');
+
+        $('#slFindings').html(
+            '<div class="sl-finding">'
+            + '<h4>Faktor terkuat justru berlawanan dengan intuisi: makin ramai volume saat sinyal muncul, makin buruk hasilnya.</h4>'
+            + '<p>Diuji pada <strong>6.871 sinyal historis</strong> (Jan&ndash;Sep 2026) yang dipasangkan dengan data kepemilikan '
+            + 'dan broker harian <strong>tanpa lookahead</strong> &mdash; sinyal tanggal D hanya boleh memakai snapshot KSEI yang '
+            + 'tanggal potongnya sudah lewat sebelum D. Baseline pasar periode ini <strong>' + pct(stats.baseline) + '</strong> per 20 hari.</p>'
+            + '<div style="overflow-x:auto; margin-top:10px;"><table class="sl-table">'
+            + '<thead><tr><th class="sl-left">Volume hari sinyal</th><th>Sinyal</th><th>Rata-rata 20h</th><th>Win rate</th></tr></thead>'
+            + '<tbody>' + rows + '</tbody></table></div>'
+            + '</div>'
+
+            + '<div class="sl-finding">'
+            + '<h4>Efeknya bukan artefak &mdash; bertahan di dalam scanner yang tidak berbasis volume.</h4>'
+            + '<p>Sebagian scanner (<em>big_jump</em>, <em>breakout</em>) memang hanya menyala saat volume melonjak, jadi temuan di atas '
+            + 'bisa saja cuma &ldquo;scanner itu jelek&rdquo; yang diulang. Ternyata polanya tetap muncul di dalam scanner yang sama sekali '
+            + 'tidak melihat volume: <strong>slope_turn &minus;1,95pp</strong> (n=5.178) dan <strong>divergence &minus;7,20pp</strong> (n=1.126), '
+            + 'keduanya monoton dari kelompok sepi ke kelompok ramai. Arahnya juga konsisten di ketiga kuartal, termasuk Q3 saat pasar naik.</p>'
+            + '</div>'
+
+            + '<div class="sl-finding">'
+            + '<h4>Data kepemilikan menambah sedikit, bukan banyak.</h4>'
+            + '<p>Sendirian, faktor kepemilikan lemah &mdash; selisih antar kuartil cuma 1&ndash;2pp dan tidak monoton. '
+            + 'Digabung dengan volume, kombinasi terbaik yang ditemukan (<strong>volume sepi + bucket individu KSEI tebal + arus ritel mendingin</strong>) '
+            + 'mencapai <strong>+2,59pp di atas baseline</strong> (n=492, win 45,1%). '
+            + 'Studi itu memakai bucket <em>Individu</em> KSEI apa adanya &mdash; termasuk pemegang perorangan besar &mdash; '
+            + 'jadi bacalah faktor ini sebagai &ldquo;banyak nama perorangan&rdquo;, bukan &ldquo;banyak ritel&rdquo;. '
+            + 'Karena itu bobot kepemilikan pada skor sengaja dibuat kecil.</p>'
+            + '</div>'
+
+            + '<div class="sl-finding sl-warn">'
+            + '<h4>Batasnya, dan ini yang paling penting.</h4>'
+            + '<p>Win rate kombinasi terbaik pun <strong>masih di bawah 50%</strong> dan median-nya masih negatif &mdash; rata-rata positif '
+            + 'ditarik segelintir pemenang besar, bukan konsistensi. Periodenya cuma ~8 bulan dan didominasi pasar turun. '
+            + 'Skor di halaman ini adalah <strong>ringkasan pola historis, bukan prediksi dan bukan saran beli</strong>.</p>'
+            + '</div>');
+    }
+
+    function renderStats(stats) {
+        var body = $('#slStatsBody').empty();
+        (stats.scanners || []).forEach(function (r) {
+            var badge = r.retrospective
+                ? ' <span class="sl-badge sl-badge-warn">retrospektif</span>' : '';
+            body.append('<tr>'
+                + '<td class="sl-left">' + esc(r.label) + badge
+                +   '<div class="sl-flat" style="font-size:10.5px; font-family:var(--font-ui); white-space:normal;">'
+                +   esc(r.desc) + '</div></td>'
+                + '<td>' + idNum(r.n) + '</td>'
+                + '<td>' + signed(r.mean, '%') + '</td>'
+                + '<td>' + signed(r.median, '%') + '</td>'
+                + '<td>' + pct(r.win_rate, 1) + '</td>'
+                + '<td>' + signed(r.vs_baseline, 'pp') + '</td>'
+                + '</tr>');
+        });
+        $('#slStatsNote').html(
+            'Dibandingkan terhadap baseline pasar <strong>' + pct(stats.baseline) + '</strong> '
+            + '(rata-rata return 20 hari seluruh saham pada periode yang sama, 116.522 pengamatan). '
+            + 'Scanner bertanda <em>retrospektif</em> mendefinisikan dirinya sebagai &ldquo;rally terbesar&rdquo;, '
+            + 'jadi hasil positifnya konsekuensi definisi &mdash; bukan bukti daya prediksi, dan dikecualikan dari statistik volume.');
+    }
+
+    function currentRows() {
+        if (!slData) { return []; }
+        var q = ($('#slFilter').val() || '').trim().toUpperCase();
+        var hideRetro = $('#slHideRetro').is(':checked');
+        var key = $('#slSort').val();
+
+        var rows = slData.rows.filter(function (r) {
+            if (hideRetro && r.retrospective) { return false; }
+            if (q && r.stock.indexOf(q) === -1) { return false; }
+            return true;
+        });
+
+        return rows.slice().sort(function (a, b) {
+            if (key === 'signal_date') { return a.signal_date < b.signal_date ? 1 : -1; }
+            var x = a[key], y = b[key];
+            // Baris tanpa nilai selalu di bawah, bukan dianggap nol.
+            if (x === null || x === undefined) { return 1; }
+            if (y === null || y === undefined) { return -1; }
+            return key === 'vol_mult' ? x - y : y - x;
+        });
+    }
+
+    function renderSignals() {
+        var rows = currentRows();
+        var body = $('#slSignalBody').empty();
+
+        if (!rows.length) {
+            body.append('<tr><td colspan="12" class="sl-empty">Tidak ada sinyal yang cocok dengan filter ini.</td></tr>');
+            $('#slSignalNote').html('');
+            return;
+        }
+
+        rows.forEach(function (r, i) {
+            var reasons = (r.reasons || []).map(function (x) {
+                return '<div class="sl-reason sl-reason-' + x.kind + '">' + esc(x.text) + '</div>';
+            }).join('');
+            var badge = r.retrospective ? ' <span class="sl-badge sl-badge-warn">retro</span>' : '';
+            var flowSection = '<div class="sl-section-title" style="margin-top:10px;">Kesehatan Arus Pasca-Sinyal</div>'
+                             + flowDetailHtml(r.flow);
+
+            body.append('<tr class="sl-expand" data-row="' + i + '">'
+                + '<td class="sl-left">' + esc(r.signal_date) + '</td>'
+                + '<td class="sl-left"><span class="sl-ticker" data-ticker="' + esc(r.stock) + '"'
+                +   ' data-date="' + esc(r.signal_date) + '" data-row="' + i + '">'
+                +   esc(r.stock) + '</span></td>'
+                + '<td class="sl-left" style="font-family:var(--font-ui); white-space:normal;">'
+                +   esc(r.scanner_label) + badge + '</td>'
+                + '<td><div class="sl-score">'
+                +   '<div class="sl-score-bar"><div class="sl-score-fill" style="width:' + r.score + '%;'
+                +     'background:' + scoreColor(r.score) + ';"></div></div>'
+                +   '<span class="sl-score-num" style="color:' + scoreColor(r.score) + ';">' + r.score + '</span>'
+                + '</div></td>'
+                + '<td>' + (r.vol_mult === null ? '—' : idNum(r.vol_mult, 2) + 'x') + '</td>'
+                + '<td>' + (r.adv_juta === null ? '—' : idNum(r.adv_juta, 1)) + '</td>'
+                + '<td>' + pct(r.own_pct_individu) + '</td>'
+                + '<td>' + signed(r.own_d_individu, 'pp') + '</td>'
+                + '<td>' + pct(r.own_pct_foreign) + '</td>'
+                + '<td>' + signed(r.own_d_foreign, 'pp') + '</td>'
+                + '<td>' + (slMode === 'live'
+                    ? (r.pending
+                        ? '<span class="sl-badge sl-badge-pending">' + r.forward_needed + 'h lagi</span>'
+                        : '<span class="sl-flat">siap dinilai</span>')
+                    : signed(r.fwd20, '%')) + '</td>'
+                + '<td class="sl-left">' + flowBadge(r.flow) + '</td>'
+                + '</tr>'
+                + '<tr class="sl-reasons" data-reasons="' + i + '"><td colspan="12">'
+                +   reasons + flowSection + '</td></tr>');
+        });
+
+        var note = 'Menampilkan <strong>' + idNum(rows.length) + '</strong> sinyal. '
+                 + 'Klik satu baris untuk melihat dasar skornya, atau klik kode saham untuk membuka '
+                 + 'halaman Kepemilikan Saham-nya. ';
+        if (slMode === 'live') {
+            var pendingCount = rows.filter(function (r) { return r.pending; }).length;
+            note += '<strong>' + idNum(pendingCount) + '</strong> di antaranya belum bisa dinilai &mdash; '
+                  + 'umurnya belum cukup untuk mengetahui hasilnya, dan justru sinyal inilah yang '
+                  + 'tidak akan pernah muncul di mode Backtest.';
+        } else {
+            note += 'Kolom <em>Hasil 20h</em> hanya terisi untuk sinyal yang umurnya sudah lewat 20 hari bursa.';
+        }
+        $('#slSignalNote').html(note);
+    }
+
+    function applyMode() {
+        var live = slMode === 'live';
+        $('.sl-mode').removeClass('active').filter('[data-mode="' + slMode + '"]').addClass('active');
+        $('#slRescan').toggle(live);
+        $('#slRetroWrap').toggle(!live);
+        $('#slLastCol').text(live ? 'Status' : 'Hasil 20h');
+        $('#slSignalTitle').text(live ? 'Sinyal Berjalan' : 'Sinyal Terbaru');
+        // Urut "Hasil 20 hari" tidak masuk akal di mode live (semuanya kosong).
+        $('#slSort option[value="fwd20"]').prop('disabled', live);
+        if (live && $('#slSort').val() === 'fwd20') { $('#slSort').val('score'); }
+    }
+
+    // Chart dibuka dengan ?focus=<tanggal sinyal> supaya endpoint
+    // menggambar penanda "Signal" tepat di hari sinyal muncul -- tanpa itu
+    // chart cuma menampilkan 100 hari terakhir tanpa konteks kenapa saham
+    // ini muncul di daftar.
+    function openChart(ticker, signalDate, rowIndex) {
+        var rows = currentRows();
+        var row = rows[rowIndex];
+
+        $('#slModalTicker').text(ticker);
+        $('#slModalSub').text('sinyal ' + signalDate
+            + (row ? ' · skor ' + row.score + ' · ' + row.scanner_label : ''));
+        $('#slModalOwnership').attr('href', '/kepemilikan-saham?stock=' + encodeURIComponent(ticker));
+        $('#slModalHub').attr('href', '/saham/' + encodeURIComponent(ticker));
+        $('#slModalReasons').html(row
+            ? (row.reasons || []).map(function (x) {
+                  return '<span class="sl-reason sl-reason-' + x.kind + '" style="display:inline; margin-right:12px;">'
+                       + esc(x.text.split('—')[0].trim()) + '</span>';
+              }).join('')
+            : '');
+        $('#slModalChart').html('<div class="sl-empty">Memuat chart...</div>');
+        $('#slModal').addClass('open');
+
+        var url = '/stock-chart-data/' + encodeURIComponent(ticker)
+                + '?focus=' + encodeURIComponent(signalDate);
+        $.getJSON(url, function (data) {
+            if (!data || !data.found) {
+                $('#slModalChart').html('<div class="sl-empty">Data chart untuk ' + esc(ticker) + ' tidak ada.</div>');
+                return;
+            }
+            $('#slModalChart').empty();
+            // renderChart() dipakai bersama dengan halaman All Charts
+            // (static/js/stock_chart.js) -- argumen kedua mengarahkannya
+            // menggambar ke div modal ini, bukan ke #chartDiv.
+            renderChart(data, 'slModalChart');
+        }).fail(function () {
+            $('#slModalChart').html('<div class="sl-empty">Gagal memuat chart.</div>');
+        });
+    }
+
+    function closeChart() {
+        $('#slModal').removeClass('open');
+        $('#slModalChart').empty();
+    }
+
+    function load(force) {
+        $('#slBody').hide();
+        $('#slMessage').hide();
+        $('#slLoading').show().html(window.skeleton('tabel', 9, slMode === 'live' && force
+            ? 'Memindai ulang seluruh emiten dari data Summary terbaru — bisa ~1 menit'
+            : 'Memuat sinyal dan menghitung konteksnya'));
+        applyMode();
+
+        var dataReq = slMode === 'live'
+            ? $.post('/scanner-lab-live', { scanner: $('#slScanner').val(),
+                                            days_back: 60, force: force ? 1 : 0 })
+            : $.post('/scanner-lab-data', { limit: 300, scanner: $('#slScanner').val() });
+
+        $.when($.post('/scanner-lab-stats'), dataReq).done(function (statsRes, dataRes) {
+            $('#slLoading').hide();
+            slStats = statsRes[0];
+            slData = dataRes[0];
+
+            if (!slData || !slData.available) {
+                $('#slMessage').text((slData && slData.message) || 'Data scanner tidak tersedia.').show();
+                return;
+            }
+
+            if (slStats && slStats.available) {
+                renderFindings(slStats);
+                renderStats(slStats);
+            }
+
+            if (!$('#slScanner option').length || $('#slScanner option').length === 1) {
+                (slData.scanners || []).forEach(function (s) {
+                    $('#slScanner').append($('<option>').val(s.key).text(s.label));
+                });
+            }
+
+            renderSignals();
+
+            if (slMode === 'live') {
+                $('#slModeNote').html(
+                    'Sinyal dipindai langsung dari data harian sampai <strong>'
+                    + esc(slData.last_data_date || '-') + '</strong>, tanpa menunggu hasilnya diketahui. '
+                    + 'Script riset aslinya sengaja membuang sinyal terbaru karena harus menghitung hasil '
+                    + '20&ndash;60 hari ke depan, jadi mode Backtest berhenti 1&ndash;3 bulan di belakang. '
+                    + (slData.from_cache ? 'Memakai hasil pindaian tersimpan &mdash; klik <em>Pindai Ulang</em> untuk memaksa segar.'
+                                         : 'Baru saja dipindai ulang.')).show();
+            } else {
+                $('#slModeNote').html(
+                    'Menampilkan sinyal dari CSV hasil riset, yang <strong>sudah diketahui hasilnya</strong>. '
+                    + 'Karena script-nya harus menunggu 20&ndash;60 hari bursa untuk mengukur hasil, '
+                    + 'sinyal terbaru tidak ada di sini &mdash; pindah ke <em>Sinyal berjalan</em> untuk itu.').show();
+            }
+
+            $('#slBody').show();
+        }).fail(function () {
+            $('#slLoading').hide();
+            $('#slMessage').text('Gagal memuat data Scanner Lab.').show();
+        });
+    }
+
+    $(document).ready(function () {
+        $('#slFilter').on('input', renderSignals);
+        $('#slSort, #slHideRetro').on('change', renderSignals);
+        $('#slScanner').on('change', function () { load(false); });
+
+        $('.sl-mode').on('click', function () {
+            var mode = $(this).data('mode');
+            if (mode === slMode) { return; }
+            slMode = mode;
+            // Daftar scanner beda antar mode (live tidak punya scanner
+            // retrospektif), jadi dropdown-nya dikosongkan supaya diisi ulang.
+            $('#slScanner').empty().append($('<option>').val('').text('Semua scanner'));
+            load(false);
+        });
+
+        $('#slRescan').on('click', function () { load(true); });
+
+        $('#slSignalBody').on('click', '.sl-expand', function () {
+            var i = $(this).data('row');
+            $('tr.sl-reasons[data-reasons="' + i + '"]').toggle();
+        });
+
+        $('#slSignalBody').on('click', '.sl-ticker', function (e) {
+            e.stopPropagation();
+            openChart($(this).data('ticker'), $(this).data('date'), $(this).data('row'));
+        });
+
+        $('#slModalClose').on('click', closeChart);
+        $('#slModal').on('click', function (e) {
+            // Klik di area gelap di luar kotak menutup modal; klik di
+            // dalam kotak tidak (kalau tidak, drag di chart ikut menutup).
+            if (e.target === this) { closeChart(); }
+        });
+        $(document).on('keydown', function (e) {
+            if (e.key === 'Escape' && $('#slModal').hasClass('open')) { closeChart(); }
+        });
+
+        load(false);
+    });
+</script>
+{% endblock %}

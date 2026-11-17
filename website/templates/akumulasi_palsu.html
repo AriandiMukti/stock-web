@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}Akumulasi Palsu{% endblock %}
+{% block page_title %}Akumulasi Palsu{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group btn-group-sm" role="group">
+    <button type="button" class="btn btn-outline-secondary ap-days active" data-days="20">20h</button>
+    <button type="button" class="btn btn-outline-secondary ap-days" data-days="40">40h</button>
+    <button type="button" class="btn btn-outline-secondary ap-days" data-days="60">60h</button>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .ap-finding:last-child { margin-bottom: 0; }
+    .ap-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .ap-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .ap-finding strong { color: var(--text); }
+
+
+    .ap-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .ap-table th.ap-left { text-align: left; }
+    .ap-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .ap-table td.ap-left { text-align: left; font-family: var(--font-ui); }
+    .ap-table tbody tr:hover { background: var(--raised); }
+    .ap-ticker:hover { text-decoration: underline; }
+
+
+    .ap-grid { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .ap-grid th { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+                  color: var(--text-dim); padding: 0 10px 9px; border-bottom: 1px solid var(--line); text-align: center; }
+    .ap-grid th.ap-left { text-align: left; }
+    .ap-grid td { padding: 10px; border-bottom: 1px solid var(--line-soft); text-align: center;
+                  font-family: var(--font-mono); }
+    .ap-grid td.ap-left { text-align: left; font-family: var(--font-ui); color: var(--text-mid); }
+    .ap-cell-win { font-size: 15px; font-weight: 600; }
+    .ap-cell-sub { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+    .ap-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+</style>
+
+<div class="ap-controls">
+    <div class="ap-field">
+        <label>Tampilkan</label>
+        <select id="apFilterCell" class="form-select form-select-sm" style="width:250px;">
+            <option value="fake" selected>Akumulasi palsu (sel terburuk)</option>
+            <option value="best">Setup terbaik (turun + Top5 beli)</option>
+            <option value="all">Semua emiten</option>
+        </select>
+    </div>
+    <div class="ap-field">
+        <label>Cari kode</label>
+        <input type="text" id="apFilter" class="form-control form-control-sm"
+               placeholder="BBRI" style="width:120px; text-transform:uppercase;">
+    </div>
+</div>
+
+<div id="apLoading" class="ap-empty">Menempatkan seluruh emiten ke dalam grid&hellip;</div>
+<div id="apMessage" class="ap-empty" style="display:none;"></div>
+
+<div id="apBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="ap-section-title">Pertanyaan Aslinya, dan Jawaban yang Ternyata Beda</div>
+        <div class="ap-finding">
+            <h4>Hipotesis awal: bandar menyamar lewat banyak broker kecil. Diuji, dan gagal.</h4>
+            <p>Idenya: kalau sebaran broker penjual melebar (kolom <strong>Total Seller</strong>, yang belum pernah
+            dipakai app ini) sementara Top5 tetap net beli, itu distribusi yang menyamar. Diuji pada 6.893
+            pengamatan: yang terlihat akumulasi punya win rate 29,4%; ditambah syarat penjual melebar jadi
+            <strong>27,0%</strong>; pembandingnya tanpa tanda penyamaran <strong>29,8%</strong>. Selisih setipis itu
+            adalah noise &mdash; jumlah broker penjual tidak memisahkan apa pun, jadi tidak dipakai sebagai sinyal.</p>
+        </div>
+        <div class="ap-finding">
+            <h4>Yang memisahkan ternyata posisi harga, bukan jumlah broker.</h4>
+            <p>Dari 12.299 pengamatan: arus Top5 <strong>memang menambah informasi</strong> &mdash; di setiap
+            kelompok harga kecuali &quot;naik banyak&quot;, Top5 beli unggul 2&ndash;4 poin persen win rate atas Top5
+            jual. Tapi begitu harga sudah lari &gt;20%, keunggulan itu <strong>hilang sama sekali</strong> (24,3% vs
+            25,4% &mdash; membeli justru sedikit lebih buruk), dan selnya jadi yang paling buruk di seluruh papan.
+            Itulah &quot;akumulasi palsu&quot; versi yang benar-benar terukur.</p>
+        </div>
+        <div class="ap-finding">
+            <h4>Dan efeknya hanya ada di jangka pendek &mdash; coba ganti window di atas.</h4>
+            <p>Grid dikalibrasi ulang untuk tiap panjang window, dan hasilnya <strong>berubah arah</strong> pada sel
+            &quot;naik banyak&quot;: window <strong>20h</strong> beli 24,5% vs jual 25,4% (membeli tidak membantu);
+            window <strong>40h</strong> 27,7% vs 24,6% (membantu); window <strong>60h</strong> 36,5% vs 27,1%
+            (sangat membantu). Artinya Top5 yang terlihat membeli <em>selama 20 hari terakhir</em> di saham yang
+            sudah lari tidak berarti apa-apa &mdash; tapi akumulasi yang <em>bertahan</em> 40&ndash;60 hari di saham
+            yang sama tetap membawa informasi. Karena itu sel &quot;palsu&quot; dihitung ulang dari grid tiap
+            window, bukan dipatok: <strong>di window 40h dan 60h tidak ada sel yang memenuhi syarat palsu.</strong></p>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Grid Hasil Historis <span id="apGridMeta" class="ap-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="ap-grid">
+                <thead>
+                    <tr><th class="ap-left"><span id="apGridHead">Posisi harga (20 hari)</span></th><th>Top5 net BELI</th><th>Top5 net JUAL</th></tr>
+                </thead>
+                <tbody id="apGridBody"></tbody>
+            </table>
+        </div>
+        <div class="ap-note">
+            Angka besar = win rate, di bawahnya rata-rata &amp; jumlah sampel. Return 40 hari, periode Jan&ndash;Sep
+            2026 yang didominasi pasar turun &mdash; jadi yang berarti adalah <strong>selisih antar sel terhadap
+            baseline</strong>, bukan tanda plus/minusnya. Ini rata-rata KELOMPOK, bukan ramalan untuk satu saham.
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Ringkasan Hari Ini</div>
+        <div class="ap-stat-grid" id="apStats"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="ap-section-title">Daftar Emiten <span id="apCount" class="ap-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="ap-table">
+                <thead id="apThead">
+                    <tr>
+                        <th class="ap-left" data-sort-key="stock">Kode</th>
+                        <th class="ap-left" data-sort-key="cell">Sel</th>
+                        <th class="ap-left" data-sort-key="verdict_label">Penilaian</th>
+                        <th data-sort-key="price_chg_pct"><span id="apHargaHead">Harga 20h %</span></th>
+                        <th data-sort-key="top5_lot">Top5 lot</th>
+                        <th data-sort-key="retail_lot">Ritel lot</th>
+                        <th data-sort-key="cell_win">Win sel %</th>
+                        <th data-sort-key="vs_baseline">vs baseline</th>
+                        <th data-sort-key="adv_value_juta">ADV (jt)</th>
+                    </tr>
+                </thead>
+                <tbody id="apTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var apData = null;
+    var apDays = 20;
+    // Default urut: sel dengan win rate terburuk lebih dulu -- gunanya
+    // menyaring, bukan memilih pemenang.
+    var apSort = { key: 'cell_win', dir: 'asc' };
+
+    function apNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function apSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="ap-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'ap-up' : (v < 0 ? 'ap-down' : 'ap-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + apNum(v, d) + '</span>';
+    }
+
+    var AP_COLOR = { hijau: 'var(--accum)', kuning: 'var(--warn)', merah: 'var(--distrib)', netral: 'var(--text-dim)' };
+    var AP_PRICE_ORDER = ['turun', 'datar', 'naik tipis', 'naik banyak'];
+
+    function apCellColor(win, baseWin) {
+        var diff = win - baseWin;
+        if (diff >= 4) { return 'var(--accum)'; }
+        if (diff >= 1) { return 'var(--warn)'; }
+        if (diff >= -5) { return 'var(--warn)'; }
+        return 'var(--distrib)';
+    }
+
+    function apRenderGrid(d) {
+        var base = d.baseline;
+        $('#apGridMeta').text('— baseline: win ' + base.win + '%, n ' + apNum(base.n)
+            + ', return ' + base.horizon + ' hari');
+        $('#apGridBody').html(AP_PRICE_ORDER.map(function (p) {
+            var cells = ['beli', 'jual'].map(function (f) {
+                var s = d.grid[p + '|' + f];
+                if (!s) { return '<td class="ap-dim">&mdash;</td>'; }
+                var color = apCellColor(s.win, base.win);
+                return '<td><div class="ap-cell-win" style="color:' + color + ';">' + apNum(s.win, 1) + '%</div>'
+                     + '<div class="ap-cell-sub">rata2 ' + apNum(s.mean, 2) + '% &middot; n ' + apNum(s.n) + '</div></td>';
+            }).join('');
+            return '<tr><td class="ap-left">' + p + '</td>' + cells + '</tr>';
+        }).join(''));
+    }
+
+    function apRenderStats(d) {
+        var items = [
+            ['Emiten terukur', apNum(d.total), 'var(--text)'],
+            ['Akumulasi palsu', apNum(d.fake_count), 'var(--distrib)'],
+            ['Setup terbaik', apNum(d.best_count), 'var(--accum)'],
+            ['Jendela', d.days + ' hari', 'var(--text-mid)']
+        ];
+        $('#apStats').html(items.map(function (it) {
+            return '<div><div class="ap-stat-label">' + it[0] + '</div>'
+                 + '<div class="ap-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function apRenderTable() {
+        if (!apData) { return; }
+        var mode = $('#apFilterCell').val();
+        var q = ($('#apFilter').val() || '').trim().toUpperCase();
+
+        var rows = apData.rows.filter(function (r) {
+            if (mode === 'fake' && !r.is_fake) { return false; }
+            if (mode === 'best' && !r.is_best) { return false; }
+            if (q && r.stock.indexOf(q) === -1) { return false; }
+            return true;
+        });
+        rows = window.sortRows(rows, apSort.key, apSort.dir);
+
+        $('#apCount').text('— ' + rows.length + ' baris');
+        if (!rows.length) {
+            var pesan = 'Tidak ada yang cocok.';
+            if (mode === 'fake' && apData.fake_cells && !apData.fake_cells.length) {
+                pesan = 'Di window ' + apData.days + ' hari tidak ada sel "akumulasi palsu" sama sekali — '
+                      + 'Top5 beli tetap mengungguli Top5 jual di semua kelompok harga. '
+                      + 'Efek itu hanya muncul di window 20 hari.';
+            }
+            $('#apTableBody').html('<tr><td colspan="9" class="ap-empty">' + pesan + '</td></tr>');
+            return;
+        }
+
+        $('#apTableBody').html(rows.slice(0, 300).map(function (r) {
+            return '<tr>'
+                 + '<td class="ap-left"><a class="ap-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>'
+                 + '<td class="ap-left ap-dim">' + r.cell + '</td>'
+                 + '<td class="ap-left"><span class="ap-badge" style="color:' + AP_COLOR[r.verdict]
+                 +   '; border:1px solid ' + AP_COLOR[r.verdict] + '55; background:' + AP_COLOR[r.verdict] + '14;">'
+                 +   r.verdict_label + '</span></td>'
+                 + '<td>' + apSigned(r.price_chg_pct, 1) + '</td>'
+                 + '<td>' + apSigned(r.top5_lot, 0) + '</td>'
+                 + '<td>' + apSigned(r.retail_lot, 0) + '</td>'
+                 + '<td>' + apNum(r.cell_win, 1) + '</td>'
+                 + '<td>' + apSigned(r.vs_baseline, 1) + '</td>'
+                 + '<td>' + apNum(r.adv_value_juta, 0) + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function apLoad() {
+        $('#apLoading').show().text('Menempatkan seluruh emiten ke dalam grid…');
+        $('#apBody').hide();
+        $('#apMessage').hide();
+        $.post('/akumulasi-palsu-data', { days: apDays }).done(function (d) {
+            if (!d || d.available === false) {
+                $('#apLoading').hide();
+                $('#apMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            apData = d;
+            $('#apHargaHead').text('Harga ' + d.days + 'h %');
+            $('#apGridHead').text('Posisi harga (' + d.days + ' hari)');
+            apRenderGrid(d);
+            apRenderStats(d);
+            apRenderTable();
+            $('#apLoading').hide();
+            $('#apBody').show();
+        }).fail(function () {
+            $('#apLoading').hide();
+            $('#apMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}), jadi POST yang
+    // dipanggil lebih awal (saat script diparse) berangkat TANPA token dan
+    // ditolak CSRFProtect dengan 400.
+    $(document).ready(function () {
+        $('#apFilterCell').on('change', apRenderTable);
+        $('#apFilter').on('input', apRenderTable);
+
+        $('.ap-days').on('click', function () {
+            $('.ap-days').removeClass('active');
+            $(this).addClass('active');
+            apDays = parseInt($(this).data('days'), 10);
+            apLoad();
+        });
+
+        apSort = window.makeSortable('#apThead', function (key, dir) {
+            apSort.key = key; apSort.dir = dir;
+            apRenderTable();
+        }, apSort.key, apSort.dir);
+
+        apLoad();
+    });
+</script>
+{% endblock %}

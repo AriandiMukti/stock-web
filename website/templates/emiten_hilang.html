@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Emiten Hilang{% endblock %}
+{% block page_title %}Emiten Hilang{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="ehRefresh">Hitung Ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .eh-finding { background: var(--void); border: 1px solid var(--line); border-radius: 10px;
+                  padding: 14px 16px; margin-bottom: 12px; }
+    .eh-finding:last-child { margin-bottom: 0; }
+    .eh-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .eh-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .eh-finding strong { color: var(--text); }
+
+    .eh-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .eh-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .eh-table th.eh-left { text-align: left; }
+    .eh-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .eh-table td.eh-left { text-align: left; font-family: var(--font-ui); }
+    .eh-table tbody tr:hover { background: var(--raised); }
+    .eh-ticker:hover { text-decoration: underline; }
+
+    .eh-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 9.5px;
+                font-family: var(--font-ui); font-weight: 600; white-space: nowrap; }
+    .eh-zona { color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08); }
+    .eh-lama { color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08); }
+
+    .eh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px; }
+    .eh-label { font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-dim); }
+    .eh-val { font-family: var(--font-mono); font-size: 19px; font-weight: 700; margin-top: 3px; }
+    .eh-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+    .eh-rugi { color: var(--distrib); }
+    .eh-besar { font-family: var(--font-mono); font-size: 30px; font-weight: 700; color: var(--distrib); line-height: 1.05; }
+
+    .eh-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.7; margin-top: 12px; }
+    .eh-empty { padding: 30px; text-align: center; color: var(--text-dim); font-size: 12px; }
+</style>
+
+<div id="ehLoading" class="eh-empty">Memeriksa seluruh emiten&hellip;</div>
+<div id="ehMessage" class="eh-empty" style="display:none;"></div>
+
+<div id="ehBody" style="display:none;">
+
+    <div class="content-card" style="border-left:3px solid var(--distrib);">
+        <div class="hb-section-title" style="color:var(--distrib);">Temuan Utama</div>
+        <div class="eh-finding">
+            <h4>Yang hilang menumpuk persis di tempat Jatuh Dalam bekerja.</h4>
+            <p id="eh-inti"></p>
+        </div>
+        <div class="eh-grid" style="margin-top:14px;">
+            <div>
+                <div class="eh-label">Di zona jatuh &gt;40%</div>
+                <div class="eh-besar" id="ehZonaPorsi"></div>
+                <div class="eh-sub" id="ehZonaSub"></div>
+            </div>
+            <div>
+                <div class="eh-label">Seluruh bursa</div>
+                <div class="eh-besar" style="color:var(--text-mid);" id="ehSemuaPorsi"></div>
+                <div class="eh-sub" id="ehSemuaSub"></div>
+            </div>
+            <div>
+                <div class="eh-label">Kelipatan</div>
+                <div class="eh-besar" id="ehKelipatan"></div>
+                <div class="eh-sub">berapa kali lebih sering menghilang</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Kenapa Ini Merusak Backtest</div>
+        <div class="eh-finding">
+            <h4>Emiten yang jatuh 40% lalu terus jatuh sampai disuspend tidak pernah masuk hitungan.</h4>
+            <p>Setiap angka &quot;luar sampel&quot; di app ini dihitung dari emiten yang <strong>masih ada</strong>.
+            Folder Test berisi 21 emiten besar yang semuanya masih diperdagangkan hari ini. Untuk sebagian
+            besar temuan itu bias kecil; untuk Jatuh Dalam, itu bias yang bisa membalik kesimpulannya.</p>
+        </div>
+        <div class="eh-finding">
+            <h4>Selisih yang bentuknya cocok dengan dugaan itu sudah terlihat.</h4>
+            <p>Setup yang sama, return majemuk 20 hari: <strong>+13,2%</strong> di 21 emiten penyintas
+            (2016&ndash;2025), tapi <strong>&minus;2,5%</strong> di 788 emiten semesta penuh (2026).
+            Lima belas poin. Rezimnya juga beda, jadi ini bukan bukti &mdash; tapi bentuknya persis
+            seperti yang diharapkan kalau survivorship yang mengangkatnya.</p>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Ringkasan</div>
+        <div class="eh-grid" id="ehStats"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Siapa Saja yang Hilang</div>
+        <div style="overflow-x:auto;">
+            <table class="eh-table">
+                <thead id="ehThead"><tr>
+                    <th class="eh-left" data-sort="stock">Kode</th>
+                    <th data-sort="tertinggal">Tertinggal</th>
+                    <th class="eh-left" data-sort="tanggal_akhir">Bar terakhir</th>
+                    <th data-sort="close">Harga terakhir</th>
+                    <th data-sort="dari_puncak">Dari puncak 60h</th>
+                    <th data-sort="chg20">Gerak 20h terakhir</th>
+                    <th data-sort="volat">Ayunan/hari</th>
+                    <th class="eh-left">Keadaan saat hilang</th>
+                </tr></thead>
+                <tbody id="ehTbody"></tbody>
+            </table>
+        </div>
+        <div class="eh-note" id="ehCatatan"></div>
+    </div>
+</div>
+
+<script>
+    var ehData = null;
+    var ehSort = { key: 'tertinggal', dir: 'desc' };
+
+    function ehNum(v, d) { return (v === null || v === undefined) ? '&mdash;' : Number(v).toFixed(d === undefined ? 1 : d); }
+
+    function ehRender(d) {
+        var z = d.zona || {};
+        $('#ehZonaPorsi').text(ehNum(z.porsi) + '%');
+        $('#ehZonaSub').html(z.hilang + ' dari ' + z.n + ' emiten');
+        $('#ehSemuaPorsi').text(ehNum(d.porsi_hilang) + '%');
+        $('#ehSemuaSub').html(d.jumlah_hilang + ' dari ' + d.total_emiten + ' emiten');
+        $('#ehKelipatan').text(z.kelipatan === null ? '—' : z.kelipatan + 'x');
+
+        $('#eh-inti').html(
+            'Dari <strong>' + z.n + '</strong> emiten yang sedang berada di zona jatuh &gt;40% dari puncak 60 harinya, ' +
+            '<strong>' + z.hilang + '</strong> (' + ehNum(z.porsi) + '%) berhenti mengirim data. ' +
+            'Di seluruh bursa angkanya cuma ' + ehNum(d.porsi_hilang) + '%. ' +
+            'Emiten di zona jatuh dalam <strong>' + z.kelipatan + ' kali</strong> lebih sering menghilang ' +
+            'daripada emiten biasa &mdash; dan yang tersisa untuk dihitung cuma penyintasnya.');
+
+        $('#ehStats').html([
+            ['Hari bursa terakhir', d.terakhir_bursa, ''],
+            ['Total emiten', d.total_emiten, 'punya berkas Summary'],
+            ['Berhenti kirim data', d.jumlah_hilang, '&ge; 5 hari bursa tertinggal'],
+            ['Hilang lama', d.jumlah_hilang_lama, '&ge; 20 hari, kemungkinan suspensi'],
+            ['Di zona jatuh dalam', (d.zona || {}).hilang, 'dari ' + (d.zona || {}).n + ' yang ada di zona']
+        ].map(function (s) {
+            return '<div><div class="eh-label">' + s[0] + '</div>' +
+                   '<div class="eh-val">' + s[1] + '</div>' +
+                   '<div class="eh-sub">' + s[2] + '</div></div>';
+        }).join(''));
+
+        $('#ehCatatan').text(d.catatan || '');
+        ehRenderTable();
+    }
+
+    function ehRenderTable() {
+        if (!ehData) { return; }
+        var rows = (ehData.hilang || []).slice();
+        var k = ehSort.key, dir = ehSort.dir === 'asc' ? 1 : -1;
+        rows.sort(function (a, b) {
+            var x = a[k], y = b[k];
+            if (typeof x === 'string') { return String(x).localeCompare(String(y)) * dir; }
+            return ((x === null ? -1e9 : x) - (y === null ? -1e9 : y)) * dir;
+        });
+        $('#ehTbody').html(rows.map(function (r) {
+            var tag = '';
+            if (r.di_zona_dalam) { tag += '<span class="eh-badge eh-zona">jatuh dalam</span> '; }
+            if (r.lama) { tag += '<span class="eh-badge eh-lama">hilang lama</span>'; }
+            if (!tag) { tag = '<span class="eh-sub">&mdash;</span>'; }
+            return '<tr>' +
+                '<td class="eh-left"><a class="eh-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>' +
+                '<td>' + r.tertinggal + ' hari</td>' +
+                '<td class="eh-left">' + r.tanggal_akhir + '</td>' +
+                '<td>' + (r.close === null ? '&mdash;' : Number(r.close).toLocaleString('id-ID')) + '</td>' +
+                '<td class="' + (r.dari_puncak !== null && r.dari_puncak <= -40 ? 'eh-rugi' : '') + '">' + ehNum(r.dari_puncak) + '%</td>' +
+                '<td class="' + (r.chg20 !== null && r.chg20 < 0 ? 'eh-rugi' : '') + '">' + ehNum(r.chg20) + '%</td>' +
+                '<td>' + ehNum(r.volat, 2) + '%</td>' +
+                '<td class="eh-left">' + tag + '</td>' +
+                '</tr>';
+        }).join(''));
+    }
+
+    function ehLoad(force) {
+        $('#ehBody').hide(); $('#ehMessage').hide(); $('#ehLoading').show();
+        $.post('/emiten-hilang-data', { force: force ? '1' : '0' }).done(function (d) {
+            if (!d || !d.available) {
+                $('#ehLoading').hide();
+                $('#ehMessage').show().text((d && d.message) || 'Data tidak tersedia.');
+                return;
+            }
+            ehData = d; ehRender(d);
+            $('#ehLoading').hide(); $('#ehBody').show();
+        }).fail(function () {
+            $('#ehLoading').hide();
+            $('#ehMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}).
+    $(document).ready(function () {
+        $('#ehRefresh').on('click', function () { ehLoad(true); });
+        ehSort = window.makeSortable('#ehThead', function (key, dir) {
+            ehSort.key = key; ehSort.dir = dir; ehRenderTable();
+        }, ehSort.key, ehSort.dir);
+        ehLoad(false);
+    });
+</script>
+{% endblock %}

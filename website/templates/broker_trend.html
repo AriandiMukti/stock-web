@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Broker Trend{% endblock %}
+{% block page_title %}Broker Trend{% endblock %}
+
+{% block content %}
+
+<style>
+    .bt-controls { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 18px; flex-wrap: wrap; }
+    .bt-field { display: flex; flex-direction: column; gap: 3px; }
+    .bt-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .bt-note { color: var(--text-dim); font-size: 12px; margin-top: 10px; }
+</style>
+
+<div class="bt-controls">
+    <div class="bt-field">
+        <label>Stock</label>
+        <input type="text" id="btStock" class="form-control form-control-sm" placeholder="BBCA" maxlength="6" style="width:100px;">
+    </div>
+    <div class="bt-field">
+        <label>Broker Code</label>
+        <input type="text" id="btBroker" class="form-control form-control-sm" placeholder="BK" maxlength="4" style="width:80px;">
+    </div>
+    <div class="bt-field">
+        <label>Type</label>
+        <select id="btStockType" class="form-select form-select-sm">
+            <option value="All">All</option>
+            <option value="Foreign">Foreign</option>
+        </select>
+    </div>
+    <div class="bt-field">
+        <label>Date range</label>
+        <input type="text" id="btRangeDate" class="form-control form-control-sm" value="{{ rangeDate }}">
+    </div>
+    <button type="button" class="btn btn-sm btn-primary" id="btScanBtn">Scan</button>
+</div>
+
+<div class="content-card" id="btResults" style="display:none;">
+    <div id="btChart" style="height:460px;"></div>
+    <div class="bt-note">Net Lot kumulatif = akumulasi Buy Lot - Sell Lot broker ini di saham ini, hari per hari.</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script>
+    function scan() {
+        var stock = $('#btStock').val().trim().toUpperCase();
+        var brokerCode = $('#btBroker').val().trim().toUpperCase();
+        if (!stock || !brokerCode) { alert('Isi kode saham dan kode broker dulu.'); return; }
+
+        $.post('/broker-trend-data', {
+            stock: stock,
+            brokerCode: brokerCode,
+            stockType: $('#btStockType').val(),
+            rangeDate: $('#btRangeDate').val()
+        }).done(function (data) {
+            var series = data.series || [];
+            if (!series.length) {
+                alert('Gak ada data buat kombinasi itu di rentang tanggal ini.');
+                return;
+            }
+
+            var cumulative = 0;
+            var dates = [], netLot = [], cumulativeNet = [];
+            series.forEach(function (row) {
+                cumulative += row.netLot;
+                dates.push(row.date);
+                netLot.push(row.netLot);
+                cumulativeNet.push(cumulative);
+            });
+
+            var barColors = netLot.map(function (v) { return v < 0 ? '#16E0AE' : '#FF6076'; });
+
+            var traces = [
+                {
+                    type: 'bar', x: dates, y: netLot, name: 'Daily Net Lot',
+                    marker: { color: barColors, opacity: 0.6 }, yaxis: 'y'
+                },
+                {
+                    type: 'scatter', mode: 'lines', x: dates, y: cumulativeNet, name: 'Cumulative Net Lot',
+                    line: { color: '#16E0AE', width: 2, shape: 'spline', smoothing: 0.5 }, yaxis: 'y2'
+                }
+            ];
+            var layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#93A2B6', family: 'JetBrains Mono' },
+                title: { text: brokerCode + ' di ' + stock, font: { color: '#F4F7FB', size: 13, family: "'Plus Jakarta Sans', sans-serif" }, x: 0.01, xanchor: 'left' },
+                margin: { t: 40, l: 50, r: 50, b: 40 },
+                showlegend: true, legend: { orientation: 'h', y: -0.15 },
+                xaxis: { gridcolor: 'rgba(255,255,255,0.045)', tickfont: { size: 9 } },
+                yaxis: { title: 'Daily Net Lot', gridcolor: 'rgba(255,255,255,0.045)', tickfont: { size: 10 }, zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+                yaxis2: { title: 'Cumulative', overlaying: 'y', side: 'right', showgrid: false, tickfont: { size: 10 } }
+            };
+
+            $('#btResults').show();
+            Plotly.newPlot('btChart', traces, layout, { responsive: true, displaylogo: false });
+        }).fail(function () {
+            alert('Gagal scan data.');
+        });
+    }
+
+    $(document).ready(function () {
+        $('#btScanBtn').on('click', scan);
+        $('#btRangeDate').daterangepicker({
+            opens: 'left',
+            startDate: moment($('#btRangeDate').val().split('-')[0].trim(), 'MM/DD/YYYY'),
+            endDate: moment($('#btRangeDate').val().split('-')[1].trim(), 'MM/DD/YYYY'),
+            locale: { format: 'MM/DD/YYYY' }
+        });
+    });
+</script>
+{% endblock %}

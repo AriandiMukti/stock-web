@@ -1,0 +1,44 @@
+<section class="content-card" id="hbCandleResearch" style="margin-bottom:16px" aria-labelledby="hbCandleTitle">
+    <h2 class="hb-section-title" id="hbCandleTitle">Riset Pola Candle · BRPT</h2>
+    <div class="hb-sub">Arsip {{ tanggal_riset }} · Backtest v1</div>
+    <p class="hb-note">
+        Pada sesi ini BRPT menutup di low Rp850 setelah empat penutupan yang makin rendah.
+        Keenam pola bullish yang diuji belum aktif. Area pemulihan terdekat ada di Rp875–910,
+        lalu Rp975–1.015. <a href="#hbChart">Lihat chart saham</a>.
+    </p>
+    <div class="hb-stats" style="margin:12px 0">
+        <div><div class="hb-stat-label">Penutupan arsip</div><div class="hb-stat-val">Rp{{ candle_research.snapshot.close|int }}</div></div>
+        <div><div class="hb-stat-label">MA20</div><div class="hb-stat-val">{{ '%.1f'|format(candle_research.snapshot.ma20) }}</div></div>
+        <div><div class="hb-stat-label">RSI14</div><div class="hb-stat-val">{{ '%.1f'|format(candle_research.snapshot.rsi14) }}</div></div>
+        <div><div class="hb-stat-label">Volume vs 20 sesi</div><div class="hb-stat-val">{{ '%.2f'|format(candle_research.snapshot.volratio) }}×</div></div>
+    </div>
+    <p class="hb-note">Untuk batas pegang 10 sesi, breakout 20 sesi mencatat +210,33% dari 12 transaksi pada 2025–2026 dan +1,49% dari 11 transaksi pada 2023–2024.</p>
+    <div class="hb-links" style="align-items:end;margin:12px 0">
+        <label>Periode<select id="hbCandlePeriod" class="form-control form-control-sm"><option>2025-2026</option><option>2023-2024</option><option>2019-2022</option></select></label>
+        <label>Batas pegang<select id="hbCandleHold" class="form-control form-control-sm"><option value="5">5 sesi</option><option value="10" selected>10 sesi</option><option value="20">20 sesi</option></select></label>
+        <label>Filter sinyal<select id="hbCandleFilter" class="form-control form-control-sm"><option value="">Pola dasar</option><option value="_volume">Volume ≥ 1,5×</option><option value="_trend">Di atas MA50 yang naik</option></select></label>
+    </div>
+    <div style="overflow:auto">
+        <table class="hb-pattern-table" style="white-space:nowrap">
+            <thead><tr><th scope="col" class="hb-left">Pola</th><th scope="col">Trade</th><th scope="col">Win rate</th><th scope="col">Net / trade</th><th scope="col">Return net</th><th scope="col">Drawdown</th></tr></thead>
+            <tbody id="hbCandleResults"></tbody>
+        </table>
+    </div>
+    <p class="hb-note" id="hbCandleBenchmark"></p>
+    <div id="hbCandleAudit" hidden>
+        <h3 class="hb-section-title" id="hbCandleAuditTitle"></h3>
+        <div style="overflow:auto">
+            <table class="hb-pattern-table" style="white-space:nowrap">
+                <thead><tr><th scope="col" class="hb-left">Sinyal</th><th scope="col">Masuk</th><th scope="col">Harga masuk</th><th scope="col">Keluar</th><th scope="col">Harga keluar</th><th scope="col">Stop</th><th scope="col">Target</th><th scope="col">Alasan</th><th scope="col">Return net</th></tr></thead>
+                <tbody id="hbCandleTrades"></tbody>
+            </table>
+        </div>
+    </div>
+    <details class="hb-note">
+        <summary>Aturan dan sumber pengujian</summary>
+        <p>Masuk pada pembukaan sesi setelah sinyal. Stop di bawah low acuan, target 2× jarak risiko, dan keluar sesuai batas pegang. Fee beli 0,15%, jual 0,25%, dan slippage 0,1% per sisi. Modal penuh per posisi tanpa leverage. Dividen, lot, dan antrean transaksi belum dimodelkan.</p>
+        <p>Hasil memakai 1.894 sesi data historis Yahoo Finance dari 2 Januari 2019 sampai 6 November 2026. Periode diuji terpisah. Harga arsip dicocokkan dengan <a href="https://barito.listedcompany.com/historical_price.html">riwayat harga emiten</a>.</p>
+    </details>
+    <script type="application/json" id="hbCandleData">{{ candle_research|tojson }}</script>
+    <script defer src="{{ url_for('static', filename='js/stock_candle_research.js') }}"></script>
+</section>

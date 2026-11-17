@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+{% block title %}Portfolio P&L{% endblock %}
+{% block page_title %}Portfolio P&L{% endblock %}
+
+{% block content %}
+
+<style>
+    .pnl-form-row { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; align-items: flex-end; }
+    .pnl-field { display: flex; flex-direction: column; gap: 3px; }
+    .pnl-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .pnl-field input { width: 130px; }
+
+    .pnl-summary { display: flex; gap: 24px; margin-bottom: 18px; flex-wrap: wrap; }
+    .pnl-summary-item { }
+    .pnl-summary-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+    .pnl-summary-value { font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
+    .pnl-summary-value.up { color: var(--accum); }
+    .pnl-summary-value.down { color: var(--distrib); }
+
+    .pnl-table { width: 100%; }
+    .pnl-table th {
+        font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+        letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim);
+        text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    }
+    .pnl-table td {
+        font-family: var(--font-mono); font-size: 12.5px;
+        padding: 9px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text);
+    }
+    .pnl-table td.up { color: var(--accum); }
+    .pnl-table td.down { color: var(--distrib); }
+    .pnl-table td.na { color: var(--text-dim); }
+    .pnl-close-btn, .pnl-delete-btn, .pnl-edit-btn, .pnl-closed-edit-btn, .pnl-save-btn, .pnl-cancel-btn {
+        background: none; border: 1px solid var(--line-soft); border-radius: 7px;
+        padding: 3px 8px; cursor: pointer; color: var(--text-dim); font-size: 12px;
+    }
+    .pnl-delete-btn:hover { border-color: var(--distrib); color: var(--distrib); }
+    .pnl-edit-btn:hover, .pnl-closed-edit-btn:hover { border-color: var(--accum-dim); color: var(--accum); }
+    .pnl-close-btn { border-color: var(--accum-dim); color: var(--accum); margin-right: 4px; }
+    .pnl-close-btn:hover { background: var(--accum-glow); }
+    .pnl-save-btn { border-color: var(--accum); color: var(--accum); margin-right: 4px; }
+    .pnl-save-btn:hover { background: var(--accum-glow); }
+    /* Batal sekarang ditaruh di DEPAN input (lihat pnl-close-btn click
+       handler) -- butuh jarak sendiri di sini, dulu selalu di ujung
+       kanan jadi cukup mengandalkan margin pnl-save-btn di sisi kirinya. */
+    .pnl-cancel-btn { margin-right: 6px; }
+    .cell-actions { white-space: nowrap; }
+    .pnl-row input {
+        width: 90px; background: rgba(255,255,255,0.035); border: 1px solid var(--line);
+        border-radius: 6px; padding: 3px 6px; color: var(--text); font-family: var(--font-mono); font-size: 12px;
+    }
+    .pnl-row input[type="date"] { width: 130px; }
+    .pnl-row input[name="editStock"] { width: 70px; }
+    .pnl-empty { color: var(--text-dim); font-size: 13px; padding: 18px 4px; }
+
+    /* Sama persis dengan Scanner Lab/Kering Screener/Halaman Saham --
+       hijau = arus masih akumulasi, kuning = arah tidak jelas,
+       merah = arus sudah berbalik. Warnanya harus berarti sama di
+       semua halaman. */
+    .pnl-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 9.5px;
+                font-family: var(--font-ui); font-weight: 600; white-space: nowrap; }
+    .pnl-badge-flow-hijau { color: var(--accum); border: 1px solid rgba(22,224,174,0.35); background: rgba(22,224,174,0.08); }
+    .pnl-badge-flow-kuning { color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08); }
+    .pnl-badge-flow-merah { color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08); }
+    .pnl-row.pnl-expand { cursor: pointer; }
+    .pnl-flow-detail { display: none; }
+    .pnl-flow-detail td { background: var(--void); font-family: var(--font-ui); white-space: normal;
+                          padding: 10px 14px 12px; }
+    .pnl-flow-row { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px;
+                   line-height: 1.7; padding: 3px 0; flex-wrap: wrap; }
+    .pnl-flow-h { font-family: var(--font-mono); color: var(--text-dim); flex: 0 0 42px; }
+    .pnl-flat { color: var(--text-dim); }
+
+    .pnl-cash-edit-btn { background: none; border: 1px solid var(--line-soft); border-radius: 7px;
+        padding: 2px 7px; cursor: pointer; color: var(--text-dim); font-size: 11px; margin-left: 8px;
+        vertical-align: middle; }
+    .pnl-cash-edit-btn:hover { border-color: var(--accum-dim); color: var(--accum); }
+    .pnl-cash-input { width: 140px; background: rgba(255,255,255,0.035); border: 1px solid var(--line);
+        border-radius: 6px; padding: 3px 6px; color: var(--text); font-family: var(--font-mono); font-size: 16px; }
+    .pnl-cash-save-btn, .pnl-cash-cancel-btn { background: none; border: 1px solid var(--line-soft); border-radius: 7px;
+        padding: 3px 8px; cursor: pointer; color: var(--text-dim); font-size: 12px; margin-left: 6px; }
+    .pnl-cash-save-btn { border-color: var(--accum); color: var(--accum); }
+</style>
+
+<div class="content-card" style="margin-bottom: 18px;">
+    <form id="pnlAddForm" class="pnl-form-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="pnl-field">
+            <label>Stock</label>
+            <input type="text" name="stock" class="form-control form-control-sm" placeholder="BBCA" maxlength="6" required>
+        </div>
+        <div class="pnl-field">
+            <label>Buy Price</label>
+            <input type="number" name="buyPrice" class="form-control form-control-sm" step="any" min="0" required>
+        </div>
+        <div class="pnl-field">
+            <label>Lots</label>
+            <input type="number" name="lots" class="form-control form-control-sm" step="any" min="0" required>
+        </div>
+        <div class="pnl-field">
+            <label>Buy Date</label>
+            <input type="date" name="buyDate" class="form-control form-control-sm">
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Add Position</button>
+    </form>
+</div>
+
+<div class="pnl-summary">
+    <div class="pnl-summary-item">
+        <div class="pnl-summary-label">Total Invested</div>
+        <div class="pnl-summary-value">{{ '{:,.0f}'.format(totalInvested) }}</div>
+    </div>
+    <div class="pnl-summary-item">
+        <div class="pnl-summary-label">Current Value</div>
+        <div class="pnl-summary-value">{{ '{:,.0f}'.format(totalCurrent) }}</div>
+    </div>
+    <div class="pnl-summary-item">
+        <div class="pnl-summary-label">Total P&amp;L</div>
+        <div class="pnl-summary-value {{ 'up' if totalPnl >= 0 else 'down' }}">{{ '+' if totalPnl >= 0 else '' }}{{ '{:,.0f}'.format(totalPnl) }}</div>
+    </div>
+    <div class="pnl-summary-item" id="pnlCashItem" data-amount="{{ cashAmount }}">
+        <div class="pnl-summary-label">Cash</div>
+        <div class="pnl-summary-value {{ 'down' if cashAmount < 0 else '' }}" id="pnlCashValue">{{ '{:,.0f}'.format(cashAmount) }}<button type="button" class="pnl-cash-edit-btn" id="pnlCashEditBtn">Edit</button></div>
+    </div>
+    <div class="pnl-summary-item">
+        <div class="pnl-summary-label">Total Portfolio</div>
+        <div class="pnl-summary-value" id="pnlPortfolioValue">{{ '{:,.0f}'.format(totalPortfolio) }}</div>
+    </div>
+</div>
+
+<div class="content-card">
+    {% if rows %}
+    <div class="table-responsive">
+        <table class="pnl-table">
+            <thead>
+                <tr>
+                    <th>Stock</th>
+                    <th>Buy Date</th>
+                    <th>Buy Price</th>
+                    <th>Lots</th>
+                    <th>Last Close</th>
+                    <th>Invested</th>
+                    <th>Current Value</th>
+                    <th>P&amp;L</th>
+                    <th>P&amp;L %</th>
+                    <th>Kesehatan Arus Sejak Beli</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set FLOW_COLOR = {'akumulasi': 'hijau', 'netral': 'kuning', 'distribusi': 'merah'} %}
+                {% for r in rows %}
+                <tr class="pnl-row {{ 'pnl-expand' if r.flowCheckpoints else '' }}" data-id="{{ r.id }}" data-stock="{{ r.stock }}" data-buyprice="{{ r.buyPrice }}" data-lots="{{ r.lots }}" data-buydate="{{ r.buyDate.strftime('%Y-%m-%d') if r.buyDate else '' }}" data-row="{{ loop.index0 }}">
+                    <td class="cell-stock"><a href="/compare?stock={{ r.stock }}" style="color:var(--accum); text-decoration:none; font-weight:600;">{{ r.stock }}</a></td>
+                    <td class="cell-buydate">{{ r.buyDate.strftime('%d %b %Y') if r.buyDate else '' }}</td>
+                    <td class="cell-buyprice">{{ r.buyPrice }}</td>
+                    <td class="cell-lots">{{ r.lots }}</td>
+                    <td>{{ r.lastClose if r.lastClose is not none else '—' }}</td>
+                    <td>{{ '{:,.0f}'.format(r.invested) }}</td>
+                    <td>{{ '{:,.0f}'.format(r.current) if r.current is not none else '—' }}</td>
+                    <td class="{{ 'up' if r.pnlValue is not none and r.pnlValue >= 0 else ('down' if r.pnlValue is not none else 'na') }}">
+                        {% if r.pnlValue is not none %}{{ '+' if r.pnlValue >= 0 else '' }}{{ '{:,.0f}'.format(r.pnlValue) }}{% else %}—{% endif %}
+                    </td>
+                    <td class="{{ 'up' if r.pnlPct is not none and r.pnlPct >= 0 else ('down' if r.pnlPct is not none else 'na') }}">
+                        {% if r.pnlPct is not none %}{{ '+' if r.pnlPct >= 0 else '' }}{{ r.pnlPct }}%{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if r.bestFlow %}
+                        <span class="pnl-badge pnl-badge-flow-{{ FLOW_COLOR.get(r.bestFlow.arah_arus, 'kuning') }}">H+{{ r.bestFlow.horizon }} {{ r.bestFlow.label }}</span>
+                        {% elif r.flowCheckpoints %}
+                        <span class="pnl-flat">belum ada checkpoint</span>
+                        {% else %}
+                        <span class="pnl-flat">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="cell-actions">
+                        <button type="button" class="pnl-close-btn" data-id="{{ r.id }}">Tutup</button>
+                        <button type="button" class="pnl-edit-btn" data-id="{{ r.id }}">Edit</button>
+                        <button type="button" class="pnl-delete-btn" data-id="{{ r.id }}">Hapus</button>
+                    </td>
+                </tr>
+                {% if r.flowCheckpoints %}
+                <tr class="pnl-flow-detail" data-detail="{{ loop.index0 }}">
+                    <td colspan="11">
+                        {% for c in r.flowCheckpoints %}
+                            {% if c.available %}
+                            <div class="pnl-flow-row">
+                                <span class="pnl-flow-h">H+{{ c.horizon }}</span>
+                                <span class="pnl-badge pnl-badge-flow-{{ FLOW_COLOR.get(c.arah_arus, 'kuning') }}">{{ c.label }}</span>
+                                <span>harga {{ '+' if c.price_pct >= 0 else '' }}{{ c.price_pct }}%
+                                    &middot; skor arus {{ '+' if c.skor_post >= 0 else '' }}{{ c.skor_post }}
+                                    {% if c.low_sample %}<span class="pnl-flat">(sampel kecil)</span>{% endif %}
+                                    &mdash; {{ c.penjelasan }}</span>
+                            </div>
+                            {% else %}
+                            <div class="pnl-flow-row"><span class="pnl-flow-h">H+{{ c.horizon }}</span><span class="pnl-flat">{{ c.message }}</span></div>
+                            {% endif %}
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="pnl-empty">Belum ada posisi terbuka. Tambahkan saham yang beneran kamu beli di atas.</div>
+    {% endif %}
+</div>
+
+<div class="content-card">
+    <div class="pnl-section-title">Posisi Tertutup{% if closedRows %} <span class="pnl-flat">&mdash; {{ closedRows|length }} posisi, {{ realMenang }} untung</span>{% endif %}</div>
+
+    {% if closedRows %}
+    <div class="pnl-summary" style="margin-bottom:14px;">
+        <div class="pnl-summary-item">
+            <div class="pnl-summary-label">Modal Terpakai</div>
+            <div class="pnl-summary-value">{{ '{:,.0f}'.format(realInvested) }}</div>
+        </div>
+        <div class="pnl-summary-item">
+            <div class="pnl-summary-label">Hasil Penjualan</div>
+            <div class="pnl-summary-value">{{ '{:,.0f}'.format(realProceeds) }}</div>
+        </div>
+        <div class="pnl-summary-item">
+            <div class="pnl-summary-label">P&amp;L Terealisasi</div>
+            <div class="pnl-summary-value {{ 'up' if realPnl >= 0 else 'down' }}">{{ '+' if realPnl >= 0 else '' }}{{ '{:,.0f}'.format(realPnl) }}</div>
+        </div>
+        <div class="pnl-summary-item">
+            <div class="pnl-summary-label">Win Rate</div>
+            <div class="pnl-summary-value">{{ (realMenang / closedRows|length * 100)|round(0)|int }}%</div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="pnl-table">
+            <thead>
+                <tr>
+                    <th>Stock</th>
+                    <th>Beli</th>
+                    <th>Harga Beli</th>
+                    <th>Jual</th>
+                    <th>Harga Jual</th>
+                    <th>Lots</th>
+                    <th>Hari</th>
+                    <th>Modal</th>
+                    <th>Hasil</th>
+                    <th>P&amp;L</th>
+                    <th>P&amp;L %</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in closedRows %}
+                <tr class="pnl-closed-row" data-id="{{ r.id }}" data-stock="{{ r.stock }}"
+                    data-buyprice="{{ r.buyPrice }}" data-lots="{{ r.lots }}"
+                    data-buydate="{{ r.buyDate.strftime('%Y-%m-%d') if r.buyDate else '' }}"
+                    data-sellprice="{{ r.sellPrice }}"
+                    data-selldate="{{ r.sellDate.strftime('%Y-%m-%d') if r.sellDate else '' }}">
+                    <td class="ccell-stock"><a href="/saham/{{ r.stock }}" style="color:var(--accum); text-decoration:none; font-weight:600;">{{ r.stock }}</a></td>
+                    <td class="ccell-buydate">{{ r.buyDate.strftime('%d %b %Y') if r.buyDate else '—' }}</td>
+                    <td class="ccell-buyprice">{{ r.buyPrice }}</td>
+                    <td class="ccell-selldate">{{ r.sellDate.strftime('%d %b %Y') if r.sellDate else '—' }}</td>
+                    <td class="ccell-sellprice">{{ r.sellPrice }}</td>
+                    <td class="ccell-lots">{{ r.lots }}</td>
+                    <td>{{ r.holdDays if r.holdDays is not none else '—' }}</td>
+                    <td>{{ '{:,.0f}'.format(r.invested) }}</td>
+                    <td>{{ '{:,.0f}'.format(r.proceeds) }}</td>
+                    <td class="{{ 'up' if r.pnlValue >= 0 else 'down' }}">{{ '+' if r.pnlValue >= 0 else '' }}{{ '{:,.0f}'.format(r.pnlValue) }}</td>
+                    <td class="{{ 'up' if r.pnlPct >= 0 else 'down' }}">{{ '+' if r.pnlPct >= 0 else '' }}{{ r.pnlPct }}%</td>
+                    <td class="ccell-actions"><button type="button" class="pnl-closed-edit-btn" data-id="{{ r.id }}">Edit</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="pnl-empty">Belum ada posisi yang ditutup. Pakai tombol <strong>Tutup</strong> (bukan Hapus)
+    waktu menjual &mdash; barisnya tetap tersimpan, dan itu satu-satunya catatan hasil beneran yang
+    tidak bisa dibikin ulang dari data pasar.</div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Edit cash langsung di ringkasan, sama pola dengan edit posisi di
+    // bawah -- ganti value jadi input, Simpan lewat AJAX, reload supaya
+    // Total Portfolio ikut kehitung ulang dari server.
+    $('#pnlCashEditBtn').on('click', function () {
+        var $item = $('#pnlCashItem');
+        var amount = $item.data('amount');
+        $('#pnlCashValue').html(
+            '<input type="number" class="pnl-cash-input" id="pnlCashInput" value="' + amount + '" step="any" min="0">' +
+            '<button type="button" class="pnl-cash-save-btn" id="pnlCashSaveBtn">Simpan</button>' +
+            '<button type="button" class="pnl-cash-cancel-btn" id="pnlCashCancelBtn">Batal</button>'
+        );
+        $('#pnlCashInput').trigger('focus').trigger('select');
+
+        $('#pnlCashCancelBtn').on('click', function () { window.location.reload(); });
+        $('#pnlCashSaveBtn').on('click', function () {
+            $.post('/pnl/cash', {
+                amount: $('#pnlCashInput').val(),
+                csrf_token: $('meta[name="csrf-token"]').attr('content')
+            }).done(function (data) {
+                if (data.rsp === 'success') { window.location.reload(); }
+                else { alert(data.message || 'Gagal menyimpan cash'); }
+            }).fail(function () { alert('Request failed'); });
+        });
+    });
+
+    $('#pnlAddForm').on('submit', function (e) {
+        e.preventDefault();
+        $.post('/pnl/add', $(this).serialize())
+            .done(function (data) {
+                if (data.rsp === 'success') { window.location.reload(); }
+                else { alert(data.message || 'Gagal menambahkan posisi'); }
+            })
+            .fail(function () { alert('Request failed'); });
+    });
+
+    $('.pnl-expand').on('click', function () {
+        $('.pnl-flow-detail[data-detail="' + $(this).data('row') + '"]').toggle();
+    });
+
+    // Menutup posisi memakai form di dalam barisnya, bukan prompt():
+    // harga jual, tanggal jual, dan lot jual tiga masukan, dan prompt()
+    // cuma muat satu. Lot jual boleh LEBIH KECIL dari lot yang dipegang
+    // (jual sebagian) -- default-nya seluruh lot, diedit langsung kalau
+    // mau jual sebagian saja (lihat /pnl/close soal cara posisinya dipecah).
+    //
+    // Batal ditaruh PALING DEPAN (bukan paling belakang setelah semua
+    // input) -- dia satu-satunya tombol yang tidak butuh nilai input apa
+    // pun, jadi taruh di tempat yang paling gampang dijangkau, bukan di
+    // ujung setelah tiga kotak isian.
+    $('.pnl-close-btn').on('click', function (e) {
+        e.stopPropagation();
+        var $row = $(this).closest('.pnl-row');
+        var hariIni = new Date().toISOString().slice(0, 10);
+        var lotDipegang = $row.data('lots');
+
+        $row.find('.cell-actions').html(
+            '<button type="button" class="pnl-cancel-btn">Batal</button>' +
+            '<input type="number" name="jualHarga" placeholder="harga" step="any" min="0" style="width:68px;">' +
+            '<input type="date" name="jualTanggal" value="' + hariIni + '" style="width:118px;">' +
+            '<input type="number" name="jualLot" title="Lot yang dijual -- boleh kurang dari lot yang dipegang buat jual sebagian" ' +
+                'value="' + lotDipegang + '" step="any" min="0" max="' + lotDipegang + '" style="width:58px;">' +
+            '<button type="button" class="pnl-save-btn">Simpan</button>'
+        );
+        $row.find('[name="jualHarga"]').trigger('focus');
+        // Kotak yang baru muncul (harga/tanggal/lot/Simpan) bisa jatuh di
+        // luar area yang kelihatan -- tabelnya lebar (11 kolom), dan
+        // .table-responsive men-scroll horizontal tapi TIDAK otomatis
+        // menggeser ke konten baru. Tanpa ini, kotak Lot & tombol Simpan
+        // bisa kepotong di tepi kanan, kelihatan ada tapi tidak
+        // terjangkau tanpa scroll manual dulu.
+        var actionsEl = $row.find('.cell-actions')[0];
+        if (actionsEl && actionsEl.scrollIntoView) {
+            actionsEl.scrollIntoView({ behavior: 'smooth', inline: 'end', block: 'nearest' });
+        }
+        $row.find('.pnl-cancel-btn').on('click', function () { window.location.reload(); });
+        $row.find('.pnl-save-btn').on('click', function () {
+            $.post('/pnl/close', {
+                id: $row.data('id'),
+                sellPrice: $row.find('[name="jualHarga"]').val(),
+                sellDate: $row.find('[name="jualTanggal"]').val(),
+                sellLot: $row.find('[name="jualLot"]').val(),
+                csrf_token: $('meta[name="csrf-token"]').attr('content')
+            }).done(function (data) {
+                if (data.rsp === 'success') { window.location.reload(); }
+                else { alert(data.message || 'Gagal menutup posisi'); }
+            }).fail(function () { alert('Request failed'); });
+        });
+    });
+
+    $('.pnl-delete-btn').on('click', function (e) {
+        e.stopPropagation();
+        var id = $(this).data('id');
+        if (!confirm('Hapus PERMANEN posisi ini?\n\nKalau sahamnya sudah dijual, pakai Tutup — '
+                   + 'riwayatnya masih kepakai. Hapus cuma buat baris yang salah input.')) { return; }
+        $.post('/pnl/delete', { id: id, csrf_token: $('meta[name="csrf-token"]').attr('content') })
+            .done(function (data) {
+                if (data.rsp === 'success') { window.location.reload(); }
+                else { alert(data.message || 'Gagal menghapus'); }
+            })
+            .fail(function () { alert('Request failed'); });
+    });
+
+    // Turns a row's Stock/Buy Date/Buy Price/Lots cells into inputs
+    // in-place, rather than a separate edit page/modal — the derived
+    // columns (Last Close, P&L, etc.) stay read-only since they're
+    // recomputed server-side from these four values anyway.
+    $('.pnl-edit-btn').on('click', function (e) {
+        e.stopPropagation();
+        var $row = $(this).closest('.pnl-row');
+        var stock = $row.data('stock'), buyPrice = $row.data('buyprice'),
+            lots = $row.data('lots'), buyDate = $row.data('buydate');
+
+        $row.find('.cell-stock').html('<input type="text" name="editStock" value="' + stock + '" maxlength="6">');
+        $row.find('.cell-buydate').html('<input type="date" name="editBuyDate" value="' + buyDate + '">');
+        $row.find('.cell-buyprice').html('<input type="number" name="editBuyPrice" value="' + buyPrice + '" step="any" min="0">');
+        $row.find('.cell-lots').html('<input type="number" name="editLots" value="' + lots + '" step="any" min="0">');
+        $row.find('.cell-actions').html(
+            '<button type="button" class="pnl-save-btn">Save</button>' +
+            '<button type="button" class="pnl-cancel-btn">Cancel</button>'
+        );
+
+        $row.find('.pnl-cancel-btn').on('click', function () { window.location.reload(); });
+        $row.find('.pnl-save-btn').on('click', function () {
+            $.post('/pnl/edit', {
+                id: $row.data('id'),
+                stock: $row.find('[name="editStock"]').val(),
+                buyPrice: $row.find('[name="editBuyPrice"]').val(),
+                lots: $row.find('[name="editLots"]').val(),
+                buyDate: $row.find('[name="editBuyDate"]').val(),
+                csrf_token: $('meta[name="csrf-token"]').attr('content')
+            }).done(function (data) {
+                if (data.rsp === 'success') { window.location.reload(); }
+                else { alert(data.message || 'Gagal menyimpan'); }
+            }).fail(function () { alert('Request failed'); });
+        });
+    });
+
+    // Sama seperti edit posisi terbuka di atas, tapi utk posisi yang SUDAH
+    // dijual -- satu-satunya cara memperbaiki salah input (harga/tanggal
+    // jual, atau data belinya) tanpa Hapus permanen (yang membuang
+    // riwayat P&L-nya). Ditambahkan karena sebelumnya posisi tertutup
+    // sama sekali tidak bisa dikoreksi lewat halaman ini.
+    $('.pnl-closed-edit-btn').on('click', function (e) {
+        e.stopPropagation();
+        var $row = $(this).closest('.pnl-closed-row');
+        var stock = $row.data('stock'), buyPrice = $row.data('buyprice'),
+            lots = $row.data('lots'), buyDate = $row.data('buydate'),
+            sellPrice = $row.data('sellprice'), sellDate = $row.data('selldate');
+
+        $row.find('.ccell-stock').html('<input type="text" name="editStock" value="' + stock + '" maxlength="6" style="width:70px;">');
+        $row.find('.ccell-buydate').html('<input type="date" name="editBuyDate" value="' + buyDate + '" style="width:118px;">');
+        $row.find('.ccell-buyprice').html('<input type="number" name="editBuyPrice" value="' + buyPrice + '" step="any" min="0" style="width:75px;">');
+        $row.find('.ccell-selldate').html('<input type="date" name="editSellDate" value="' + sellDate + '" style="width:118px;">');
+        $row.find('.ccell-sellprice').html('<input type="number" name="editSellPrice" value="' + sellPrice + '" step="any" min="0" style="width:75px;">');
+        $row.find('.ccell-lots').html('<input type="number" name="editLots" value="' + lots + '" step="any" min="0" style="width:58px;">');
+        $row.find('.ccell-actions').html(
+            '<button type="button" class="pnl-cancel-btn">Batal</button>' +
+            '<button type="button" class="pnl-save-btn">Simpan</button>'
+        );
+
+        $row.find('.pnl-cancel-btn').on('click', function () { window.location.reload(); });
+        $row.find('.pnl-save-btn').on('click', function () {
+            $.post('/pnl/edit', {
+                id: $row.data('id'),
+                stock: $row.find('[name="editStock"]').val(),
+                buyPrice: $row.find('[name="editBuyPrice"]').val(),
+                lots: $row.find('[name="editLots"]').val(),
+                buyDate: $row.find('[name="editBuyDate"]').val(),
+                sellPrice: $row.find('[name="editSellPrice"]').val(),
+                sellDate: $row.find('[name="editSellDate"]').val(),
+                csrf_token: $('meta[name="csrf-token"]').attr('content')
+            }).done(function (data) {
+                if (data.rsp === 'success') { window.location.reload(); }
+                else { alert(data.message || 'Gagal menyimpan'); }
+            }).fail(function () { alert('Request failed'); });
+        });
+    });
+</script>
+{% endblock %}

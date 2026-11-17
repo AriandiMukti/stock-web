@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block title %}Kepercayaan Data{% endblock %}
+{% block page_title %}Kepercayaan Data{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="kdRefresh">Hitung Ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .kd-finding:last-child { margin-bottom: 0; }
+    .kd-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .kd-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .kd-finding strong { color: var(--text); }
+
+
+    .kd-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .kd-table th.kd-left { text-align: left; }
+    .kd-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .kd-table td.kd-left { text-align: left; font-family: var(--font-ui); white-space: normal; }
+    .kd-table tbody tr:hover { background: var(--raised); }
+    .kd-ticker:hover { text-decoration: underline; }
+
+    .kd-bar-wrap { background: var(--raised); border-radius: 4px; height: 8px; overflow: hidden; min-width: 70px; }
+    .kd-bar { height: 100%; }
+
+    .kd-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+</style>
+
+<div class="kd-controls">
+    <div class="kd-field">
+        <label>Tampilkan</label>
+        <select id="kdLabel" class="form-select form-select-sm" style="width:210px;">
+            <option value="rendah" selected>Kepercayaan rendah</option>
+            <option value="sedang">Kepercayaan sedang</option>
+            <option value="tinggi">Kepercayaan tinggi</option>
+            <option value="all">Semua emiten</option>
+        </select>
+    </div>
+    <div class="kd-field">
+        <label>Cari kode</label>
+        <input type="text" id="kdFilter" class="form-control form-control-sm"
+               placeholder="BBRI" style="width:120px; text-transform:uppercase;">
+    </div>
+    <div class="kd-field">
+        <label>Data basi saja</label>
+        <select id="kdStale" class="form-select form-select-sm" style="width:170px;">
+            <option value="0">Tidak</option>
+            <option value="1">Ya (tertinggal &gt; 7 hari)</option>
+        </select>
+    </div>
+</div>
+
+<div id="kdLoading" class="kd-empty">Menilai kelengkapan data seluruh emiten&hellip; (bisa ~1 menit saat pertama)</div>
+<div id="kdMessage" class="kd-empty" style="display:none;"></div>
+
+<div id="kdBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="kd-section-title">Kenapa Halaman Ini Ada</div>
+        <div class="kd-finding">
+            <h4>Saham dengan riwayat 26 hari tampil persis sama meyakinkannya dengan yang punya 158 hari.</h4>
+            <p>Angka seperti &quot;skor 0,72&quot; atau &quot;retail 99,5%&quot; terlihat sama tegaknya di seluruh
+            app, padahal yang satu dihitung dari data lengkap dan yang lain dari potongan data yang bolong. Halaman
+            ini memberi <strong>satu angka 0&ndash;100</strong> per emiten dari kelengkapan datanya, plus daftar apa
+            yang kurang &mdash; supaya angka rapuh bisa dibedakan sebelum dipakai mengambil keputusan.</p>
+        </div>
+        <div class="kd-finding">
+            <h4>Ini mengukur kelengkapan, bukan kebenaran.</h4>
+            <p>Data bisa lengkap tapi salah. Bug dobel hitung tabel pemegang saham yang pernah ditemukan di app ini
+            lolos 100% kelengkapan &mdash; tidak ada sel yang kosong, angkanya saja yang keliru. Skor tinggi berarti
+            <strong>&quot;tidak ada yang kosong&quot;</strong>, bukan &quot;sudah diverifikasi benar&quot;.</p>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="kd-section-title">Ringkasan <span id="kdMeta" class="kd-dim"></span></div>
+        <div class="kd-stat-grid" id="kdStats"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="kd-section-title">Bobot Penilaian</div>
+        <div style="overflow-x:auto;">
+            <table class="kd-table">
+                <thead><tr><th class="kd-left">Komponen</th><th>Bobot</th><th class="kd-left">Yang diukur</th></tr></thead>
+                <tbody id="kdBobotBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="kd-section-title">Daftar Emiten <span id="kdCount" class="kd-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="kd-table">
+                <thead id="kdThead">
+                    <tr>
+                        <th class="kd-left" data-sort-key="stock">Kode</th>
+                        <th data-sort-key="skor">Skor</th>
+                        <th class="kd-left" style="width:90px;">Bar</th>
+                        <th class="kd-left" data-sort-key="label">Tingkat</th>
+                        <th data-sort-key="n_baris">Baris harga</th>
+                        <th data-sort-key="bulan_ksei">Bulan KSEI</th>
+                        <th data-sort-key="tertinggal_hari">Tertinggal (hari)</th>
+                        <th class="kd-left">Yang kurang</th>
+                    </tr>
+                </thead>
+                <tbody id="kdTableBody"></tbody>
+            </table>
+        </div>
+        <div class="kd-note">
+            Emiten yang <strong>tertinggal jauh</strong> biasanya sudah disuspensi atau berhenti diperdagangkan,
+            tapi datanya tetap ikut terbaca modul lain seolah masih hidup &mdash; itulah yang paling perlu
+            diperhatikan dari daftar ini.
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var kdData = null;
+    var kdSort = { key: 'skor', dir: 'asc' };
+
+    var KD_KOMPONEN = {
+        riwayat: 'Jumlah baris riwayat harga (penuh di ≥120 baris)',
+        kolom: '% sel terisi pada 20 baris terakhir, untuk kolom yang benar-benar dipakai app',
+        segar: 'Selisih hari antara data terakhir emiten dan data terakhir bursa',
+        ksei: 'Jumlah bulan data kepemilikan KSEI (penuh di ≥6 bulan)',
+        registri: 'Ada tabel pemegang saham ≥5% dari registri IDX atau tidak',
+        free_float: 'Ada angka free float resmi (LBRPE/registri) atau tidak'
+    };
+
+    function kdNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    var KD_COLOR = { hijau: 'var(--accum)', kuning: 'var(--warn)', merah: 'var(--distrib)' };
+
+    function kdRenderStats(d) {
+        $('#kdMeta').text('— data bursa terakhir ' + (d.market_last || '—'));
+        var items = [
+            ['Emiten dinilai', kdNum(d.total), 'var(--text)'],
+            ['Skor rata-rata', kdNum(d.rata2, 1), 'var(--text)'],
+            ['Kepercayaan tinggi', kdNum(d.counts.tinggi), 'var(--accum)'],
+            ['Sedang', kdNum(d.counts.sedang), 'var(--warn)'],
+            ['Rendah', kdNum(d.counts.rendah), 'var(--distrib)']
+        ];
+        $('#kdStats').html(items.map(function (it) {
+            return '<div><div class="kd-stat-label">' + it[0] + '</div>'
+                 + '<div class="kd-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function kdRenderBobot(d) {
+        $('#kdBobotBody').html(Object.keys(d.bobot).map(function (k) {
+            return '<tr><td class="kd-left">' + k + '</td><td>' + d.bobot[k] + '</td>'
+                 + '<td class="kd-left kd-dim">' + (KD_KOMPONEN[k] || '') + '</td></tr>';
+        }).join(''));
+    }
+
+    function kdRenderTable() {
+        if (!kdData) { return; }
+        var label = $('#kdLabel').val();
+        var q = ($('#kdFilter').val() || '').trim().toUpperCase();
+        var staleOnly = $('#kdStale').val() === '1';
+
+        var rows = kdData.rows.filter(function (r) {
+            if (label !== 'all' && r.label !== label) { return false; }
+            if (q && r.stock.indexOf(q) === -1) { return false; }
+            if (staleOnly && !(r.tertinggal_hari > 7)) { return false; }
+            return true;
+        });
+        rows = window.sortRows(rows, kdSort.key, kdSort.dir);
+
+        $('#kdCount').text('— ' + rows.length + ' baris');
+        if (!rows.length) {
+            $('#kdTableBody').html('<tr><td colspan="8" class="kd-empty">Tidak ada yang cocok.</td></tr>');
+            return;
+        }
+
+        $('#kdTableBody').html(rows.slice(0, 300).map(function (r) {
+            var color = KD_COLOR[r.verdict] || 'var(--text-dim)';
+            return '<tr>'
+                 + '<td class="kd-left"><a class="kd-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>'
+                 + '<td style="color:' + color + ';">' + kdNum(r.skor, 1) + '</td>'
+                 + '<td class="kd-left"><div class="kd-bar-wrap"><div class="kd-bar" style="width:' + r.skor
+                 +   '%; background:' + color + ';"></div></div></td>'
+                 + '<td class="kd-left"><span class="kd-badge" style="color:' + color + '; border:1px solid '
+                 +   color + '55; background:' + color + '14;">' + r.label + '</span></td>'
+                 + '<td>' + kdNum(r.n_baris) + '</td>'
+                 + '<td>' + kdNum(r.bulan_ksei) + '</td>'
+                 + '<td' + (r.tertinggal_hari > 7 ? ' style="color:var(--distrib);"' : '') + '>'
+                 +   kdNum(r.tertinggal_hari) + '</td>'
+                 + '<td class="kd-left kd-dim">' + (r.kurang.length ? r.kurang.join('; ') : '—') + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function kdLoad(force) {
+        $('#kdLoading').show();
+        $('#kdBody').hide();
+        $('#kdMessage').hide();
+        $.post('/kepercayaan-data-data', { force: force ? '1' : '0' }).done(function (d) {
+            $('#kdLoading').hide();
+            if (!d || d.available === false) {
+                $('#kdMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            kdData = d;
+            kdRenderStats(d);
+            kdRenderBobot(d);
+            kdRenderTable();
+            $('#kdBody').show();
+        }).fail(function () {
+            $('#kdLoading').hide();
+            $('#kdMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // Di dalam document.ready: base.html memasang $.ajaxSetup untuk header
+    // X-CSRFToken di dalam $(function(){...}), jadi POST yang berangkat
+    // lebih awal akan ditolak 400.
+    $(document).ready(function () {
+        $('#kdLabel, #kdStale').on('change', kdRenderTable);
+        $('#kdFilter').on('input', kdRenderTable);
+        $('#kdRefresh').on('click', function () { kdLoad(true); });
+
+        kdSort = window.makeSortable('#kdThead', function (key, dir) {
+            kdSort.key = key; kdSort.dir = dir;
+            kdRenderTable();
+        }, kdSort.key, kdSort.dir);
+
+        kdLoad(false);
+    });
+</script>
+{% endblock %}

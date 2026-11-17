@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+{% block title %}Skor Kecondongan{% endblock %}
+{% block page_title %}Skor Kecondongan{% endblock %}
+{% block page_subtitle %}Peringkat harian dari dua ukuran yang sudah lolos luar sampel: dekat puncak 52 minggu dan tenang.{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="kcRefresh">Hitung Ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .kc-finding { background: var(--void); border: 1px solid var(--line); border-radius: 10px;
+                  padding: 14px 16px; margin-bottom: 14px; }
+    .kc-finding:last-child { margin-bottom: 0; }
+    .kc-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .kc-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .kc-finding strong { color: var(--text); }
+
+    .kc-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+    @media (max-width: 1100px) { .kc-grid2 { grid-template-columns: minmax(0, 1fr); } }
+
+    .kc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .kc-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 8px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .kc-table th.kc-left, .kc-table td.kc-left { text-align: left; }
+    .kc-table td { padding: 8px 8px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .kc-table td.kc-left { font-family: var(--font-ui); }
+    .kc-table tbody tr:hover { background: var(--raised); }
+    .kc-table tr.kc-sorot td { background: rgba(22,224,174,0.06); font-weight: 600; }
+    .kc-table tr.kc-sorot-merah td { background: rgba(255,96,118,0.06); font-weight: 600; }
+    .kc-table tr.kc-redup td { opacity: 0.78; }
+    .kc-ticker { font-weight: 700; color: var(--accum); }
+    .kc-ticker:hover { text-decoration: underline; color: var(--accum); }
+    .kc-bawah .kc-ticker { color: var(--distrib); }
+
+    .kc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+    .kc-head h3 { font-size: 15px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+    .kc-head span { font-size: 11.5px; color: var(--text-dim); }
+
+    .kc-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+    .kc-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-dim); }
+    .kc-stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 600; margin-top: 4px; }
+    .kc-stat-sub { font-size: 11.5px; color: var(--text-mid); margin-top: 4px; line-height: 1.5; }
+
+    .kc-bar { display: inline-block; width: 56px; height: 6px; border-radius: 3px; background: var(--line-soft);
+              position: relative; overflow: hidden; vertical-align: middle; margin-right: 6px; }
+    .kc-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--accum); }
+    .kc-bawah .kc-bar i { background: var(--distrib); }
+
+    .kc-cari { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .kc-cari input { width: 130px; text-transform: uppercase; }
+    .kc-hasil { font-size: 12.5px; color: var(--text-mid); }
+    .kc-hasil b { color: var(--text); font-family: var(--font-mono); }
+    .kc-desil-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+
+    .kc-tahun { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 4px; align-items: end; height: 120px; margin-top: 10px; }
+    .kc-tahun-col { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; position: relative; }
+    .kc-tahun-col .b { width: 70%; border-radius: 3px; position: absolute; }
+    .kc-tahun-col .y { position: absolute; bottom: -18px; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-dim); }
+    .kc-tahun-wrap { position: relative; padding-bottom: 20px; }
+    .kc-tahun-wrap::before { content: ''; position: absolute; left: 0; right: 0; top: 60px; border-top: 1px dashed var(--line); }
+
+    .kc-r2 { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700;
+             font-family: var(--font-ui); margin-left: 4px; }
+    .kc-r2-sendiri { color: var(--distrib); background: rgba(255,96,118,0.12); }
+    .kc-r2-tengah { color: var(--text-mid); background: rgba(148,163,184,0.12); }
+    .kc-r2-pasar { color: var(--text-dim); background: rgba(148,163,184,0.08); }
+
+    .kc-up { color: var(--accum); }
+    .kc-down { color: var(--distrib); }
+    .kc-dim { color: var(--text-dim); }
+    .kc-note { font-size: 11px; color: var(--text-dim); line-height: 1.6; margin-top: 10px; }
+    .kc-empty { color: var(--text-dim); text-align: center; padding: 30px; font-size: 12px; }
+    .kc-list { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; padding-left: 18px; }
+</style>
+
+<div id="kcLoading"></div>
+<div id="kcMessage" class="kc-empty" style="display:none;"></div>
+
+<div id="kcBody" style="display:none;">
+
+    <div class="content-card" style="border-left:3px solid var(--accum);">
+        <div class="hb-section-title" style="color:var(--accum);">Satu Peringkat, Dua Ukuran yang Sudah Lolos</div>
+        <div class="kc-finding">
+            <h4>Tiga cara mencari pola chart sampai ke kesimpulan yang sama: arah dari harga itu kecil, dan sisanya tertangkap dua ukuran sederhana.</h4>
+            <p><strong>Dekat puncak 52 minggu</strong> (close dibanding tertinggi 250 hari) dan <strong>tenang</strong>
+            (volatilitas 20 hari rendah). Skor = rata-rata peringkat persentil keduanya di antara emiten layak hari itu
+            &mdash; tanpa bobot, tanpa ambang yang disetel. Desil 10 = 10% skor tertinggi, desil 1 = 10% terendah.</p>
+        </div>
+        <div class="kc-finding" style="border-color: rgba(255,96,118,0.35);">
+            <h4>Sisi yang paling kokoh justru sisi BAWAH: desil 1 &mdash; jauh dari puncak dan liar &mdash; konsisten kalah.</h4>
+            <p>Di keempat sel uji dan di semua lapis likuiditas desil 1 kalah dari pasar (&minus;2,6% s.d. &minus;13,5% per 60
+            hari), negatif 12 dari 14 tahun. Desil 10 condong naik tapi lebih lemah: +5,0% per 60 hari di validasi, ~0 di
+            data 2013&ndash;2019. Baca sebagai <strong>saringan</strong>, bukan daftar beli.</p>
+        </div>
+        <div class="kc-finding" style="border-color: rgba(255,96,118,0.35);">
+            <h4>Desil 1 tidak seragam: yang terus jatuh adalah yang <em>jalan sendiri</em>.</h4>
+            <p><strong>R&sup2;</strong> = seberapa besar gerak harian emiten dijelaskan gerak pasar, 250 hari terakhir. Desil 1
+            dengan R&sup2; &lt; 0,05 kalah dari pasar &minus;9,8% s.d. &minus;14,3% per 60 hari di keempat sel, negatif 13 dari 14
+            tahun. Desil 1 dengan R&sup2; &ge; 0,15 cuma ikut turun bersama pasar &mdash; hasilnya setara pasar. Rinciannya di
+            kartu <em>Desil 1 Dipecah R&sup2;</em> di bawah.</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="kc-table">
+                <thead><tr>
+                    <th class="kc-left">IC (korelasi peringkat vs return 60 hari vs pasar)</th>
+                    <th>Dekat puncak</th>
+                    <th>Tenang</th>
+                    <th>SKOR</th>
+                    <th>Skor, 20 hari</th>
+                </tr></thead>
+                <tbody id="kcIcBody"></tbody>
+            </table>
+        </div>
+        <div class="kc-note">Pencarian = separuh emiten A 2013&ndash;2019; validasi = separuh emiten LAIN 2020&ndash;2026. IC 0 =
+        tidak ada hubungan; di pasar saham IC 0,05 sudah dianggap berguna.</div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Ringkasan <span id="kcMeta" class="kc-dim"></span></div>
+        <div class="kc-stat-grid" id="kcStats"></div>
+        <div class="kc-note" id="kcLayakNote"></div>
+    </div>
+
+    <div class="kc-grid2">
+        <div class="content-card">
+            <div class="kc-head"><h3 class="kc-up">Desil 10 &mdash; condong naik</h3><span id="kcAtasCount"></span></div>
+            <div style="overflow-x:auto;">
+                <table class="kc-table">
+                    <thead><tr>
+                        <th class="kc-left">Kode</th><th>Skor</th><th>Dari puncak</th><th>Vol 20h</th><th>Nilai/hari</th><th>Kemarin</th>
+                    </tr></thead>
+                    <tbody id="kcAtasBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="content-card kc-bawah">
+            <div class="kc-head"><h3 class="kc-down">Desil 1 &mdash; hindari</h3><span id="kcBawahCount"></span></div>
+            <div style="overflow-x:auto;">
+                <table class="kc-table">
+                    <thead><tr>
+                        <th class="kc-left">Kode</th><th>Skor</th><th>Dari puncak</th><th>Vol 20h</th><th class="kc-left">R&sup2; 250h</th><th>Nilai/hari</th><th>Kemarin</th>
+                    </tr></thead>
+                    <tbody id="kcBawahBody"></tbody>
+                </table>
+            </div>
+            <div class="kc-note">Urut: yang <span class="kc-down">jalan sendiri</span> (R&sup2; &lt; 0,05) di atas &mdash; itu yang di
+            riset benar-benar terus jatuh. Yang <em>ikut pasar</em> (R&sup2; &ge; 0,15) cuma ikut turun bersama pasar.</div>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px; border-left:3px solid var(--distrib);">
+        <div class="hb-section-title" style="color:var(--distrib);">Desil 1 Dipecah R&sup2; <span class="kc-dim">&mdash; riset 29 Okt 2026</span></div>
+        <div style="overflow-x:auto;">
+            <table class="kc-table">
+                <thead><tr>
+                    <th class="kc-left">Desil 1, vs pasar 60 hari (t)</th>
+                    <th>Pencarian A 13&ndash;19</th><th>Validasi B 20&ndash;26</th><th>Silang B 13&ndash;19</th><th>Silang A 20&ndash;26</th>
+                    <th>Absolut (validasi)</th><th>Jatuh lagi &ge;20%</th><th>Tahun negatif</th>
+                </tr></thead>
+                <tbody id="kcR2Body"></tbody>
+            </table>
+        </div>
+        <div class="kc-note">Satu kejadian per emiten per 20 hari bursa; t dengan galat dikelompokkan per bulan. Kolom
+        <em>jatuh lagi &ge;20%</em> = porsi kejadian yang turun 20% atau lebih dalam 60 hari (sel validasi).</div>
+        <div class="kc-grid2" style="margin-top:12px;">
+            <div>
+                <table class="kc-table">
+                    <thead><tr><th class="kc-left">Portofolio 10 slot, 2013&ndash;26</th><th>CAGR</th><th>Drawdown</th></tr></thead>
+                    <tbody id="kcR2Porto"></tbody>
+                </table>
+                <div class="kc-note" id="kcR2PortoNote"></div>
+            </div>
+            <div>
+                <ul class="kc-list" id="kcR2Kokoh"></ul>
+            </div>
+        </div>
+        <div class="kc-note" id="kcR2Batas" style="color:var(--warn);"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Cek Satu Emiten</div>
+        <div class="kc-cari">
+            <input type="text" id="kcCari" class="form-control form-control-sm" placeholder="BBRI" autocomplete="off" spellcheck="false">
+            <div class="kc-hasil" id="kcCariHasil">Ketik kode emiten untuk melihat desilnya hari ini.</div>
+        </div>
+        <div class="kc-note"><em>Vol 20h</em> = simpangan baku return harian 20 hari (%). <em>Dari puncak</em> = jarak close dari
+        tertinggi 250 hari bursa. Emiten yang tidak layak (kurang likuid, riwayat pendek, harga &lt; Rp100, atau ada loncatan
+        harga &gt;45% dalam 60 hari) tidak diperingkat &mdash; saringan yang sama dengan pengujian.</div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px; border-left:3px solid var(--accum);">
+        <div class="hb-section-title" style="color:var(--accum);">Jurnal Maju &mdash; Uji yang Buta</div>
+        <div class="kc-finding">
+            <h4>IC dua komponen di data validasi sudah sempat terlihat sebelum rumus ini ditulis. Jurnal ini yang menguji tanpa itu.</h4>
+            <p>Tiap hari bursa SEMUA emiten layak ditulis ke disk dengan ukuran mentahnya, sebelum hasilnya ada, lalu diukur
+            20 dan 60 hari bursa kemudian terhadap pasar hari yang sama.</p>
+        </div>
+        <div class="kc-note" id="kcJurnalCakupan" style="margin-top:0; margin-bottom:10px;"></div>
+        <div style="overflow-x:auto;">
+            <table class="kc-table">
+                <thead><tr>
+                    <th class="kc-left">Horizon</th><th>Tanggal matang</th><th>Desil 10 vs pasar</th><th>Desil 1 vs pasar</th><th>IC harian</th>
+                    <th class="kc-left">Harapan (validasi)</th>
+                </tr></thead>
+                <tbody id="kcJurnalBody"></tbody>
+            </table>
+        </div>
+        <div class="hb-section-title" style="margin-top:18px;">Desil 1 per R&sup2; <span class="kc-dim">&mdash; jurnal sejak 29 Okt 2026</span></div>
+        <div class="kc-note" id="kcJurnalR2Cakupan" style="margin-top:0; margin-bottom:10px;"></div>
+        <div style="overflow-x:auto;">
+            <table class="kc-table">
+                <thead><tr>
+                    <th class="kc-left">Horizon</th><th class="kc-left">Kelompok</th><th>Baris (tanggal)</th><th>vs pasar</th>
+                    <th>Alfa setelah beta</th><th>Beta median</th><th class="kc-left">Harapan (validasi): vs pasar / alfa</th>
+                </tr></thead>
+                <tbody id="kcJurnalR2Body"></tbody>
+            </table>
+        </div>
+        <div class="kc-note">Kelompok ikut pasar ber-beta ~1,7: kalau pasar ambruk ia kalah dari pasar hanya karena beta. Karena
+        itu ujinya alfa &mdash; return dikurangi beta &times; pasar di jendela yang sama &mdash; sama seperti di riset.</div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Desil di Data Validasi (emiten B, 2020&ndash;2026)</div>
+        <div style="overflow-x:auto;">
+            <table class="kc-table">
+                <thead><tr>
+                    <th class="kc-left">Desil</th><th>n</th><th>vs pasar 20h</th><th>vs pasar 60h</th><th>+10% dulu</th><th>&minus;10% dulu</th>
+                </tr></thead>
+                <tbody id="kcDesilBody"></tbody>
+            </table>
+        </div>
+        <div class="kc-note" id="kcDesilNote"></div>
+        <div style="overflow-x:auto; margin-top:14px;">
+            <table class="kc-table">
+                <thead><tr><th class="kc-left">Sel &mdash; vs pasar 60 hari</th><th>Desil 1</th><th>Desil 10</th></tr></thead>
+                <tbody id="kcSelBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="kc-grid2">
+        <div class="content-card">
+            <div class="hb-section-title">Per Tahun</div>
+            <div class="kc-tahun-wrap"><div class="kc-tahun" id="kcTahun"></div></div>
+            <div class="kc-note" id="kcTahunNote"></div>
+        </div>
+        <div class="content-card">
+            <div class="hb-section-title">Per Lapis Likuiditas (vs pasar 60 hari)</div>
+            <div style="overflow-x:auto;">
+                <table class="kc-table">
+                    <thead><tr><th class="kc-left">Nilai transaksi</th><th>Desil 10</th><th>Desil 1</th></tr></thead>
+                    <tbody id="kcLikuidBody"></tbody>
+                </table>
+            </div>
+            <div class="kc-note" id="kcLikuidNote"></div>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Sebagai Portofolio</div>
+        <div style="overflow-x:auto;">
+            <table class="kc-table">
+                <thead><tr><th class="kc-left">Strategi</th><th>CAGR 2013&ndash;26</th><th>CAGR 2020&ndash;26</th><th>Drawdown terdalam</th></tr></thead>
+                <tbody id="kcPortoBody"></tbody>
+            </table>
+        </div>
+        <div class="kc-note" id="kcPortoNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Batasnya</div>
+        <ul class="kc-list" id="kcBatas"></ul>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var kcData = null;
+
+    function kcNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
+    }
+    function kcSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="kc-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'kc-up' : (v < 0 ? 'kc-down' : 'kc-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + kcNum(v, d === undefined ? 1 : d) + '%</span>';
+    }
+    function kcEsc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+    function kcIc(v, t) {
+        return '<span class="' + (v > 0 ? 'kc-up' : 'kc-down') + '">' + (v > 0 ? '+' : '') + kcNum(v, 3) + '</span>'
+             + (t === undefined ? '' : ' <span class="kc-dim">(t ' + kcNum(t, 1) + ')</span>');
+    }
+    function kcDesilChip(desil) {
+        if (!desil) { return '<span class="kc-dim">tidak diperingkat</span>'; }
+        var warna = desil >= 9 ? 'var(--accum)' : (desil <= 2 ? 'var(--distrib)' : 'var(--text-mid)');
+        var bg = desil >= 9 ? 'rgba(22,224,174,0.12)' : (desil <= 2 ? 'rgba(255,96,118,0.12)' : 'rgba(148,163,184,0.12)');
+        return '<span class="kc-desil-chip" style="color:' + warna + '; background:' + bg + ';">desil ' + desil + '</span>';
+    }
+
+    var KC_R2_LABEL = { sendiri: 'jalan sendiri', tengah: 'tengah', pasar: 'ikut pasar' };
+    function kcR2(r2, kel) {
+        if (r2 === null || r2 === undefined || !kel) { return '<span class="kc-dim">&mdash;</span>'; }
+        return kcNum(r2, 3) + '<span class="kc-r2 kc-r2-' + kel + '">' + KC_R2_LABEL[kel] + '</span>';
+    }
+
+    function kcBaris(r, denganR2) {
+        var kemarin = r.desil_kemarin === null || r.desil_kemarin === undefined
+            ? '<span class="kc-dim">baru layak</span>'
+            : (r.desil_kemarin === r.desil ? '<span class="kc-dim">sama</span>'
+               : 'desil ' + r.desil_kemarin);
+        return '<tr><td class="kc-left"><a class="kc-ticker" href="/saham/' + kcEsc(r.stock) + '">' + kcEsc(r.stock) + '</a></td>'
+             + '<td><span class="kc-bar"><i style="width:' + Math.max(2, r.skor || 0) + '%;"></i></span>' + kcNum(r.skor, 0) + '</td>'
+             + '<td>' + kcSigned(r.dari_puncak, 1) + '</td>'
+             + '<td>' + kcNum(r.vol20, 2) + '%</td>'
+             + (denganR2 ? '<td class="kc-left" style="font-family:var(--font-mono);">' + kcR2(r.r2, r.r2_kel) + '</td>' : '')
+             + '<td>' + kcNum(r.nilai_b, 1) + ' M</td>'
+             + '<td>' + kemarin + '</td></tr>';
+    }
+
+    function kcRenderR2(r) {
+        if (!r || !r.sel) { return; }
+        $('#kcR2Body').html(r.sel.map(function (g) {
+            var val = g.baris[1] || {};
+            var cls = g.kel === 'sendiri' ? ' class="kc-sorot-merah"' : (g.kel === 'pasar' ? ' class="kc-redup"' : '');
+            return '<tr' + cls + '><td class="kc-left">' + kcEsc(g.label) + '</td>'
+                 + g.baris.map(function (x) {
+                       return '<td>' + kcSigned(x.vs60, 1) + ' <span class="kc-dim">(' + kcNum(x.t, 1) + ')</span></td>';
+                   }).join('')
+                 + '<td>' + kcSigned(val.abs60, 1) + '</td>'
+                 + '<td>' + kcNum(val.jatuh20) + '%</td>'
+                 + '<td>' + kcEsc((r.tahun_negatif || {})[g.kel] || '') + '</td></tr>';
+        }).join(''));
+        $('#kcR2Porto').html((r.porto || []).map(function (x) {
+            return '<tr' + (x.pembanding ? ' class="kc-redup"' : '') + '><td class="kc-left">' + kcEsc(x.strategi) + '</td>'
+                 + '<td>' + kcSigned(x.cagr, 1) + '</td><td class="kc-down">' + kcNum(x.dd, 1) + '%</td></tr>';
+        }).join(''));
+        $('#kcR2PortoNote').text(r.porto_catatan || '');
+        $('#kcR2Kokoh').html((r.kokoh || []).map(function (t) { return '<li>' + kcEsc(t) + '</li>'; }).join(''));
+        $('#kcR2Batas').text(r.batas || '');
+    }
+
+    function kcRender(d) {
+        var b = d.bukti || {};
+        $('#kcIcBody').html((b.ic || []).map(function (r, i) {
+            return '<tr' + (i === 1 ? ' class="kc-sorot"' : '') + '><td class="kc-left">' + kcEsc(r.sel) + '</td>'
+                 + '<td>' + kcIc(r.puncak, r.t_puncak) + '</td><td>' + kcIc(r.tenang, r.t_tenang) + '</td>'
+                 + '<td>' + kcIc(r.skor, r.t_skor) + '</td><td>' + kcIc(r.skor20) + '</td></tr>';
+        }).join(''));
+
+        $('#kcMeta').text('— posisi ' + (d.as_of || '-') + (d.from_cache ? ' (cache)' : ''));
+        var items = [
+            ['Diperingkat', kcNum(d.n_layak), 'var(--text)', 'dari ' + kcNum(d.n_segar) + ' emiten dengan data hari itu'],
+            ['Desil 10', kcNum((d.n_desil || {})['10']), 'var(--accum)',
+             (d.masuk10 && d.masuk10.length) ? 'baru masuk: ' + kcEsc(d.masuk10.join(', ')) : 'tidak ada yang baru masuk'],
+            ['Desil 1', kcNum((d.n_desil || {})['1']), 'var(--distrib)',
+             ((d.masuk1 && d.masuk1.length) ? 'baru masuk: ' + kcEsc(d.masuk1.join(', ')) : 'tidak ada yang baru masuk')
+             + (d.n_d1_r2 ? '<br><span class="kc-down">jalan sendiri ' + kcNum(d.n_d1_r2.sendiri) + '</span> &middot; tengah '
+                + kcNum(d.n_d1_r2.tengah) + ' &middot; ikut pasar ' + kcNum(d.n_d1_r2.pasar) : '')]
+        ];
+        $('#kcStats').html(items.map(function (it) {
+            return '<div><div class="kc-stat-label">' + it[0] + '</div>'
+                 + '<div class="kc-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div>'
+                 + '<div class="kc-stat-sub">' + it[3] + '</div></div>';
+        }).join(''));
+        $('#kcLayakNote').text('Hanya emiten yang lolos saringan pengujian yang diperingkat. Peringkat dihitung ulang tiap hari '
+            + 'bursa; "kemarin" = desil emiten itu di hari bursa sebelumnya (' + (d.kemarin || '-') + ').');
+
+        $('#kcAtasCount').text((d.atas || []).length + ' teratas');
+        $('#kcBawahCount').text((d.bawah || []).length + ' terbawah');
+        $('#kcAtasBody').html((d.atas || []).map(function (r) { return kcBaris(r, false); }).join('')
+            || '<tr><td colspan="6" class="kc-empty">Kosong.</td></tr>');
+        $('#kcBawahBody').html((d.bawah || []).map(function (r) { return kcBaris(r, true); }).join('')
+            || '<tr><td colspan="7" class="kc-empty">Kosong.</td></tr>');
+
+        kcRenderR2(b.r2);
+        kcRenderJurnal(d);
+
+        $('#kcDesilBody').html((b.desil_validasi || []).map(function (r) {
+            var cls = r.desil === 10 ? ' class="kc-sorot"' : (r.desil === 1 ? ' class="kc-sorot-merah"' : '');
+            return '<tr' + cls + '><td class="kc-left">' + r.desil + '</td><td>' + kcNum(r.n) + '</td>'
+                 + '<td>' + kcSigned(r.vs20, 1) + '</td><td>' + kcSigned(r.vs60, 1) + '</td>'
+                 + '<td>' + kcNum(r.naik10, 1) + '%</td><td>' + kcNum(r.turun10, 1) + '%</td></tr>';
+        }).join(''));
+        $('#kcDesilNote').text(b.desil_catatan || '');
+        $('#kcSelBody').html((b.sel_desil || []).map(function (r, i) {
+            return '<tr' + (i === 1 ? ' class="kc-sorot"' : '') + '><td class="kc-left">' + kcEsc(r.sel) + '</td>'
+                 + '<td>' + kcSigned(r.d1, 1) + '</td><td>' + kcSigned(r.d10, 1)
+                 + ' <span class="kc-dim">(t ' + kcNum(r.t10, 1) + ')</span></td></tr>';
+        }).join(''));
+
+        var th = b.tahun || [], d10 = b.tahun_d10 || [], d1 = b.tahun_d1 || [];
+        var maks = Math.max.apply(null, d10.concat(d1).map(function (v) { return Math.abs(v); }).concat([1]));
+        $('#kcTahun').html(th.map(function (y, i) {
+            function batang(v, warna, geser) {
+                var h = Math.abs(v) / maks * 56;
+                var gaya = v >= 0 ? 'bottom:60px; height:' + h + 'px;' : 'top:60px; height:' + h + 'px;';
+                return '<span class="b" style="' + gaya + ' background:' + warna + '; left:' + geser + '%; width:34%;" title="'
+                     + y + ': ' + (v > 0 ? '+' : '') + v + '%"></span>';
+            }
+            return '<div class="kc-tahun-col">' + batang(d10[i], 'var(--accum)', 12) + batang(d1[i], 'var(--distrib)', 54)
+                 + '<span class="y">' + String(y).slice(2) + '</span></div>';
+        }).join(''));
+        $('#kcTahunNote').html('<span class="kc-up">&#9632;</span> desil 10 &nbsp; <span class="kc-down">&#9632;</span> desil 1. '
+            + kcEsc(b.tahun_catatan || ''));
+
+        $('#kcLikuidBody').html((b.likuiditas || []).map(function (r) {
+            return '<tr><td class="kc-left">' + kcEsc(r.lapis) + '</td>'
+                 + '<td>' + kcSigned(r.d10, 1) + ' <span class="kc-dim">(' + kcNum(r.n10) + ')</span></td>'
+                 + '<td>' + kcSigned(r.d1, 1) + ' <span class="kc-dim">(' + kcNum(r.n1) + ')</span></td></tr>';
+        }).join(''));
+        $('#kcLikuidNote').text(b.likuiditas_catatan || '');
+
+        $('#kcPortoBody').html((b.portofolio || []).map(function (r) {
+            return '<tr' + (r.pembanding ? ' class="kc-redup"' : '') + '><td class="kc-left">' + kcEsc(r.strategi) + '</td>'
+                 + '<td>' + kcSigned(r.cagr, 1) + '</td><td>' + kcSigned(r.cagr_val, 1) + '</td>'
+                 + '<td class="kc-down">' + kcNum(r.dd, 1) + '%</td></tr>';
+        }).join(''));
+        $('#kcPortoNote').text(b.portofolio_catatan || '');
+        $('#kcBatas').html((b.batas || []).map(function (t) { return '<li>' + kcEsc(t) + '</li>'; }).join(''));
+    }
+
+    function kcRenderJurnal(d) {
+        var j = d.jurnal || {};
+        if (!j.available) {
+            $('#kcJurnalCakupan').text(j.message || 'Jurnal tidak tersedia.');
+            $('#kcJurnalBody').html('');
+            return;
+        }
+        var c = j.cakupan || {};
+        var terlewat = c.terlewat || [];
+        $('#kcJurnalCakupan').html('Dicatat sejak <strong>' + kcEsc(c.mulai || '-') + '</strong>: '
+            + kcNum(c.n_hari) + ' hari bursa, ' + kcNum(c.n_baris) + ' baris. '
+            + (terlewat.length
+                ? '<span class="kc-down">' + terlewat.length + ' hari bursa terlewat (' + kcEsc(terlewat.slice(-5).join(', '))
+                  + ') &mdash; tidak bisa dikejar.</span>'
+                : '<span class="kc-up">Tidak ada hari yang terlewat.</span>'));
+        $('#kcJurnalBody').html((j.horizon || []).map(function (r) {
+            var hp = r.harapan || {};
+            var isi;
+            if (!r.cukup) {
+                isi = '<td colspan="3" class="kc-dim" style="text-align:center;">'
+                    + (r.n_tanggal ? kcNum(r.n_tanggal) + ' tanggal matang, belum cukup (min ' + kcNum(j.min_tanggal) + ')'
+                                   : 'belum matang' + (r.sisa_hari ? ' &mdash; ' + kcNum(r.sisa_hari) + ' hari bursa lagi' : ''))
+                    + '</td>';
+            } else {
+                isi = '<td>' + kcSigned(r.d10, 2) + '</td><td>' + kcSigned(r.d1, 2) + '</td><td>' + kcIc(r.ic) + '</td>';
+            }
+            return '<tr><td class="kc-left">H+' + r.horizon + '</td><td>' + kcNum(r.n_tanggal) + '</td>' + isi
+                 + '<td class="kc-left kc-dim">desil 10 ' + (hp.d10 > 0 ? '+' : '') + kcNum(hp.d10, 1) + '%, desil 1 '
+                 + kcNum(hp.d1, 1) + '%, IC ' + kcNum(hp.ic, 3) + '</td></tr>';
+        }).join(''));
+
+        var cr = c.r2;
+        $('#kcJurnalR2Cakupan').html(cr
+            ? 'R&sup2; tercatat untuk ' + kcNum(cr.n_baris) + ' baris jurnal. ' + kcNum(cr.n_belakangan)
+              + ' di antaranya <strong>diisi belakangan</strong> (tanggal sebelum pecahan R&sup2; dipasang &mdash; nilainya R&sup2; '
+              + 'PADA tanggal itu, dari harga s.d. hari itu, rumus tetap). Dicatat di harinya sejak <strong>'
+              + kcEsc(cr.maju_sejak || '-') + '</strong>.'
+            : 'Jurnal R&sup2; belum ada.');
+        var baris = [];
+        (j.horizon || []).forEach(function (r) {
+            var hr = r.harapan_r2 || {};
+            ['sendiri', 'tengah', 'pasar'].forEach(function (kel) {
+                var x = (r.d1_r2 || []).filter(function (y) { return y.kel === kel; })[0] || {};
+                var h = hr[kel] || {};
+                var isi;
+                if (!r.cukup) {
+                    isi = '<td colspan="3" class="kc-dim" style="text-align:center;">'
+                        + (x.n ? kcNum(x.n) + ' baris, belum cukup' : 'belum matang') + '</td>';
+                } else {
+                    isi = '<td>' + kcSigned(x.exc, 2) + '</td><td>' + kcSigned(x.alfa, 2) + '</td><td>' + kcNum(x.beta, 2) + '</td>';
+                }
+                baris.push('<tr' + (kel === 'sendiri' ? ' class="kc-sorot-merah"' : '') + '><td class="kc-left">H+' + r.horizon + '</td>'
+                    + '<td class="kc-left"><span class="kc-r2 kc-r2-' + kel + '" style="margin-left:0;">' + KC_R2_LABEL[kel] + '</span></td>'
+                    + '<td>' + kcNum(x.n) + ' <span class="kc-dim">(' + kcNum(x.n_tanggal) + ')</span></td>' + isi
+                    + '<td class="kc-left kc-dim">' + (h.vs > 0 ? '+' : '') + kcNum(h.vs, 1) + '% / '
+                    + (h.alfa > 0 ? '+' : '') + kcNum(h.alfa, 1) + '%</td></tr>');
+            });
+        });
+        $('#kcJurnalR2Body').html(baris.join(''));
+    }
+
+    function kcCari() {
+        var q = ($('#kcCari').val() || '').trim().toUpperCase();
+        if (!q || !kcData) {
+            $('#kcCariHasil').text('Ketik kode emiten untuk melihat desilnya hari ini.');
+            return;
+        }
+        var r = (kcData.semua || []).filter(function (x) { return x.stock === q; })[0];
+        if (!r) {
+            $('#kcCariHasil').html('<b>' + kcEsc(q) + '</b> tidak diperingkat hari ini &mdash; tidak lolos saringan layak '
+                + '(likuiditas, harga, riwayat, atau loncatan harga), atau kodenya tidak ada.');
+            return;
+        }
+        $('#kcCariHasil').html('<a class="kc-ticker" href="/saham/' + kcEsc(r.stock) + '">' + kcEsc(r.stock) + '</a> '
+            + kcDesilChip(r.desil) + ' &nbsp;skor <b>' + kcNum(r.skor, 0) + '</b>'
+            + ' &middot; dekat puncak persentil <b>' + kcNum(r.r_puncak) + '</b> (' + kcSigned(r.dari_puncak, 1) + ' dari puncak)'
+            + ' &middot; tenang persentil <b>' + kcNum(r.r_tenang) + '</b> (vol ' + kcNum(r.vol20, 2) + '%/hari)'
+            + ' &middot; R&sup2; 250h <b>' + kcR2(r.r2, r.r2_kel) + '</b>');
+    }
+
+    function kcLoad(force) {
+        $('#kcBody').hide();
+        $('#kcMessage').hide();
+        $('#kcLoading').html(window.skeleton('kartu', 3, 'Memeringkat semua emiten layak&hellip;')).show();
+        $.post('/skor-kecondongan-data', { force: force ? '1' : '0' }).done(function (d) {
+            $('#kcLoading').hide();
+            if (!d || !d.available) {
+                $('#kcMessage').show().text((d && d.message) || 'Data tidak tersedia.');
+                return;
+            }
+            kcData = d;
+            kcRender(d);
+            kcCari();
+            $('#kcBody').show();
+        }).fail(function () {
+            $('#kcLoading').hide();
+            $('#kcMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: $.ajaxSetup (header X-CSRFToken) dipasang
+    // base.html di dalam $(function(){...}).
+    $(document).ready(function () {
+        $('#kcRefresh').on('click', function () { kcLoad(true); });
+        $('#kcCari').on('input', kcCari);
+        kcLoad(false);
+    });
+</script>
+{% endblock %}

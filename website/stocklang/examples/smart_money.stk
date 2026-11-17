@@ -1,0 +1,30 @@
+# Broker-flow check for one stock: is big money accumulating or leaving?
+# Shows functions with blocks, if/else and text output.
+#
+#   python -m stocklang stocklang/examples/smart_money.stk
+
+stock TLKM
+
+fn flow_score(days) {
+    big    = total(net_top5, days)
+    small  = total(retail, days)
+    foreign = total(foreign_top5, days)
+    return where(big > 0, 1, 0) + where(small < 0, 1, 0) + where(foreign > 0, 1, 0)
+}
+
+score5  = flow_score(5)
+score20 = flow_score(20)
+
+print("Flow score, last 5 days: ", score5, "/ 3")
+print("Flow score, last 20 days:", score20, "/ 3")
+
+if last(score5) >= 2 and last(score20) >= 2 {
+    print("Verdict: accumulation (big brokers buying, retail selling)")
+} else if last(score5) <= 1 and last(score20) <= 1 {
+    print("Verdict: distribution (big brokers selling)")
+} else {
+    print("Verdict: mixed signals")
+}
+
+trend = slope(close, 10)
+print("10-day price slope:", round(trend, 1), "per day")

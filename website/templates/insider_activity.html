@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}Aktivitas Insider{% endblock %}
+{% block page_title %}Aktivitas Insider{% endblock %}
+
+{% block content %}
+
+<style>
+    .ia-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+
+
+    .ia-finding:last-child { margin-bottom: 0; }
+    .ia-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .ia-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .ia-finding strong { color: var(--text); }
+
+    .ia-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+
+    .ia-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .ia-table th.ia-left { text-align: left; }
+    .ia-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .ia-table td.ia-left { text-align: left; font-family: var(--font-ui); white-space: normal; }
+    .ia-table tbody tr:hover { background: var(--raised); }
+
+
+    .ia-table td.ia-purpose { min-width: 180px; max-width: 320px; overflow-wrap: anywhere; }
+
+    .ia-ticker { font-family: var(--font-ui); font-weight: 600; color: var(--accum); cursor: pointer; }
+    .ia-ticker:hover { text-decoration: underline; }
+
+    .ia-badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 9.5px;
+                font-family: var(--font-ui); font-weight: 600; white-space: nowrap; margin-right: 3px; }
+    .ia-badge-buy { color: var(--accum); border: 1px solid rgba(22,224,174,0.35); background: rgba(22,224,174,0.08); }
+    .ia-badge-sell { color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08); }
+    .ia-badge-other { color: var(--text-dim); border: 1px solid var(--line); }
+    .ia-badge-controller { color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08); }
+    .ia-badge-role { color: var(--info); border: 1px solid rgba(132,171,255,0.35); background: rgba(132,171,255,0.08); }
+    .ia-badge-est { color: var(--text-dim); border: 1px solid var(--line); font-size: 9px; }
+    .ia-badge-source { color: var(--text-dim); border: 1px solid var(--line); font-size: 9px; }
+    .ia-badge-source-confirmed { color: var(--accum); border: 1px solid rgba(22,224,174,0.35); background: rgba(22,224,174,0.08); font-size: 9px; }
+
+</style>
+
+<div class="ia-controls">
+    <div class="ia-field">
+        <label>Tipe transaksi</label>
+        <select id="iaAction" class="form-select form-select-sm" style="width:190px;">
+            <option value="trade" selected>Beli &amp; Jual saja</option>
+            <option value="buy">Beli saja</option>
+            <option value="sell">Jual saja</option>
+            <option value="all">Semua tipe (termasuk korporasi)</option>
+        </select>
+    </div>
+    <div class="ia-field">
+        <label>Rentang</label>
+        <select id="iaDaysBack" class="form-select form-select-sm" style="width:150px;">
+            <option value="14">14 hari terakhir</option>
+            <option value="30" selected>30 hari terakhir</option>
+            <option value="90">90 hari terakhir</option>
+            <option value="180">180 hari terakhir</option>
+        </select>
+    </div>
+    <div class="ia-field">
+        <label>Cari kode</label>
+        <input type="text" id="iaFilter" class="form-control form-control-sm"
+               placeholder="BBRI" style="width:120px; text-transform:uppercase;">
+    </div>
+    <div class="ia-field">
+        <label>Urut</label>
+        <select id="iaSort" class="form-select form-select-sm" style="width:170px;">
+            <option value="date">Tanggal</option>
+            <option value="value_idr">Nilai transaksi</option>
+            <option value="shares_changed">Jumlah lembar</option>
+        </select>
+    </div>
+</div>
+
+<div id="iaLoading"></div>
+<script>document.getElementById('iaLoading').innerHTML = window.skeleton('tabel', 8, 'Membaca transaksi insider');</script>
+<div id="iaMessage" class="ia-empty" style="display:none;"></div>
+
+<div id="iaBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="ia-section-title">Tentang Data Ini</div>
+        <div class="ia-finding">
+            <h4>Dua masalah kualitas data ditemukan sebelum halaman ini dibangun, dan ditangani secara eksplisit.</h4>
+            <p><strong>Persentase kepemilikan</strong> dari sumbernya TIDAK konsisten satuannya antar baris (kadang
+            pecahan, kadang sudah dalam bentuk persen) &mdash; jadi field itu tidak dipakai untuk sortir/hitung apa
+            pun di sini. <strong>Harga transaksi kosong pada 68% baris</strong>
+            (67% dari transaksi Beli, 63% dari Jual) &mdash; kalau kosong, halaman ini memakai harga penutupan
+            saham pada tanggal transaksi atau tanggal tersedia sebelumnya sebagai <span class="ia-badge ia-badge-est">estimasi</span>, ditandai jelas
+            beda dari harga eksekusi yang <span class="ia-badge ia-badge-est" style="color:var(--text-mid);">dilaporkan</span> sungguhan.</p>
+        </div>
+        <div class="ia-finding">
+            <h4>Bukan semua "Beli" berarti insider membeli di pasar terbuka.</h4>
+            <p>Data sumbernya mencampur transaksi pasar sungguhan dengan aksi korporasi/mekanis (eksekusi opsi
+            saham karyawan, waran, stock split, dividen saham, dst.). Filter <strong>"Beli &amp; Jual saja"</strong>
+            (default) menyaring supaya cuma transaksi pasar diskresioner yang tampil.</p>
+        </div>
+        <div class="ia-stat-grid" style="margin-top:14px;" id="iaStats"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="ia-section-title" id="iaTableTitle">Transaksi</div>
+        <div style="overflow-x:auto;">
+            <table class="ia-table">
+                <thead>
+                    <tr>
+                        <th class="ia-left">Tanggal</th>
+                        <th class="ia-left">Kode</th>
+                        <th class="ia-left">Nama</th>
+                        <th class="ia-left">Tipe</th>
+                        <th class="ia-left">Tujuan</th>
+                        <th class="ia-left">Sumber</th>
+                        <th>Lembar</th>
+                        <th>Harga</th>
+                        <th>Nilai (Rp)</th>
+                    </tr>
+                </thead>
+                <tbody id="iaTableBody"></tbody>
+            </table>
+        </div>
+        <div class="ia-note" id="iaTableNote"></div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var iaData = null;
+
+    function idNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d || 0, maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function esc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+
+    function rupiahShort(v) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        var abs = Math.abs(v);
+        if (abs >= 1e12) { return idNum(v / 1e12, 2) + ' T'; }
+        if (abs >= 1e9) { return idNum(v / 1e9, 2) + ' M'; }
+        if (abs >= 1e6) { return idNum(v / 1e6, 1) + ' jt'; }
+        return idNum(v, 0);
+    }
+
+    function actionBadge(row) {
+        var cls = row.action_type === 'ACTION_TYPE_BUY' ? 'ia-badge-buy'
+                : row.action_type === 'ACTION_TYPE_SELL' ? 'ia-badge-sell' : 'ia-badge-other';
+        var html = '<span class="ia-badge ' + cls + '">' + esc(row.action_label) + '</span>';
+        if (row.is_controller) { html += '<span class="ia-badge ia-badge-controller">Pengendali</span>'; }
+        (row.badges || []).forEach(function (b) {
+            if (b !== 'Pengendali') { html += '<span class="ia-badge ia-badge-role">' + esc(b) + '</span>'; }
+        });
+        return html;
+    }
+
+    function sourceBadge(row) {
+        if (!row.source) { return '<span class="ia-flat">—</span>'; }
+        if (row.cross_source_confirmed) {
+            return '<span class="ia-badge ia-badge-source-confirmed" title="Dilaporkan terpisah oleh KSEI dan IDX untuk transaksi yang sama -- digabung jadi satu baris di sini, bukan dihitung dua kali.">'
+                 + esc(row.source) + ' ✓</span>';
+        }
+        return '<span class="ia-badge ia-badge-source">' + esc(row.source) + '</span>';
+    }
+
+    function currentRows() {
+        if (!iaData) { return []; }
+        var q = ($('#iaFilter').val() || '').trim().toUpperCase();
+        var key = $('#iaSort').val();
+        var rows = iaData.rows.filter(function (r) {
+            return !q || r.ticker.indexOf(q) !== -1;
+        });
+        return rows.slice().sort(function (a, b) {
+            if (key === 'date') { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); }
+            var x = a[key], y = b[key];
+            if (x === null || x === undefined) { return 1; }
+            if (y === null || y === undefined) { return -1; }
+            return Math.abs(y) - Math.abs(x);
+        });
+    }
+
+    function renderStats(d) {
+        var c = d.counts;
+        $('#iaStats').html(
+            '<div><div class="ia-stat-label">Emiten (semua histori)</div><div class="ia-stat-value">' + idNum(d.total_emiten) + '</div></div>'
+            + '<div><div class="ia-stat-label">Beli (rentang dipilih)</div><div class="ia-stat-value ia-up">' + idNum(c.buy) + '</div></div>'
+            + '<div><div class="ia-stat-label">Jual (rentang dipilih)</div><div class="ia-stat-value ia-down">' + idNum(c.sell) + '</div></div>'
+            + '<div><div class="ia-stat-label">Aksi korporasi</div><div class="ia-stat-value ia-flat">' + idNum(c.other) + '</div></div>');
+    }
+
+    function renderTable() {
+        var rows = currentRows();
+        var body = $('#iaTableBody').empty();
+        if (!rows.length) {
+            body.append('<tr><td colspan="9" class="ia-empty">Tidak ada transaksi yang cocok dengan filter ini.</td></tr>');
+            $('#iaTableNote').text('');
+            return;
+        }
+        rows.forEach(function (r) {
+            var priceHtml = r.price_used
+                ? idNum(r.price_used, 0) + (r.price_source === 'estimated_close'
+                    ? ' <span class="ia-badge ia-badge-est">estimasi</span>'
+                    : ' <span class="ia-badge ia-badge-est" style="color:var(--text-mid);">dilaporkan</span>')
+                : '<span class="ia-flat">—</span>';
+            body.append('<tr>'
+                + '<td class="ia-left">' + esc(r.date) + '</td>'
+                + '<td class="ia-left"><span class="ia-ticker" data-ticker="' + esc(r.ticker) + '">' + esc(r.ticker) + '</span></td>'
+                + '<td class="ia-left">' + esc(r.name) + '<div class="ia-flat" style="font-size:10.5px;">' + esc(r.nationality) + '</div></td>'
+                + '<td class="ia-left">' + actionBadge(r) + '</td>'
+                + '<td class="ia-left ia-purpose">' + (r.purpose ? esc(r.purpose) : '<span class="ia-flat">Tidak dicantumkan</span>') + '</td>'
+                + '<td class="ia-left">' + sourceBadge(r) + '</td>'
+                + '<td class="' + (r.shares_changed >= 0 ? 'ia-up' : 'ia-down') + '">'
+                +   (r.shares_changed >= 0 ? '+' : '') + idNum(r.shares_changed) + '</td>'
+                + '<td>' + priceHtml + '</td>'
+                + '<td>' + rupiahShort(r.value_idr) + '</td>'
+                + '</tr>');
+        });
+        $('#iaTableNote').html('Menampilkan <strong>' + idNum(rows.length) + '</strong> transaksi. '
+            + 'Klik kode saham untuk membuka Halaman Saham-nya.');
+    }
+
+    function load() {
+        $('#iaBody').hide();
+        $('#iaMessage').hide();
+        $('#iaLoading').show();
+
+        $.post('/insider-activity-data', {
+            days_back: $('#iaDaysBack').val(), action_filter: $('#iaAction').val()
+        }).done(function (d) {
+            $('#iaLoading').hide();
+            if (!d || !d.available) {
+                $('#iaMessage').text((d && d.message) || 'Data tidak tersedia.').show();
+                return;
+            }
+            iaData = d;
+            $('#iaTableTitle').text('Transaksi (per ' + d.as_of + ')');
+            renderStats(d);
+            renderTable();
+            $('#iaBody').show();
+        }).fail(function () {
+            $('#iaLoading').hide();
+            $('#iaMessage').text('Gagal memuat data.').show();
+        });
+    }
+
+    $(document).ready(function () {
+        $('#iaAction, #iaDaysBack').on('change', load);
+        $('#iaFilter').on('input', renderTable);
+        $('#iaSort').on('change', renderTable);
+
+        $('#iaTableBody').on('click', '.ia-ticker', function () {
+            window.location.href = '/saham/' + encodeURIComponent($(this).data('ticker'));
+        });
+
+        load();
+    });
+</script>
+{% endblock %}

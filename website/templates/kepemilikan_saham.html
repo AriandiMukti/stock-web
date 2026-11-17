@@ -1,0 +1,966 @@
+{% extends "base.html" %}
+{% block title %}Kepemilikan Saham{% endblock %}
+{% block page_title %}Kepemilikan Saham{% endblock %}
+
+{% block content %}
+
+<style>
+    .ks-controls { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 18px; flex-wrap: wrap; }
+    .ks-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+
+    /* Kartu identitas: profil di kiri, donat komposisi di kanan. Turun
+       jadi satu kolom di bawah 900px supaya donat tidak terhimpit. */
+    .ks-hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 24px; }
+    @media (max-width: 900px) { .ks-hero { grid-template-columns: 1fr; } }
+
+    .ks-ticker { font-family: var(--font-ui); font-size: 34px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.05; }
+    .ks-company { color: var(--text-mid); font-size: 13px; margin-top: 2px; }
+    .ks-sector { color: var(--text-dim); font-size: 11px; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.6px; }
+
+    .ks-facts { margin-top: 20px; }
+    .ks-fact { display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+    .ks-fact:last-child { border-bottom: 0; }
+    .ks-fact-key { flex: 0 0 46%; color: var(--text-dim); font-size: 12px; }
+    .ks-fact-val { font-family: var(--font-mono); font-size: 14px; color: var(--text); }
+    .ks-fact-sub { color: var(--text-dim); font-size: 11px; font-family: var(--font-mono); }
+
+    .ks-donut-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+    .ks-donut { width: 100%; max-width: 260px; height: 220px; }
+    .ks-legend { width: 100%; display: flex; flex-direction: column; gap: 7px; }
+    .ks-legend-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-mid); }
+    .ks-swatch { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+    .ks-legend-val { margin-left: auto; font-family: var(--font-mono); color: var(--text); }
+
+    .ks-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-top: 16px; }
+    .ks-stat-value { font-family: var(--font-mono); font-size: 26px; font-weight: 600; margin-top: 4px; line-height: 1; }
+    .ks-stat-delta { font-size: 11px; font-family: var(--font-mono); margin-top: 5px; }
+    .ks-spark { height: 92px; margin-top: 8px; }
+
+
+
+    .ks-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+                   color: var(--text-dim); padding: 0 10px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .ks-table th:nth-child(1), .ks-table th:nth-child(2), .ks-table th:nth-child(3) { text-align: left; }
+    .ks-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right; font-family: var(--font-mono); white-space: nowrap; }
+    .ks-table td:nth-child(1), .ks-table td:nth-child(2), .ks-table td:nth-child(3) { text-align: left; }
+    .ks-table td:nth-child(2) { font-family: var(--font-ui); white-space: normal; min-width: 190px; }
+    .ks-table tbody tr:hover { background: var(--raised); }
+    .ks-idx { color: var(--text-dim); }
+
+    .ks-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-family: var(--font-ui);
+              font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+    .ks-tag-local { color: #7DA6FF; border-color: rgba(125, 166, 255, 0.35); background: rgba(125, 166, 255, 0.08); }
+    .ks-tag-foreign { color: #FFB454; border-color: rgba(255, 180, 84, 0.35); background: rgba(255, 180, 84, 0.08); }
+    .ks-tag-person { color: #C4A5FF; border-color: rgba(196, 165, 255, 0.32); background: rgba(196, 165, 255, 0.07); }
+    .ks-tag-public { color: var(--accum); border-color: rgba(0, 229, 199, 0.30); background: rgba(0, 229, 199, 0.07); }
+    .ks-tag-unknown { color: var(--text-dim); border-color: var(--line); }
+    .ks-ctrl { color: var(--accum); font-size: 10px; margin-left: 6px; }
+
+    .ks-note { color: var(--text-dim); font-size: 11px; line-height: 1.6; margin-top: 12px; }
+    .ks-note code { color: var(--text-mid); background: var(--raised); padding: 1px 5px; border-radius: 4px; font-size: 10.5px; }
+
+
+    /* Bar dua sisi lokal/asing per tipe investor -- rincian yang tidak
+       ada di halaman aslinya, tapi datanya sudah ikut di file KSEI. */
+    .ks-bd-row { display: grid; grid-template-columns: 120px 1fr 74px; gap: 10px; align-items: center; padding: 6px 0; }
+    .ks-bd-name { font-size: 12px; color: var(--text-mid); }
+    .ks-bd-track { display: flex; height: 16px; border-radius: 4px; overflow: hidden; background: var(--raised); }
+    .ks-bd-local { background: #4C7DF0; }
+    .ks-bd-foreign { background: #FFB454; }
+    .ks-bd-val { font-family: var(--font-mono); font-size: 11px; text-align: right; color: var(--text-mid); }
+
+    /* Panel keluaran tombol perawatan: keluaran CLI apa adanya, jadi
+       monospace dan bisa di-scroll sendiri. */
+    .ks-task-log { margin-top: 12px; background: var(--void); border: 1px solid var(--line);
+                   border-radius: 8px; padding: 10px 12px; font-family: var(--font-mono);
+                   font-size: 11px; line-height: 1.7; color: var(--text-mid);
+                   max-height: 190px; overflow: auto; white-space: pre-wrap; }
+
+    /* Tabel peringkat: header bisa diklik untuk sortir. */
+    .ks-rank-controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+    .ks-rank-check { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-mid); }
+    .ks-table th.ks-sortable { cursor: pointer; user-select: none; }
+    .ks-table th.ks-sortable:hover { color: var(--text); }
+    .ks-table th.ks-sort-active { color: var(--accum); }
+    .ks-sort-arrow { font-size: 8px; margin-left: 3px; }
+    .ks-rank-ticker { font-family: var(--font-ui); font-weight: 600; color: var(--accum); cursor: pointer; }
+    .ks-rank-ticker:hover { text-decoration: underline; }
+</style>
+
+<div class="ks-controls">
+    <div class="ks-field">
+        <label>Kode Saham</label>
+        <input type="text" id="ksStock" class="form-control form-control-sm" placeholder="ADRO"
+               maxlength="6" style="width:110px; text-transform:uppercase;" value="{{ defaultStock }}">
+    </div>
+    <button type="button" class="btn btn-sm btn-primary" id="ksLoadBtn">Tampilkan</button>
+
+    <div style="flex:1 1 auto;"></div>
+
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="ksRefreshKseiBtn"
+            title="python -m website.ownership fetch --months 2">Refresh KSEI</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="ksSyncBtn"
+            title="python -m website.ownership sync &lt;kode saham&gt;">Sync Emiten</button>
+</div>
+
+<div class="ks-task-log" id="ksTaskLog" style="display:none;"></div>
+
+<div id="ksLoading" style="display:none;"></div>
+<script>document.getElementById('ksLoading').innerHTML = window.skeleton('panel', 5, 'Memuat data kepemilikan');</script>
+<div id="ksMessage" class="ks-empty" style="display:none;"></div>
+
+<div id="ksResults" style="display:none;">
+
+    <div class="content-card">
+        <div class="ks-hero">
+            <div>
+                <div class="ks-ticker" id="ksTicker">—</div>
+                <div class="ks-company" id="ksCompany"></div>
+                <div class="ks-sector" id="ksSector"></div>
+
+                <div class="ks-facts">
+                    <div class="ks-fact">
+                        <div class="ks-fact-key">Market Cap</div>
+                        <div><span class="ks-fact-val" id="ksMarketCap">—</span></div>
+                    </div>
+                    <div class="ks-fact">
+                        <div class="ks-fact-key">Total Saham Scripless (Ribu Lot)</div>
+                        <div>
+                            <span class="ks-fact-val" id="ksScripless">—</span>
+                            <span class="ks-fact-sub" id="ksScriplessPct"></span>
+                        </div>
+                    </div>
+                    <div class="ks-fact">
+                        <div class="ks-fact-key">Free Float</div>
+                        <div>
+                            <span class="ks-fact-val" id="ksFreeFloat">—</span>
+                            <span class="ks-fact-sub" id="ksFreeFloatSrc"></span>
+                        </div>
+                    </div>
+                    <div class="ks-fact">
+                        <div class="ks-fact-key">Jumlah Pemegang Saham</div>
+                        <div>
+                            <span class="ks-fact-val" id="ksSid">—</span>
+                            <span class="ks-fact-sub" id="ksSidSrc"></span>
+                        </div>
+                    </div>
+                    <div class="ks-fact">
+                        <div class="ks-fact-key">Average Jumlah Saham / Investor Retail</div>
+                        <div>
+                            <span class="ks-fact-val" id="ksAvgRetail">—</span>
+                            <span class="ks-fact-sub" id="ksAvgRetailSrc"></span>
+                        </div>
+                    </div>
+                    <div class="ks-fact">
+                        <div class="ks-fact-key">Konglo</div>
+                        <div><span class="ks-fact-val" id="ksKonglo">—</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ks-donut-wrap">
+                <div class="ks-donut" id="ksDonut"></div>
+                <div class="ks-legend" id="ksLegend"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ks-stat-grid">
+        <div class="content-card">
+            <div class="ks-stat-label">% Foreign Total</div>
+            <div class="ks-stat-value" id="ksForeignValue" style="color:#7DA6FF;">—</div>
+            <div class="ks-stat-delta" id="ksForeignDelta"></div>
+            <div class="ks-spark" id="ksForeignSpark"></div>
+        </div>
+        <div class="content-card">
+            <div class="ks-stat-label">% Foreign Hidden Player</div>
+            <div class="ks-stat-value" id="ksHiddenValue" style="color:#FFB454;">—</div>
+            <div class="ks-stat-delta" id="ksHiddenDelta"></div>
+            <div class="ks-spark" id="ksHiddenSpark"></div>
+        </div>
+        <div class="content-card">
+            <div class="ks-stat-label">% Retail (Pahlawan Bursa)</div>
+            <div class="ks-stat-value ks-up" id="ksRetailValue">—</div>
+            <div class="ks-stat-delta" id="ksRetailDelta"></div>
+            <div class="ks-spark" id="ksRetailSpark"></div>
+            <div class="ks-note" id="ksRetailCarve" style="margin-top:6px;"></div>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="ks-section-title" id="ksHolderTitle">Daftar Pemegang Saham</div>
+        <div style="overflow-x:auto;">
+            <table class="ks-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Nama Investor</th>
+                        <th>Tipe</th>
+                        <th id="ksThPrevLot">(Lot) Sebelumnya</th>
+                        <th id="ksThPrevPct">% Sebelumnya</th>
+                        <th id="ksThLot">(Lot) Terkini</th>
+                        <th id="ksThPct">% Terkini</th>
+                        <th>Val (M)</th>
+                        <th>Change</th>
+                    </tr>
+                </thead>
+                <tbody id="ksHolderBody"></tbody>
+            </table>
+        </div>
+        <div class="ks-note" id="ksHolderNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="ks-section-title">Rincian per Tipe Investor (KSEI)</div>
+        <div id="ksBreakdown"></div>
+        <div class="ks-note">
+            Biru = investor lokal, oranye = investor asing. Persentase dihitung terhadap total saham
+            scripless, bukan total saham tercatat &mdash; KSEI hanya mencatat saham yang ada di C-BEST.
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="ks-section-title">Tren Komposisi</div>
+        <div id="ksTrendChart" style="height:340px;"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="ks-section-title" id="ksRankTitle">Peringkat Emiten</div>
+
+        <div class="ks-rank-controls">
+            <div class="ks-field">
+                <label>Cari kode</label>
+                <input type="text" id="ksRankFilter" class="form-control form-control-sm"
+                       placeholder="BB, ADRO..." style="width:130px; text-transform:uppercase;">
+            </div>
+            <div class="ks-field">
+                <label>Urut berdasarkan</label>
+                <select id="ksRankSort" class="form-select form-select-sm" style="width:210px;">
+                    <option value="market_cap">Market Cap</option>
+                    <option value="sid">Jumlah Pemegang Saham (SID)</option>
+                    <option value="pct_foreign">% Foreign Total</option>
+                    <option value="pct_retail_raw">% Individu (KSEI)</option>
+                    <option value="pct_local_non_retail">% Lokal Non-Ritel</option>
+                    <option value="free_float">% Free Float</option>
+                    <option value="scripless_pct_of_listed">% Scripless</option>
+                    <option value="delta_foreign">Perubahan % Foreign</option>
+                    <option value="delta_retail">Perubahan % Individu</option>
+                </select>
+            </div>
+            <div class="ks-field">
+                <label>Arah</label>
+                <select id="ksRankDir" class="form-select form-select-sm" style="width:130px;">
+                    <option value="desc">Terbesar dulu</option>
+                    <option value="asc">Terkecil dulu</option>
+                </select>
+            </div>
+            <label class="ks-rank-check">
+                <input type="checkbox" id="ksRankSidOnly"> Hanya yang punya data SID
+            </label>
+        </div>
+
+        <div style="overflow-x:auto;">
+            <table class="ks-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th class="ks-sortable" data-sort="ticker">Kode</th>
+                        <th class="ks-sortable" data-sort="market_cap">Market Cap</th>
+                        <th class="ks-sortable" data-sort="sid">SID</th>
+                        <th class="ks-sortable" data-sort="free_float">Free Float</th>
+                        <th class="ks-sortable" data-sort="pct_foreign">% Foreign</th>
+                        <th class="ks-sortable" data-sort="delta_foreign">&Delta; Foreign</th>
+                        <th class="ks-sortable" data-sort="pct_retail_raw">% Individu</th>
+                        <th class="ks-sortable" data-sort="delta_retail">&Delta; Individu</th>
+                        <th class="ks-sortable" data-sort="pct_local_non_retail">% Lokal Non-Ritel</th>
+                        <th class="ks-sortable" data-sort="scripless_pct_of_listed">% Scripless</th>
+                    </tr>
+                </thead>
+                <tbody id="ksRankBody"></tbody>
+            </table>
+        </div>
+        <div class="ks-note" id="ksRankNote"></div>
+    </div>
+
+    <div class="ks-note" id="ksSourceNote"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script>
+    var KS_BLUE = '#4C7DF0';        // foreign named
+    var KS_BLUE_SOFT = '#7DA6FF';   // foreign hidden player
+    var KS_GREEN = '#16E0AE';       // retail
+    var KS_GREY = '#586479';        // lokal non-ritel
+
+    // Angka Indonesia: titik ribuan, koma desimal. Dipakai di seluruh
+    // halaman supaya format kartu, tabel dan tooltip chart konsisten.
+    function idNum(value, decimals) {
+        if (value === null || value === undefined || isNaN(value)) { return '—'; }
+        return Number(value).toLocaleString('id-ID', {
+            minimumFractionDigits: decimals || 0,
+            maximumFractionDigits: decimals === undefined ? 0 : decimals
+        });
+    }
+
+    function pct(value, decimals) {
+        if (value === null || value === undefined || isNaN(value)) { return '—'; }
+        return idNum(value, decimals === undefined ? 2 : decimals) + '%';
+    }
+
+    // Rupiah dipadatkan ke satuan terbesar yang masih menyisakan angka
+    // yang bisa dibaca sekilas -- market cap triliunan dan nilai
+    // kepemilikan jutaan tidak bisa pakai skala yang sama.
+    function rupiahShort(value) {
+        if (!value || isNaN(value)) { return '—'; }
+        var abs = Math.abs(value);
+        if (abs >= 1e12) { return idNum(value / 1e12, 3) + ' T'; }
+        if (abs >= 1e9) { return idNum(value / 1e9, 3) + ' M'; }
+        if (abs >= 1e6) { return idNum(value / 1e6, 1) + ' jt'; }
+        return idNum(value, 0);
+    }
+
+    function deltaHtml(value, unit) {
+        if (value === null || value === undefined || isNaN(value)) {
+            return '<span class="ks-flat">belum ada pembanding</span>';
+        }
+        var cls = value > 0 ? 'ks-up' : (value < 0 ? 'ks-down' : 'ks-flat');
+        var sign = value > 0 ? '+' : '';
+        return '<span class="' + cls + '">' + sign + idNum(value, 2) + (unit || '') + '</span>';
+    }
+
+    function esc(text) {
+        return $('<div>').text(text === null || text === undefined ? '' : text).html();
+    }
+
+    // ------------------------------------------------------------- charts
+
+    // Plotly default-nya format Inggris (titik desimal, koma ribuan),
+    // sedangkan seluruh teks halaman pakai idNum() alias format Indonesia.
+    // `separators` menyamakan keduanya: karakter pertama = pemisah
+    // desimal, kedua = pemisah ribuan. Tanpa ini tooltip chart menulis
+    // "12.45%" sementara kartu di sebelahnya menulis "12,45%".
+    var BASE_LAYOUT = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        separators: ',.',
+        font: { color: '#93A2B6', family: 'JetBrains Mono', size: 10 }
+    };
+    var PLOT_CONFIG = { responsive: true, displaylogo: false, displayModeBar: false };
+
+    // Kalau tab/jendela ini TIDAK terlihat saat Plotly.newPlot() dipanggil
+    // (tab background, jendela diminimize), kontainernya berukuran nol di
+    // mata browser -- document.hidden true, window.innerWidth 0 -- dan
+    // Plotly menandai dirinya "container nol" secara PERMANEN saat itu.
+    // Sudah dicoba memperbaikinya SESUDAH digambar lewat Plotly.Plots.
+    // resize(): promise-nya selesai tanpa error, tapi lebarnya tetap
+    // salah -- tanda flag internal itu tidak pernah dibersihkan oleh
+    // resize() biasa. Jadi perbaikannya bukan "betulkan sesudahnya", tapi
+    // "jangan pernah gambar sama sekali saat halaman belum terlihat":
+    // whenVisible() menunda render sampai document.hidden benar-benar
+    // false, supaya Plotly.newPlot() yang pertama kali selalu mengukur
+    // kontainer yang ukurannya sudah benar.
+    function whenVisible(callback) {
+        if (!document.hidden) { callback(); return; }
+        function onVisible() {
+            if (!document.hidden) {
+                document.removeEventListener('visibilitychange', onVisible);
+                callback();
+            }
+        }
+        document.addEventListener('visibilitychange', onVisible);
+    }
+
+    // Lapis kedua, independen dari whenVisible(): render() menggambar 5
+    // chart berturut-turut secara sinkron tanpa jeda ke browser. Kalau
+    // Plotly mengukur lebar kontainer lewat cache/batch reflow browser
+    // (bukan reflow segar per chart), chart yang digambar belakangan bisa
+    // dapat angka basi -- diverifikasi: kontainer terbukti 284px lewat
+    // getBoundingClientRect() PERSIS saat Plotly.Plots.resize() dipanggil,
+    // tapi chart tetap menggambar di 217px. Jadi lebar diukur sendiri di
+    // sini (offsetHeight dibaca dulu buat memaksa reflow segar) dan
+    // diberikan eksplisit ke Plotly sebagai layout.width, bukan diserahkan
+    // ke pengukuran otomatis Plotly yang terbukti tidak bisa diandalkan
+    // untuk kasus lima chart berurutan ini. `responsive: true` di
+    // PLOT_CONFIG tetap dipertahankan supaya resize jendela yang SUNGGUHAN
+    // sesudahnya (User mengubah ukuran browser) masih berfungsi normal.
+    function measuredWidth(id, fallback) {
+        var el = document.getElementById(id);
+        if (!el) { return fallback; }
+        void el.offsetHeight; // paksa reflow segar sebelum membaca lebar
+        return el.clientWidth || fallback;
+    }
+
+    // Halaman ini menggambar 5 chart Plotly (donat + 3 sparkline + tren).
+    // Kalau kelimanya dipanggil sinkron berturut-turut tanpa jeda ke
+    // browser sama sekali, yang kedua sampai kelima terbukti mengukur
+    // lebar kontainer yang basi -- diverifikasi visual (bukan cuma lewat
+    // DOM query): garis chart berhenti di ~76% lebar kartunya, menyisakan
+    // ruang kosong di kanan, walau kontainernya sendiri sudah benar sejak
+    // awal. Memberi setiap panggilan giliran sendiri lewat setTimeout
+    // memperbaikinya (diuji: 217px -> 303px, konsisten di ketiganya).
+    // requestAnimationFrame TIDAK dipakai untuk jeda ini -- browser bisa
+    // membekukannya total kalau tab sedang tidak aktif/di-background,
+    // sedangkan setTimeout tetap jalan.
+    function runSequentially(steps) {
+        var i = 0;
+        function next() {
+            if (i >= steps.length) { return; }
+            steps[i++]();
+            setTimeout(next, 20);
+        }
+        next();
+    }
+
+    function renderDonut(data) {
+        var slices = [
+            { label: 'Foreign Named', value: data.pct_foreign_named, color: KS_BLUE },
+            { label: 'Foreign Hidden Player', value: data.pct_foreign_hidden, color: KS_BLUE_SOFT },
+            { label: 'Retail (Pahlawan Bursa)', value: data.pct_retail, color: KS_GREEN },
+            { label: 'Lokal Non-Ritel', value: data.pct_local_non_retail, color: KS_GREY }
+        ].filter(function (slice) { return slice.value > 0; });
+
+        Plotly.newPlot('ksDonut', [{
+            type: 'pie',
+            hole: 0.72,
+            sort: false,
+            direction: 'clockwise',
+            labels: slices.map(function (s) { return s.label; }),
+            values: slices.map(function (s) { return s.value; }),
+            marker: { colors: slices.map(function (s) { return s.color; }), line: { width: 0 } },
+            textinfo: 'none',
+            hovertemplate: '%{label}<br>%{value:.2f}%<extra></extra>'
+        }], $.extend({}, BASE_LAYOUT, {
+            width: measuredWidth('ksDonut', 260),
+            height: 220,
+            margin: { t: 0, l: 0, r: 0, b: 0 },
+            showlegend: false,
+            annotations: [
+                {
+                    text: idNum(data.pct_retail, 1) + '%',
+                    x: 0.5, y: 0.55, showarrow: false,
+                    font: { size: 26, color: '#F4F7FB', family: "'Plus Jakarta Sans', sans-serif" }
+                },
+                {
+                    text: 'RETAIL<br>(PAHLAWAN BURSA)',
+                    x: 0.5, y: 0.34, showarrow: false,
+                    font: { size: 8.5, color: '#93A2B6', family: "'Plus Jakarta Sans', sans-serif" }
+                }
+            ]
+        }), PLOT_CONFIG);
+
+        var legend = slices.map(function (slice) {
+            return '<div class="ks-legend-row">'
+                 + '<span class="ks-swatch" style="background:' + slice.color + ';"></span>'
+                 + '<span>' + slice.label + '</span>'
+                 + '<span class="ks-legend-val">' + pct(slice.value) + '</span>'
+                 + '</div>';
+        }).join('');
+        $('#ksLegend').html(legend);
+    }
+
+    function hexToRgba(hex, alpha) {
+        var value = hex.replace('#', '');
+        var num = parseInt(value, 16);
+        return 'rgba(' + ((num >> 16) & 255) + ',' + ((num >> 8) & 255) + ',' + (num & 255) + ',' + alpha + ')';
+    }
+
+    function renderSparkline(divId, trend, key, color) {
+        var labels = trend.map(function (row) { return row.label; });
+        var values = trend.map(function (row) { return row[key]; });
+
+        Plotly.newPlot(divId, [{
+            type: 'scatter',
+            mode: 'lines+markers',
+            x: labels,
+            y: values,
+            line: { color: color, width: 2, shape: 'spline', smoothing: 0.6 },
+            marker: { size: 4, color: color },
+            fill: 'tozeroy',
+            fillcolor: hexToRgba(color, 0.12),
+            hovertemplate: '%{x}: %{y:.2f}%<extra></extra>'
+        }], $.extend({}, BASE_LAYOUT, {
+            width: measuredWidth(divId, 280),
+            height: 92,
+            margin: { t: 6, l: 0, r: 0, b: 18 },
+            showlegend: false,
+            xaxis: { showgrid: false, zeroline: false, tickfont: { size: 8.5 }, fixedrange: true },
+            yaxis: { visible: false, fixedrange: true }
+        }), PLOT_CONFIG);
+    }
+
+    function renderTrend(trend) {
+        var labels = trend.map(function (row) { return row.label; });
+        var series = [
+            { key: 'pct_foreign', name: '% Foreign Total', color: KS_BLUE_SOFT },
+            { key: 'pct_retail', name: '% Retail', color: KS_GREEN },
+            { key: 'pct_local_non_retail', name: '% Lokal Non-Ritel', color: KS_GREY }
+        ];
+
+        Plotly.newPlot('ksTrendChart', series.map(function (item) {
+            return {
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: item.name,
+                x: labels,
+                y: trend.map(function (row) { return row[item.key]; }),
+                line: { color: item.color, width: 2, shape: 'spline', smoothing: 0.5 },
+                marker: { size: 5 },
+                hovertemplate: '%{x} — %{y:.2f}%<extra>' + item.name + '</extra>'
+            };
+        }), $.extend({}, BASE_LAYOUT, {
+            width: measuredWidth('ksTrendChart', 900),
+            height: 340,
+            margin: { t: 10, l: 45, r: 20, b: 30 },
+            showlegend: true,
+            legend: { orientation: 'h', y: -0.14, font: { size: 10 } },
+            hovermode: 'x unified',
+            xaxis: { gridcolor: 'rgba(255,255,255,0.045)', tickfont: { size: 9.5 } },
+            yaxis: { ticksuffix: '%', gridcolor: 'rgba(255,255,255,0.045)', tickfont: { size: 9.5 } }
+        }), PLOT_CONFIG);
+    }
+
+    function renderBreakdown(breakdown) {
+        var peak = Math.max.apply(null, breakdown.map(function (row) {
+            return row.local_pct + row.foreign_pct;
+        }).concat([1]));
+
+        var html = breakdown.map(function (row) {
+            var total = row.local_pct + row.foreign_pct;
+            if (total <= 0) { return ''; }
+            // Lebar bar diskalakan ke tipe investor terbesar, bukan ke
+            // 100% -- kalau tidak, semua tipe kecil jadi garis tak
+            // terbaca di sebelah "Individu" atau "Korporasi".
+            var scale = 100 / peak;
+            return '<div class="ks-bd-row">'
+                 + '<div class="ks-bd-name">' + esc(row.label) + '</div>'
+                 + '<div class="ks-bd-track">'
+                 +   '<div class="ks-bd-local" style="width:' + (row.local_pct * scale) + '%;" '
+                 +        'title="Lokal ' + pct(row.local_pct) + '"></div>'
+                 +   '<div class="ks-bd-foreign" style="width:' + (row.foreign_pct * scale) + '%;" '
+                 +        'title="Asing ' + pct(row.foreign_pct) + '"></div>'
+                 + '</div>'
+                 + '<div class="ks-bd-val">' + pct(total) + '</div>'
+                 + '</div>';
+        }).join('');
+        $('#ksBreakdown').html(html);
+    }
+
+    function renderHolders(data) {
+        var holders = data.holders || [];
+        var body = $('#ksHolderBody').empty();
+
+        $('#ksThPrevLot').text('(Lot) ' + (data.holder_prev_month || 'Sebelumnya'));
+        $('#ksThPrevPct').text('% ' + (data.holder_prev_month || 'Sebelumnya'));
+        $('#ksThLot').text('(Lot) ' + (data.holder_month || 'Terkini'));
+        $('#ksThPct').text('% ' + (data.holder_month || 'Terkini'));
+        $('#ksHolderTitle').text('Daftar Pemegang Saham'
+            + (data.holder_month ? ' (' + data.holder_month + ')' : ''));
+
+        if (!holders.length) {
+            body.append('<tr><td colspan="9" class="ks-empty">'
+                + 'Registri pemegang saham IDX belum tersedia untuk emiten ini.</td></tr>');
+            $('#ksHolderNote').html('');
+            return;
+        }
+
+        holders.forEach(function (row, index) {
+            // 'public' = baris agregat masyarakat/treasury, 'person' =
+            // direksi/komisaris. Keduanya datang dari kategori resmi IDX,
+            // jadi bukan tebakan -- hanya Local/Foreign yang heuristik.
+            var TAGS = {
+                foreign: ['ks-tag-foreign', 'Foreign'],
+                local:   ['ks-tag-local', 'Local'],
+                person:  ['ks-tag-person', 'Perorangan'],
+                public:  ['ks-tag-public', 'Publik'],
+                unknown: ['ks-tag-unknown', 'N/A']
+            };
+            var tag = TAGS[row.nationality] || TAGS.unknown;
+            var tagClass = tag[0], tagText = tag[1];
+
+            var change = '—';
+            if (row.change_lot !== null && row.change_lot !== undefined) {
+                if (Math.abs(row.change_lot) < 0.5) {
+                    change = '<span class="ks-flat">0</span>';
+                } else {
+                    var cls = row.change_lot > 0 ? 'ks-up' : 'ks-down';
+                    var sign = row.change_lot > 0 ? '+' : '';
+                    change = '<span class="' + cls + '">' + sign + idNum(row.change_lot, 0) + '</span>';
+                }
+            }
+
+            body.append(
+                '<tr>'
+                + '<td class="ks-idx">' + (index + 1) + '</td>'
+                + '<td>' + esc(row.name)
+                +   (row.controller ? '<span class="ks-ctrl" title="Pemegang saham pengendali">★</span>' : '')
+                +   (row.from_override ? '<span class="ks-ctrl" title="Diisi manual lewat overrides.json — tidak ada di registri IDX">*</span>' : '')
+                +   '<div class="ks-idx" style="font-size:10.5px;">' + esc(row.category) + '</div>'
+                + '</td>'
+                + '<td><span class="ks-tag ' + tagClass + '">' + tagText + '</span></td>'
+                + '<td>' + (row.prev_lot === null ? '—' : idNum(row.prev_lot, 0)) + '</td>'
+                + '<td>' + (row.prev_pct === null ? '—' : pct(row.prev_pct)) + '</td>'
+                + '<td>' + idNum(row.lot, 0) + '</td>'
+                + '<td>' + pct(row.pct) + '</td>'
+                + '<td>' + rupiahShort(row.value) + '</td>'
+                + '<td>' + change + '</td>'
+                + '</tr>');
+        });
+
+        var overrideCount = holders.filter(function (row) { return row.from_override; }).length;
+        var note = 'Sumber: registri pemegang saham IDX. <em>Publik</em> dan <em>Perorangan</em> '
+                 + 'berasal dari kategori resmi IDX; <em>Local</em> / <em>Foreign</em> ditebak dari bentuk '
+                 + 'badan hukum pada nama, karena IDX tidak menerbitkan nasionalitas pemegang saham.';
+        // Registri IDX berhenti di 5%, padahal rentang 1-5% itulah yang
+        // menentukan Foreign Named dan carve-out ritel. Baris bertanda *
+        // datang dari overrides.json, bukan dari IDX.
+        note += '<br>Registri IDX hanya memuat pemegang &ge;5% plus direksi/komisaris. '
+              + 'Baris rentang 1&ndash;5% harus diisi lewat <code>overrides.json</code> '
+              + 'dan ditandai <span class="ks-ctrl">*</span>'
+              + (overrideCount ? ' (' + overrideCount + ' baris di sini).' : '.');
+        if (!data.holder_prev_month) {
+            note += '<br>Kolom pembanding dari IDX masih kosong: snapshot baru diambil sekali. '
+                  + 'Jalankan <code>python -m website.ownership registry ' + esc(data.ticker) + '</code> '
+                  + 'tiap awal bulan untuk membangun riwayatnya.';
+        }
+        $('#ksHolderNote').html(note);
+    }
+
+    function render(data) {
+        // Kontainer harus terlihat SEBELUM Plotly.newPlot dipanggil di
+        // bawah -- kalau masih display:none saat digambar, Plotly salah
+        // ukur lebarnya (kontainer tersembunyi = lebar 0 atau nilai basi),
+        // dan chart tidak menyesuaikan ulang otomatis begitu dimunculkan.
+        // Itu sebabnya sparkline sempat meluber keluar kartunya.
+        $('#ksResults').show();
+
+        $('#ksTicker').text(data.ticker);
+        $('#ksCompany').text(data.name || '—');
+        $('#ksSector').text([data.sector, data.sub_sector].filter(Boolean).join(' · '));
+
+        $('#ksMarketCap').text(rupiahShort(data.market_cap));
+        $('#ksScripless').text(idNum(data.scripless_ribu_lot, 3));
+        $('#ksScriplessPct').text(pct(data.scripless_pct_of_listed) + ' dari total saham');
+        $('#ksFreeFloat').text(data.free_float === null ? '—' : pct(data.free_float));
+        // Free float dari LBRPE adalah angka resmi Peraturan I-A; yang dari
+        // registri IDX jauh lebih longgar, jadi basisnya harus kelihatan.
+        $('#ksFreeFloatSrc').text(
+            data.free_float_source === 'LBRPE' ? 'resmi IDX (Peraturan I-A)'
+          : (data.free_float_source ? 'basis registri IDX, bukan angka resmi' : ''));
+        $('#ksKonglo').text(data.konglo || '—');
+
+        if (data.sid) {
+            $('#ksSid').text(idNum(data.sid, 0) + ' SID');
+            $('#ksSidSrc').text(data.sid_source === 'LBRPE' ? 'LBRPE' : 'diisi manual');
+            $('#ksAvgRetail').text(idNum(data.avg_retail_lot, 0) + ' lot / Rp'
+                + rupiahShort(data.avg_retail_value));
+            // Pembaginya total SID, termasuk institusi. Jumlah SID ritel
+            // saja tidak diterbitkan, jadi angka ini sedikit lebih rendah
+            // daripada halaman acuan (~2%). Bisa dikoreksi via retail_sid.
+            $('#ksAvgRetailSrc').text(
+                data.retail_sid_source === 'override' ? 'dibagi jumlah SID ritel'
+                                                      : 'dibagi total SID');
+        } else {
+            $('#ksSid').html('<span class="ks-flat">n/a — LBRPE belum tersedia</span>');
+            $('#ksSidSrc').text('');
+            $('#ksAvgRetail').html('<span class="ks-flat">n/a — butuh jumlah SID</span>');
+            $('#ksAvgRetailSrc').text('');
+        }
+
+        // "Pahlawan Bursa" = bucket Individu KSEI dikurangi individu
+        // bernama >1%; ditulis siapa saja yang dikeluarkan supaya angkanya
+        // bisa ditelusuri, bukan muncul entah dari mana.
+        var carved = data.named_individuals || [];
+        if (carved.length) {
+            var names = carved.map(function (item) {
+                return esc(item.name) + ' ' + pct(item.pct)
+                     + (item.source === 'override' ? '*' : '');
+            }).join(', ');
+            $('#ksRetailCarve').html(
+                'Individu bernama &gt;1% dikeluarkan dari ritel: ' + names
+                + '. Bucket Individu KSEI utuh = ' + pct(data.pct_retail_raw) + '.');
+        } else {
+            $('#ksRetailCarve').html(
+                'Tidak ada individu bernama &gt;1% di daftar pemegang saham, '
+                + 'jadi seluruh bucket Individu KSEI dihitung ritel.');
+        }
+
+        $('#ksForeignValue').text(pct(data.pct_foreign));
+        $('#ksForeignDelta').html(deltaHtml(data.delta_foreign, 'pp vs ' + (data.prev_month_label || 'bulan lalu')));
+        $('#ksHiddenValue').text(pct(data.pct_foreign_hidden));
+        $('#ksHiddenDelta').html(deltaHtml(data.delta_foreign, 'pp vs ' + (data.prev_month_label || 'bulan lalu')));
+        $('#ksRetailValue').text(pct(data.pct_retail));
+        $('#ksRetailDelta').html(deltaHtml(data.delta_retail, 'pp vs ' + (data.prev_month_label || 'bulan lalu')));
+
+        // Kartu atas sengaja cuma 3 bulan terakhir: itu jendela yang
+        // dibaca untuk arah terkini. Riwayat panjangnya ada di chart
+        // "Tren Komposisi" di bawah, yang tetap memakai seluruh bulan.
+        var recent = (data.trend || []).slice(-3);
+        runSequentially([
+            function () { renderDonut(data); },
+            function () { renderSparkline('ksForeignSpark', recent, 'pct_foreign', KS_BLUE_SOFT); },
+            function () { renderSparkline('ksHiddenSpark', recent, 'pct_foreign', '#FFB454'); },
+            function () { renderSparkline('ksRetailSpark', recent, 'pct_retail', KS_GREEN); },
+            function () { renderTrend(data.trend); }
+        ]);
+        renderBreakdown(data.breakdown || []);
+        renderHolders(data);
+
+        var sources = 'Komposisi kepemilikan per <strong>' + esc(data.as_of) + '</strong> '
+                    + '(' + esc(data.month_label) + '), dari file bulanan KSEI '
+                    + '&ldquo;Kepemilikan Efek&rdquo;. '
+                    + 'Daftar pemegang saham bernama dari profil perusahaan tercatat IDX.';
+        if (data.lbrpe && data.lbrpe.period) {
+            sources += ' Free float dan jumlah pemegang saham dari LBRPE '
+                     + '(Laporan Bulanan Registrasi Pemegang Efek) posisi '
+                     + esc(data.lbrpe.period)
+                     + (data.lbrpe.source_url
+                        ? ' &mdash; <a href="' + esc(data.lbrpe.source_url) + '" target="_blank" '
+                          + 'rel="noopener">dokumen aslinya</a>.'
+                        : '.');
+        } else {
+            sources += ' LBRPE belum ditarik, jadi free float memakai basis registri IDX '
+                     + 'dan jumlah pemegang saham belum tersedia. Jalankan '
+                     + '<code>python -m website.ownership lbrpe ' + esc(data.ticker) + '</code>.';
+        }
+        $('#ksSourceNote').html(sources);
+    }
+
+
+    // ------------------------------------------- tombol perawatan data
+
+    // Dua tombol ini memanggil jalur yang sama persis dengan CLI
+    // (refresh_ksei / sync_ticker di website/ownership.py), jadi hasilnya
+    // tidak mungkin beda dengan menjalankannya dari terminal. Keluaran
+    // log-nya ditampilkan apa adanya supaya kegagalan satu sumber
+    // kelihatan, bukan tersembunyi di balik "berhasil".
+    function runTask($button, url, payload, done) {
+        var label = $button.text();
+        $('.ks-controls button').prop('disabled', true);
+        $button.text('Menjalankan...');
+        $('#ksTaskLog').show().text('$ ' + label + '\n');
+
+        $.post(url, payload)
+            .done(function (res) {
+                var lines = (res && res.log) || [];
+                if (!res || res.ok === false) {
+                    lines = [(res && res.message) || 'Gagal menjalankan perintah.'];
+                }
+                $('#ksTaskLog').text('$ ' + label + '\n' + lines.join('\n'));
+                if (done) { done(res); }
+            })
+            .fail(function (xhr) {
+                $('#ksTaskLog').text('$ ' + label + '\nGagal: HTTP ' + xhr.status
+                    + '. Cek log server.');
+            })
+            .always(function () {
+                $('.ks-controls button').prop('disabled', false);
+                $button.text(label);
+            });
+    }
+
+    function refreshKsei() {
+        runTask($('#ksRefreshKseiBtn'), '/kepemilikan-saham/refresh-ksei', { months: 2 },
+            function () {
+                // Bulan baru bisa saja baru masuk, jadi muat ulang kartu
+                // emiten yang sedang dibuka sekalian tabel peringkatnya.
+                load();
+                loadRanking(true);
+            });
+    }
+
+    function syncCurrent() {
+        var stock = $('#ksStock').val().trim().toUpperCase();
+        if (!stock) { alert('Isi kode saham dulu.'); return; }
+        runTask($('#ksSyncBtn'), '/kepemilikan-saham/sync', { stock: stock },
+            function () { load(); });
+    }
+
+    // ---------------------------------------------------- tabel peringkat
+
+    var rankData = null;
+
+    // Kolom mana yang persen, supaya format dan satuannya benar tanpa
+    // menulis ulang formatter per kolom.
+    var RANK_PCT_KEYS = ['free_float', 'pct_foreign', 'pct_retail_raw',
+                         'pct_local_non_retail', 'scripless_pct_of_listed'];
+    var RANK_DELTA_KEYS = ['delta_foreign', 'delta_retail'];
+
+    function renderRanking() {
+        if (!rankData) { return; }
+
+        var query = ($('#ksRankFilter').val() || '').trim().toUpperCase();
+        var sortKey = $('#ksRankSort').val();
+        var direction = $('#ksRankDir').val() === 'asc' ? 1 : -1;
+        var sidOnly = $('#ksRankSidOnly').is(':checked');
+
+        var rows = rankData.rows.filter(function (row) {
+            if (query && row.ticker.indexOf(query) === -1) { return false; }
+            if (sidOnly && !row.sid) { return false; }
+            return true;
+        });
+
+        rows = rows.slice().sort(function (a, b) {
+            var left = a[sortKey], right = b[sortKey];
+            if (sortKey === 'ticker') {
+                return left.localeCompare(right) * direction;
+            }
+            // Baris tanpa nilai (SID/free float belum ditarik, atau bulan
+            // pembanding belum ada) selalu ditaruh di bawah -- bukan
+            // dianggap nol, yang akan menempatkannya di puncak sortir naik.
+            if (left === null || left === undefined) { return 1; }
+            if (right === null || right === undefined) { return -1; }
+            return (left - right) * direction;
+        });
+
+        var shown = rows.slice(0, 200);
+        var body = $('#ksRankBody').empty();
+
+        if (!shown.length) {
+            body.append('<tr><td colspan="11" class="ks-empty">'
+                + 'Tidak ada emiten yang cocok dengan filter ini.</td></tr>');
+        }
+
+        shown.forEach(function (row, index) {
+            function cell(key) {
+                var value = row[key];
+                if (value === null || value === undefined) {
+                    return '<td class="ks-flat">—</td>';
+                }
+                if (RANK_DELTA_KEYS.indexOf(key) !== -1) {
+                    var cls = value > 0 ? 'ks-up' : (value < 0 ? 'ks-down' : 'ks-flat');
+                    return '<td class="' + cls + '">'
+                         + (value > 0 ? '+' : '') + idNum(value, 2) + '</td>';
+                }
+                if (RANK_PCT_KEYS.indexOf(key) !== -1) { return '<td>' + pct(value) + '</td>'; }
+                return '<td>' + idNum(value, 0) + '</td>';
+            }
+
+            body.append('<tr>'
+                + '<td class="ks-idx">' + idNum(index + 1, 0) + '</td>'
+                + '<td><span class="ks-rank-ticker" data-ticker="' + esc(row.ticker) + '">'
+                +   esc(row.ticker) + '</span></td>'
+                + '<td>' + rupiahShort(row.market_cap) + '</td>'
+                + cell('sid')
+                + cell('free_float')
+                + cell('pct_foreign')
+                + cell('delta_foreign')
+                + cell('pct_retail_raw')
+                + cell('delta_retail')
+                + cell('pct_local_non_retail')
+                + cell('scripless_pct_of_listed')
+                + '</tr>');
+        });
+
+        $('.ks-table th.ks-sortable').removeClass('ks-sort-active')
+            .find('.ks-sort-arrow').remove();
+        $('.ks-table th.ks-sortable[data-sort="' + sortKey + '"]')
+            .addClass('ks-sort-active')
+            .append('<span class="ks-sort-arrow">'
+                + ($('#ksRankDir').val() === 'asc' ? '\u25B2' : '\u25BC') + '</span>');
+
+        var note = 'Menampilkan ' + idNum(shown.length, 0) + ' dari '
+                 + idNum(rows.length, 0) + ' emiten yang cocok ('
+                 + idNum(rankData.rows.length, 0) + ' emiten punya data KSEI '
+                 + esc(rankData.label) + ').';
+        if (rows.length > shown.length) {
+            note += ' Persempit filter untuk melihat sisanya.';
+        }
+        // Penting: kolom "% Individu" di tabel ini adalah bucket Individu
+        // KSEI mentah, BUKAN "Retail (Pahlawan Bursa)" di kartu atas.
+        // Mengeluarkan individu bernama >1% butuh daftar pemegang saham
+        // per emiten, yang hanya ditarik untuk emiten yang dibuka.
+        note += '<br><strong>% Individu</strong> di sini adalah bucket Individu KSEI apa adanya '
+              + '&mdash; belum dikurangi individu bernama &gt;1%, jadi bisa lebih tinggi '
+              + 'daripada <em>Retail (Pahlawan Bursa)</em> di kartu atas.'
+              + ' Kolom <strong>SID</strong> dan <strong>Free Float</strong> hanya terisi untuk '
+              + idNum(rankData.sid_count, 0) + ' emiten yang LBRPE-nya sudah ditarik; '
+              + 'klik kode saham lalu <em>Sync Emiten</em> untuk menambah.';
+        $('#ksRankNote').html(note);
+    }
+
+    function loadRanking(force) {
+        if (rankData && !force) { renderRanking(); return; }
+        $('#ksRankBody').html('<tr><td colspan="11" style="padding:14px;">' + window.skeleton('tabel', 6) + '</td></tr>');
+        $.post('/kepemilikan-saham-ranking')
+            .done(function (res) {
+                rankData = res;
+                $('#ksRankTitle').text('Peringkat Emiten (' + (res.label || '') + ')');
+                renderRanking();
+            })
+            .fail(function () {
+                $('#ksRankBody').html('<tr><td colspan="11" class="ks-empty">'
+                    + 'Gagal memuat peringkat.</td></tr>');
+            });
+    }
+
+    function load() {
+        var stock = $('#ksStock').val().trim().toUpperCase();
+        if (!stock) { alert('Isi kode saham dulu.'); return; }
+
+        $('#ksResults').hide();
+        $('#ksMessage').hide();
+        $('#ksLoading').show();
+
+        $.post('/kepemilikan-saham-data', { stock: stock })
+            .done(function (data) {
+                $('#ksLoading').hide();
+                if (!data || !data.available) {
+                    $('#ksMessage').text((data && data.message) || 'Data tidak tersedia.').show();
+                    return;
+                }
+                // Ditunda sampai halaman benar-benar terlihat -- lihat
+                // catatan di whenVisible() di atas soal kenapa Plotly tidak
+                // boleh menggambar sama sekali saat tab masih tersembunyi.
+                whenVisible(function () { render(data); });
+                // URL ikut ganti supaya halaman satu emiten bisa di-bookmark
+                // dan dibagikan, sama seperti /display-stock-list?type=...
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState({}, '', '/kepemilikan-saham?stock=' + encodeURIComponent(stock));
+                }
+            })
+            .fail(function () {
+                $('#ksLoading').hide();
+                $('#ksMessage').text('Gagal memuat data kepemilikan.').show();
+            });
+    }
+
+    $(document).ready(function () {
+        $('#ksLoadBtn').on('click', load);
+        $('#ksStock').on('keydown', function (event) {
+            if (event.key === 'Enter') { event.preventDefault(); load(); }
+        });
+
+        $('#ksRefreshKseiBtn').on('click', refreshKsei);
+        $('#ksSyncBtn').on('click', syncCurrent);
+
+        $('#ksRankFilter').on('input', renderRanking);
+        $('#ksRankSort, #ksRankDir').on('change', renderRanking);
+        $('#ksRankSidOnly').on('change', renderRanking);
+
+        // Klik header = sortir kolom itu; klik lagi membalik arahnya.
+        $('.ks-table th.ks-sortable').on('click', function () {
+            var key = $(this).data('sort');
+            if ($('#ksRankSort').val() === key) {
+                $('#ksRankDir').val($('#ksRankDir').val() === 'asc' ? 'desc' : 'asc');
+            } else {
+                $('#ksRankSort').val(key);
+                $('#ksRankDir').val(key === 'ticker' ? 'asc' : 'desc');
+            }
+            renderRanking();
+        });
+
+        // Klik kode saham di tabel peringkat = buka emiten itu di kartu atas.
+        $('#ksRankBody').on('click', '.ks-rank-ticker', function () {
+            $('#ksStock').val($(this).data('ticker'));
+            load();
+            $('html, body').animate({ scrollTop: 0 }, 200);
+        });
+
+        load();
+        loadRanking();
+    });
+</script>
+{% endblock %}

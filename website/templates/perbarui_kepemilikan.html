@@ -1,0 +1,519 @@
+{% extends "base.html" %}
+{% block title %}Perbarui Kepemilikan{% endblock %}
+{% block page_title %}Perbarui Kepemilikan{% endblock %}
+
+{% block content %}
+
+<style>
+    .pk-intro { color: var(--text-mid); font-size: 12.5px; line-height: 1.6; margin-bottom: 16px; max-width: 820px; }
+    .pk-intro a { color: var(--accum); }
+
+    .pk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    .pk-card { display: flex; flex-direction: column; }
+    .pk-value { font-family: var(--font-mono); font-size: 26px; font-weight: 600; line-height: 1; margin-top: 2px; }
+    .pk-sub { color: var(--text-dim); font-size: 11.5px; margin-top: 8px; line-height: 1.55; }
+    .pk-sub b { color: var(--text-mid); font-weight: 600; font-family: var(--font-mono); }
+    .pk-what { color: var(--text-dim); font-size: 11px; line-height: 1.55; margin-top: 10px; }
+    .pk-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 14px; }
+    .pk-check { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-mid); }
+
+    .pk-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 10px; font-weight: 600;
+               border: 1px solid transparent; margin-left: 8px; vertical-align: middle; }
+    .pk-ok { color: var(--accum); border-color: rgba(22, 224, 174, 0.35); background: var(--accum-glow); }
+    .pk-stale { color: var(--warn); border-color: rgba(255, 195, 82, 0.35); background: rgba(255, 195, 82, 0.08); }
+    .pk-bad { color: var(--distrib); border-color: rgba(255, 96, 118, 0.35); background: var(--distrib-glow); }
+
+    .pk-meter { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; margin-top: 10px; }
+    .pk-meter > div { height: 100%; background: var(--accum); transition: width 0.4s; }
+
+    .pk-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+    .pk-field label { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+
+    .pk-steps { margin: 0; padding-left: 20px; color: var(--text-mid); font-size: 12.5px; line-height: 1.6; }
+    .pk-steps li { margin-bottom: 12px; padding-left: 4px; }
+    .pk-steps a { color: var(--accum); }
+    .pk-steps code, .pk-what code { color: var(--text-mid); background: var(--raised); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+    .pk-steps kbd { font-size: 10.5px; }
+    .pk-step-note { color: var(--text-dim); font-size: 11.5px; margin-left: 8px; }
+    .pk-skrip { display: block; width: 100%; height: 90px; margin-top: 8px; background: var(--void); color: var(--text-mid);
+                border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-mono); font-size: 10.5px; padding: 8px; }
+
+    .pk-job-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .pk-job-count { font-family: var(--font-mono); font-size: 12px; color: var(--text-mid); }
+
+    /* Keluaran perintah apa adanya, sama seperti panel log di halaman
+       Kepemilikan Saham: kegagalan satu sumber harus kelihatan. */
+    .pk-log { margin-top: 12px; background: var(--void); border: 1px solid var(--line);
+              border-radius: 8px; padding: 10px 12px; font-family: var(--font-mono);
+              font-size: 11px; line-height: 1.7; color: var(--text-mid);
+              max-height: 260px; overflow: auto; white-space: pre-wrap; }
+</style>
+
+<div class="pk-intro">
+    Data kepemilikan ditarik per bulan dan tidak ikut rantai harian. Tarik tiap awal bulan:
+    KSEI dulu (posisi akhir bulan lalu, biasanya terbit beberapa hari setelah tutup bulan),
+    lalu registri IDX dan LBRPE. Semua tombol di sini menjalankan fungsi yang sama dengan
+    <code>python -m website.ownership</code>, dan yang sudah ada bulan ini dilewati, jadi aman
+    dijalankan ulang. Hasilnya dipakai di <a href="/kepemilikan-saham">Kepemilikan Saham</a>.
+</div>
+
+<div id="pkLoading"></div>
+<script>document.getElementById('pkLoading').innerHTML = window.skeleton('panel', 4, 'Memeriksa data kepemilikan');</script>
+
+<div id="pkBody" style="display:none;">
+    <div class="pk-grid">
+        <div class="content-card pk-card">
+            <div class="ks-section-title">KSEI &middot; komposisi investor</div>
+            <div><span class="pk-value" id="pkKseiVal">—</span><span class="pk-pill" id="pkKseiPill"></span></div>
+            <div class="pk-sub" id="pkKseiSub"></div>
+            <div class="pk-what">Asing / ritel / institusi per emiten. Satu ZIP per bulan, selesai dalam belasan detik.</div>
+            <div class="pk-actions">
+                <button type="button" class="btn btn-sm btn-primary pk-btn" id="pkKseiBtn">Tarik KSEI</button>
+                <label class="pk-check"><input type="checkbox" id="pkKseiForce"> unduh ulang</label>
+            </div>
+        </div>
+
+        <div class="content-card pk-card">
+            <div class="ks-section-title">Registri IDX &middot; pemegang saham bernama</div>
+            <div><span class="pk-value" id="pkRegVal">—</span><span class="pk-pill" id="pkRegPill"></span></div>
+            <div class="pk-meter"><div id="pkRegMeter" style="width:0%"></div></div>
+            <div class="pk-sub" id="pkRegSub"></div>
+            <div class="pk-what">Pemegang &ge;5%, direksi, komisaris. Sejak Sep 2026 IDX menolak tarikan dari Python,
+                jadi ditarik lewat browser kamu (lihat kartu di bawah). Tombol "Coba langsung" tetap ada kalau suatu saat dibuka lagi.</div>
+            <div class="pk-actions">
+                <a href="#pkBrowserCard" class="btn btn-sm btn-primary">Tarik lewat browser</a>
+                <button type="button" class="btn btn-sm btn-outline-secondary pk-btn pk-bg-btn" id="pkRegBtn">Coba langsung</button>
+                <label class="pk-check"><input type="checkbox" id="pkRegSemua"> termasuk emiten tanpa Summary</label>
+            </div>
+        </div>
+
+        <div class="content-card pk-card">
+            <div class="ks-section-title">LBRPE &middot; free float &amp; jumlah SID</div>
+            <div><span class="pk-value" id="pkLbVal">—</span><span class="pk-pill" id="pkLbPill"></span></div>
+            <div class="pk-meter"><div id="pkLbMeter" style="width:0%"></div></div>
+            <div class="pk-sub" id="pkLbSub"></div>
+            <div class="pk-what">Satu PDF per emiten, dibaca server. Sama seperti registri, sejak Sep 2026 ditarik lewat browser kamu.
+                Emiten tanpa laporan 4 bulan terakhir dihitung "kosong", bukan gagal.</div>
+            <div class="pk-actions">
+                <a href="#pkLbrpeCard" class="btn btn-sm btn-primary">Tarik lewat browser</a>
+                <button type="button" class="btn btn-sm btn-outline-secondary pk-btn pk-bg-btn" id="pkLbBtn">Coba langsung</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;" id="pkBrowserCard">
+        <div class="ks-section-title">Registri IDX lewat browser</div>
+        <ol class="pk-steps">
+            <li>
+                <button type="button" class="btn btn-sm btn-primary pk-btn" id="pkSkripBtn">Salin skrip</button>
+                <span class="pk-step-note" id="pkSkripNote">Berisi emiten yang belum punya registri bulan ini.</span>
+                <textarea id="pkSkripText" class="pk-skrip" readonly style="display:none;"></textarea>
+            </li>
+            <li>Buka <a href="https://www.idx.co.id/id" target="_blank" rel="noopener">www.idx.co.id</a> di Chrome/Edge biasa,
+                tekan <kbd>F12</kbd> &rarr; tab <b>Console</b>, tempel, Enter. (Pertama kali Chrome minta ketik
+                <code>allow pasting</code> dulu.) Biarkan tabnya terbuka; ~30&ndash;40 menit untuk semua emiten,
+                progresnya muncul di Console.</li>
+            <li>Selesai, file <code>registri_idx_&lt;bulan&gt;_&lt;n&gt;.json</code> terunduh otomatis. Impor di sini:
+                <div class="pk-row" style="margin-top:8px;">
+                    <input type="file" id="pkImporFile" accept=".json,application/json" class="form-control form-control-sm" style="width:300px;">
+                    <button type="button" class="btn btn-sm btn-primary pk-btn" id="pkImporBtn">Impor</button>
+                </div>
+            </li>
+        </ol>
+        <div class="pk-what">Mau berhenti di tengah: ketik <code>bdmBerhenti = true</code> di Console, yang sudah terambil tetap
+            tersimpan. Kalau IDX minta verifikasi ulang, skrip berhenti sendiri dan menyimpan hasilnya. Impor, lalu
+            salin skrip baru: yang sudah diimpor otomatis dilewati.</div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;" id="pkLbrpeCard">
+        <div class="ks-section-title">LBRPE lewat browser</div>
+        <ol class="pk-steps">
+            <li>
+                <button type="button" class="btn btn-sm btn-primary pk-btn" id="pkSkripLbBtn">Salin skrip</button>
+                <span class="pk-step-note" id="pkSkripLbNote">Emiten yang belum punya laporan terbitan bulan ini.</span>
+                <textarea id="pkSkripLbText" class="pk-skrip" readonly style="display:none;"></textarea>
+            </li>
+            <li>Di tab <a href="https://www.idx.co.id/id" target="_blank" rel="noopener">www.idx.co.id</a>, F12 &rarr; Console,
+                tempel, Enter, sama seperti registri. Jangan barengan dengan skrip registri, tunggu yang satu selesai dulu.
+                Dua request per emiten (daftar pengumuman + PDF), jadi ~60&ndash;70 menit untuk semua. PDF yang tidak berubah
+                sejak tarikan terakhir tidak diunduh ulang.</li>
+            <li>Selesai, file <code>lbrpe_idx_&lt;bulan&gt;_&lt;n&gt;.json</code> (bisa puluhan MB) terunduh. Impor di sini;
+                server membaca PDF-nya di latar, kemajuannya muncul di kotak Keluaran:
+                <div class="pk-row" style="margin-top:8px;">
+                    <input type="file" id="pkImporLbFile" accept=".json,application/json" class="form-control form-control-sm" style="width:300px;">
+                    <button type="button" class="btn btn-sm btn-primary pk-btn" id="pkImporLbBtn">Impor</button>
+                </div>
+            </li>
+        </ol>
+        <div class="pk-what">Berhenti di tengah: <code>bdmBerhenti = true</code> di Console. LBRPE bulan berjalan biasanya baru
+            lengkap sekitar tanggal 10&ndash;15; sebelum itu sebagian emiten masih memakai laporan bulan lalu.</div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;" id="pkPkCard">
+        <div class="ks-section-title">Pemantauan Khusus &middot; jurnal maju</div>
+        <div class="pk-what" style="margin-top:0;">Bukan data kepemilikan, tapi jalurnya sama: pengumuman BEI
+            "Efek Bersifat Ekuitas Dalam Pemantauan Khusus" untuk jurnal maju temuan 18 Okt 2026 (masuk papan karena
+            kriteria fundamental = sinyal hindari). Tarik kira-kira seminggu sekali; kesehatan mengingatkan kalau
+            lewat 14 hari.</div>
+        <ol class="pk-steps" style="margin-top:10px;">
+            <li>
+                <button type="button" class="btn btn-sm btn-primary pk-btn" id="pkSkripPkBtn">Salin skrip</button>
+                <span class="pk-step-note" id="pkSkripPkNote">Mulai seminggu sebelum tarikan terakhir; yang sudah diimpor dilewati.</span>
+                <textarea id="pkSkripPkText" class="pk-skrip" readonly style="display:none;"></textarea>
+            </li>
+            <li>Di tab <a href="https://www.idx.co.id/id" target="_blank" rel="noopener">www.idx.co.id</a>, F12 &rarr; Console,
+                tempel, Enter. Skrip memuat pdf.js dari cdnjs untuk membaca PDF pengumumannya; biasanya kurang dari satu menit.</li>
+            <li>File <code>pk_idx_&lt;tanggal&gt;_&lt;n&gt;.json</code> terunduh. Impor di sini:
+                <div class="pk-row" style="margin-top:8px;">
+                    <input type="file" id="pkImporPkFile" accept=".json,application/json" class="form-control form-control-sm" style="width:300px;">
+                    <button type="button" class="btn btn-sm btn-primary pk-btn" id="pkImporPkBtn">Impor</button>
+                </div>
+            </li>
+        </ol>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="ks-section-title">Per emiten</div>
+        <div class="pk-row">
+            <div class="pk-field">
+                <label>Kode saham (pisah koma)</label>
+                <input type="text" id="pkStocks" class="form-control form-control-sm" placeholder="BBRI, ADRO, PADI"
+                       style="width:260px; text-transform:uppercase;">
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary pk-btn" id="pkSyncBtn"
+                    title="Registri IDX + LBRPE, maks. 10 emiten">Sync sekarang</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary pk-btn pk-bg-btn" id="pkLbListBtn"
+                    title="LBRPE saja, di latar, tanpa batas jumlah">LBRPE di latar</button>
+            <label class="pk-check"><input type="checkbox" id="pkSyncForce"> paksa tarik ulang</label>
+        </div>
+        <div class="pk-what">Sync sekarang = registri IDX + LBRPE langsung (maks. 10 kode, ditunggu sampai selesai).
+            Pakai ini untuk emiten yang baru IPO atau baru saja keluar laporannya.</div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;" id="pkJobCard">
+        <div class="pk-job-head">
+            <div class="ks-section-title" style="margin-bottom:0;" id="pkJobTitle">Keluaran</div>
+            <span class="pk-job-count" id="pkJobCount"></span>
+            <div style="flex:1 1 auto;"></div>
+            <button type="button" class="btn btn-sm btn-outline-danger" id="pkStopBtn" style="display:none;">Hentikan</button>
+        </div>
+        <div class="pk-meter" id="pkJobMeterWrap" style="display:none;"><div id="pkJobMeter" style="width:0%"></div></div>
+        <div class="pk-log" id="pkLog">Belum ada perintah yang dijalankan.</div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var pollTimer = null;
+    var busySync = false;     // tombol sinkron (KSEI / Sync) sedang menunggu
+    var lastJob = null;
+
+    function esc(s) { return $('<div>').text(s == null ? '' : s).html(); }
+
+    var BULAN = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    function labelBulan(stamp) {
+        if (!stamp) { return '—'; }
+        var p = stamp.split('-');
+        return BULAN[parseInt(p[1], 10)] + ' ' + p[0];
+    }
+
+    function pill($el, kind, text) {
+        $el.removeClass('pk-ok pk-stale pk-bad').addClass(kind).text(text);
+    }
+
+    function pct(a, b) { return b ? Math.min(100, Math.round(a * 100 / b)) : 0; }
+
+    function renderStatus(s) {
+        // KSEI
+        var k = s.ksei;
+        $('#pkKseiVal').text(labelBulan(k.bulan_terakhir));
+        if (k.segar) {
+            pill($('#pkKseiPill'), 'pk-ok', 'terbaru');
+        } else {
+            pill($('#pkKseiPill'), 'pk-stale', 'perlu ditarik');
+        }
+        $('#pkKseiSub').html('Seharusnya sudah ada: <b>' + esc(labelBulan(k.target)) + '</b> &middot; '
+            + '<b>' + k.bulan.length + '</b> bulan tersimpan'
+            + (k.segar ? '' : '<br>Kalau masih "belum terbit", coba lagi beberapa hari lagi.'));
+
+        // Registri & LBRPE: kemajuan bulan berjalan terhadap semesta Summary.
+        function sumber(d, ids, isLbrpe) {
+            var n = d.jumlah_bulan_ini, total = d.semesta;
+            $(ids.val).text(n + (total ? ' / ' + total : ''));
+            $(ids.meter).css('width', pct(n, total) + '%');
+            if (total && n >= total) {
+                pill($(ids.pill), 'pk-ok', 'lengkap');
+            } else if (isLbrpe ? n > 0 : n >= total * 0.95 && total) {
+                pill($(ids.pill), 'pk-ok', isLbrpe ? 'sebagian' : 'hampir lengkap');
+            } else if (n > 0) {
+                pill($(ids.pill), 'pk-stale', 'sebagian');
+            } else {
+                pill($(ids.pill), 'pk-stale', 'belum ditarik');
+            }
+            var sub = 'Bulan ' + '<b>' + esc(labelBulan(d.target)) + '</b>';
+            if (!n && d.bulan_terakhir && d.bulan_terakhir !== d.target) {
+                sub += ' &middot; terakhir ' + '<b>' + esc(labelBulan(d.bulan_terakhir)) + '</b> (' + d.jumlah_terakhir + ' emiten)';
+            }
+            if (d.gagal_bulan_ini) {
+                sub += '<br><span style="color:var(--distrib)">' + d.gagal_bulan_ini
+                     + ' gagal di percobaan terakhir</span>, tarik lagi untuk menyapu sisanya.';
+            }
+            if (isLbrpe) {
+                sub += '<br>Tidak semua emiten punya LBRPE tiap bulan, jadi angkanya jarang penuh.';
+            }
+            $(ids.sub).html(sub);
+        }
+        sumber(s.registry, { val: '#pkRegVal', meter: '#pkRegMeter', pill: '#pkRegPill', sub: '#pkRegSub' }, false);
+        sumber(s.lbrpe, { val: '#pkLbVal', meter: '#pkLbMeter', pill: '#pkLbPill', sub: '#pkLbSub' }, true);
+
+        renderJob(s.latar);
+    }
+
+    function loadStatus() {
+        return $.post('/perbarui-kepemilikan/status').done(function (s) {
+            $('#pkLoading').hide();
+            $('#pkBody').show();
+            renderStatus(s);
+        }).fail(function (xhr) {
+            $('#pkLoading').html('<div class="ks-empty">Gagal memuat status (HTTP ' + xhr.status + '). Cek log server.</div>');
+        });
+    }
+
+    function setBusy() {
+        var jobRunning = lastJob && lastJob.jalan;
+        $('.pk-btn').prop('disabled', busySync || jobRunning);
+    }
+
+    // ------------------------------------------------- pekerjaan latar
+
+    function renderJob(j) {
+        var wasRunning = lastJob && lastJob.jalan;
+        lastJob = j;
+        if (j && j.jenis) {
+            var judul = 'Tarik ' + j.label;
+            if (j.jalan) { judul += ' · berjalan'; }
+            else if (j.hasil) { judul += ' · ' + j.hasil; }
+            $('#pkJobTitle').text(judul);
+            $('#pkJobCount').text(j.total
+                ? j.selesai + '/' + j.total + ' · ' + j.berhasil + ' ok, ' + j.kosong + ' kosong, ' + j.gagal + ' gagal'
+                : '');
+            $('#pkJobMeterWrap').show();
+            $('#pkJobMeter').css('width', pct(j.selesai, j.total) + '%');
+            $('#pkStopBtn').toggle(!!j.jalan);
+            if (!busySync) {
+                var $log = $('#pkLog');
+                var nempel = $log[0].scrollHeight - $log.scrollTop() - $log.outerHeight() < 20;
+                $log.text((j.log || []).join('\n') || 'Menyiapkan...');
+                if (nempel) { $log.scrollTop($log[0].scrollHeight); }
+            }
+        }
+        setBusy();
+
+        if (j && j.jalan) {
+            if (!pollTimer) { pollTimer = setInterval(pollJob, 3000); }
+        } else {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            // Baru saja selesai: angka di kartu sudah berubah.
+            if (wasRunning) { loadStatus(); }
+        }
+    }
+
+    function pollJob() {
+        $.post('/perbarui-kepemilikan/latar').done(renderJob);
+    }
+
+    function startJob(jenis, extra) {
+        var payload = $.extend({ jenis: jenis }, extra || {});
+        $('.pk-btn').prop('disabled', true);
+        $.post('/perbarui-kepemilikan/mulai', payload).done(function (res) {
+            if (!res.ok) { alert(res.message); }
+            pollJob();
+        }).fail(function (xhr) {
+            alert('Gagal memulai: HTTP ' + xhr.status);
+            setBusy();
+        });
+    }
+
+    $('#pkRegBtn').on('click', function () {
+        startJob('registry', { semua: $('#pkRegSemua').is(':checked') ? '1' : '' });
+    });
+    $('#pkLbBtn').on('click', function () { startJob('lbrpe'); });
+    $('#pkLbListBtn').on('click', function () {
+        var stocks = $('#pkStocks').val().trim();
+        if (!stocks) { alert('Isi kode saham dulu.'); return; }
+        startJob('lbrpe', { stocks: stocks });
+    });
+    $('#pkStopBtn').on('click', function () {
+        $(this).prop('disabled', true).text('Menghentikan...');
+        var $b = $(this);
+        $.post('/perbarui-kepemilikan/hentikan').always(function () {
+            $b.prop('disabled', false).text('Hentikan');
+            pollJob();
+        });
+    });
+
+    // ------------------------------------- perintah sinkron (ditunggu)
+
+    function runSync($button, url, payload) {
+        var label = $button.text();
+        busySync = true;
+        setBusy();
+        $button.text('Menjalankan...');
+        $('#pkJobTitle').text(label);
+        $('#pkJobCount').text('');
+        $('#pkJobMeterWrap').hide();
+        $('#pkLog').text('$ ' + label + '\n');
+
+        $.post(url, payload)
+            .done(function (res) {
+                var lines = (res && res.log) || [];
+                if (!res || res.ok === false) {
+                    lines = [(res && res.message) || 'Gagal menjalankan perintah.'];
+                }
+                $('#pkLog').text('$ ' + label + '\n' + lines.join('\n'));
+            })
+            .fail(function (xhr) {
+                $('#pkLog').text('$ ' + label + '\nGagal: HTTP ' + xhr.status + '. Cek log server.');
+            })
+            .always(function () {
+                busySync = false;
+                $button.text(label);
+                setBusy();
+                loadStatus();
+            });
+    }
+
+    $('#pkKseiBtn').on('click', function () {
+        runSync($(this), '/kepemilikan-saham/refresh-ksei',
+            { months: 2, force: $('#pkKseiForce').is(':checked') ? '1' : '' });
+    });
+
+    $('#pkSyncBtn').on('click', function () {
+        var stocks = $('#pkStocks').val().trim().toUpperCase();
+        if (!stocks) { alert('Isi kode saham dulu.'); return; }
+        runSync($(this), '/kepemilikan-saham/sync',
+            { stocks: stocks, force: $('#pkSyncForce').is(':checked') ? '1' : '' });
+    });
+
+    // ------------------------------------- registri lewat browser
+
+    function salinSkrip($b, url, $note, $text, pesanKosong) {
+        $b.prop('disabled', true);
+        $.post(url, { semua: $('#pkRegSemua').is(':checked') ? '1' : '' })
+            .done(function (res) {
+                if (!res.jumlah) {
+                    $note.text(pesanKosong);
+                    $text.hide();
+                    return;
+                }
+                $text.val(res.skrip).show();
+                var tulis = navigator.clipboard && window.isSecureContext
+                    ? navigator.clipboard.writeText(res.skrip)
+                    : $.Deferred().reject().promise();
+                $.when(tulis).then(function () {
+                    $note.text('Tersalin: ' + res.jumlah + ' emiten. Lanjut ke langkah 2.');
+                }, function () {
+                    // Clipboard API ditolak (bukan https/localhost, atau tab
+                    // tidak fokus): pilih teksnya supaya tinggal Ctrl+C.
+                    $text.trigger('select');
+                    $note.text(res.jumlah + ' emiten. Tekan Ctrl+C untuk menyalin teks yang terpilih.');
+                });
+            })
+            .fail(function (xhr) { $note.text('Gagal membuat skrip: HTTP ' + xhr.status); })
+            .always(function () { $b.prop('disabled', false); setBusy(); });
+    }
+
+    $('#pkSkripBtn').on('click', function () {
+        salinSkrip($(this), '/perbarui-kepemilikan/skrip-registri', $('#pkSkripNote'), $('#pkSkripText'),
+            'Semua emiten sudah punya registri bulan ini. Tidak ada yang perlu ditarik.');
+    });
+    $('#pkSkripLbBtn').on('click', function () {
+        salinSkrip($(this), '/perbarui-kepemilikan/skrip-lbrpe', $('#pkSkripLbNote'), $('#pkSkripLbText'),
+            'Semua emiten sudah punya LBRPE terbitan bulan ini. Tidak ada yang perlu ditarik.');
+    });
+
+    $('#pkSkripPkBtn').on('click', function () {
+        var $b = $(this), $note = $('#pkSkripPkNote'), $text = $('#pkSkripPkText');
+        $b.prop('disabled', true);
+        $.post('/perbarui-kepemilikan/skrip-pk')
+            .done(function (res) {
+                $text.val(res.skrip).show();
+                var tulis = navigator.clipboard && window.isSecureContext
+                    ? navigator.clipboard.writeText(res.skrip)
+                    : $.Deferred().reject().promise();
+                $.when(tulis).then(function () {
+                    $note.text('Tersalin: pengumuman ' + res.rentang + '. Lanjut ke langkah 2.');
+                }, function () {
+                    $text.trigger('select');
+                    $note.text('Pengumuman ' + res.rentang + '. Tekan Ctrl+C untuk menyalin teks yang terpilih.');
+                });
+            })
+            .fail(function (xhr) { $note.text('Gagal membuat skrip: HTTP ' + xhr.status); })
+            .always(function () { $b.prop('disabled', false); setBusy(); });
+    });
+
+    $('#pkImporPkBtn').on('click', function () {
+        var file = $('#pkImporPkFile')[0].files[0];
+        if (!file) { alert('Pilih file JSON hasil skrip dulu.'); return; }
+        var fd = new FormData();
+        fd.append('berkas', file);
+        var $b = $(this);
+        $b.prop('disabled', true).text('Mengimpor...');
+        $('#pkJobTitle').text('Impor Pemantauan Khusus');
+        $('#pkJobCount').text('');
+        $('#pkJobMeterWrap').hide();
+        $.ajax({ url: '/perbarui-kepemilikan/impor-pk', type: 'POST', data: fd,
+                 processData: false, contentType: false })
+            .done(function (res) {
+                $('#pkLog').text('$ impor ' + file.name + '\n' + ((res && res.log) || []).join('\n'));
+                if (res && res.ok) { $('#pkImporPkFile').val(''); }
+            })
+            .fail(function (xhr) { $('#pkLog').text('$ impor ' + file.name + '\nGagal: HTTP ' + xhr.status); })
+            .always(function () { $b.text('Impor'); setBusy(); });
+    });
+
+    $('#pkImporLbBtn').on('click', function () {
+        var file = $('#pkImporLbFile')[0].files[0];
+        if (!file) { alert('Pilih file JSON hasil skrip dulu.'); return; }
+        var fd = new FormData();
+        fd.append('berkas', file);
+        var $b = $(this);
+        $b.prop('disabled', true).text('Mengunggah...');
+        $.ajax({ url: '/perbarui-kepemilikan/impor-lbrpe', type: 'POST', data: fd,
+                 processData: false, contentType: false })
+            .done(function (res) {
+                if (!res || !res.ok) { alert((res && res.message) || 'Gagal memulai impor.'); return; }
+                $('#pkImporLbFile').val('');
+                pollJob();
+            })
+            .fail(function (xhr) { alert('Gagal mengunggah: HTTP ' + xhr.status); })
+            .always(function () { $b.text('Impor'); setBusy(); });
+    });
+
+    $('#pkImporBtn').on('click', function () {
+        var file = $('#pkImporFile')[0].files[0];
+        if (!file) { alert('Pilih file JSON hasil skrip dulu.'); return; }
+        var fd = new FormData();
+        fd.append('berkas', file);
+        var $b = $(this);
+        $b.prop('disabled', true).text('Mengimpor...');
+        $('#pkJobTitle').text('Impor registri');
+        $('#pkJobCount').text('');
+        $('#pkJobMeterWrap').hide();
+        $.ajax({ url: '/perbarui-kepemilikan/impor-registri', type: 'POST', data: fd,
+                 processData: false, contentType: false })
+            .done(function (res) {
+                $('#pkLog').text('$ impor ' + file.name + '\n' + ((res && res.log) || []).join('\n'));
+                if (res && res.ok) { $('#pkImporFile').val(''); }
+            })
+            .fail(function (xhr) { $('#pkLog').text('$ impor ' + file.name + '\nGagal: HTTP ' + xhr.status); })
+            .always(function () { $b.text('Impor'); setBusy(); loadStatus(); });
+    });
+
+    // Tunggu DOM ready: token CSRF baru dipasang base.html lewat
+    // $.ajaxSetup di handler ready-nya, jadi POST sebelum itu dibalas 400.
+    $(loadStatus);
+})();
+</script>
+
+{% endblock %}

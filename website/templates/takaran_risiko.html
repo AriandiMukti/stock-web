@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Takaran Risiko{% endblock %}
+{% block page_title %}Takaran Risiko{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="trRefresh">Hitung Ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .tr-finding { background: var(--void); border: 1px solid var(--line); border-radius: 10px;
+                  padding: 14px 16px; margin-bottom: 12px; }
+    .tr-finding:last-child { margin-bottom: 0; }
+    .tr-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .tr-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .tr-finding strong { color: var(--text); }
+
+    .tr-table, .tr-bukti { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .tr-table th, .tr-bukti th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .tr-table th.tr-left, .tr-bukti th.tr-left { text-align: left; }
+    .tr-table td, .tr-bukti td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .tr-table td.tr-left, .tr-bukti td.tr-left { text-align: left; font-family: var(--font-ui); }
+    .tr-table tbody tr:hover { background: var(--raised); }
+    .tr-ticker:hover { text-decoration: underline; }
+
+    .tr-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 9.5px;
+                font-family: var(--font-ui); font-weight: 600; white-space: nowrap; }
+    .tr-hijau  { color: var(--accum);   border: 1px solid rgba(22,224,174,0.35); background: rgba(22,224,174,0.08); }
+    .tr-kuning { color: var(--warn);    border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08); }
+    .tr-oranye { color: var(--warn);    border: 1px solid rgba(255,195,82,0.5);  background: rgba(255,195,82,0.14); }
+    .tr-merah  { color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08); }
+    .tr-netral { color: var(--text-dim); border: 1px solid var(--line); }
+
+    .tr-naik { color: var(--accum); }
+    .tr-rugi { color: var(--distrib); }
+    .tr-dim  { color: var(--text-dim); }
+
+    .tr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+    .tr-label { font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-dim); }
+    .tr-val { font-family: var(--font-mono); font-size: 19px; font-weight: 700; margin-top: 3px; }
+    .tr-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+
+    .tr-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.7; margin-top: 12px; }
+    .tr-empty { padding: 30px; text-align: center; color: var(--text-dim); font-size: 12px; }
+    .tr-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .tr-filters select, .tr-filters input { font-size: 12px; }
+    .tr-heat td { font-family: var(--font-mono); text-align: center; }
+</style>
+
+<div id="trLoading" class="tr-empty">Menghitung takaran seluruh emiten&hellip;</div>
+<div id="trMessage" class="tr-empty" style="display:none;"></div>
+
+<div id="trBody" style="display:none;">
+
+    <div class="content-card" style="border-left:3px solid var(--accum);">
+        <div class="hb-section-title" style="color:var(--accum);">Satu-satunya Kalibrasi di App Ini yang Lolos Uji Luar Sampel</div>
+        <div class="tr-finding">
+            <h4>Arah tidak bisa diramal. Besaran ayunan bisa, dan bertahan sepuluh tahun.</h4>
+            <p>Diuji di dua sampel terpisah: kalibrasi 2026 (788 emiten, semesta penuh) dan
+            2016&ndash;2025 (21 emiten, folder Test). Yang dibandingkan peringkat antar kelompok,
+            bukan angka absolutnya.</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="tr-bukti">
+                <thead><tr>
+                    <th class="tr-left">Yang diramal</th>
+                    <th>Korelasi 2026 vs 2016&ndash;2025</th>
+                </tr></thead>
+                <tbody id="trReplikasiBody"></tbody>
+            </table>
+        </div>
+        <div class="tr-note" id="trReplikasiNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px; border-left:3px solid var(--warn);">
+        <div class="hb-section-title" style="color:var(--warn);">Kenapa Kelipatan, Bukan Persentase</div>
+        <div style="overflow-x:auto;">
+            <table class="tr-bukti">
+                <thead><tr>
+                    <th class="tr-left">Rezim</th>
+                    <th>Peluang kena &minus;20%</th>
+                    <th>Peluang naik &ge;30%</th>
+                </tr></thead>
+                <tbody id="trRegimeBody"></tbody>
+            </table>
+        </div>
+        <div class="tr-note" id="trRegimeNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Tabel Kalibrasi</div>
+        <div class="tr-finding">
+            <h4>Dua sumbu: seberapa liar sekarang, dan seberapa jauh sudah jatuh.</h4>
+            <p>Angka = kelipatan terhadap emiten rata-rata. <strong class="tr-rugi">Kiri</strong> risiko
+            guncangan &minus;20%, <strong class="tr-naik">kanan</strong> peluang lonjakan +30%,
+            keduanya dalam 40 hari bursa dan dihitung dari high/low (disentuh kapan saja, bukan harga akhir).</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="tr-bukti tr-heat">
+                <thead><tr>
+                    <th class="tr-left">Volatilitas harian</th>
+                    <th>jatuh &gt;40%</th><th>jatuh 20&ndash;40%</th><th>dekat puncak</th>
+                </tr></thead>
+                <tbody id="trGridBody"></tbody>
+            </table>
+        </div>
+        <div class="tr-note" id="trSatuTuas"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Ringkasan Bursa Hari Ini</div>
+        <div class="tr-grid" id="trStats"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Per Emiten</div>
+        <div class="tr-filters" style="margin-bottom:12px;">
+            <select id="trKelas" class="form-select form-select-sm" style="width:auto;">
+                <option value="">Semua kelas</option>
+                <option value="sangat liar">sangat liar</option>
+                <option value="liar">liar</option>
+                <option value="sedang">sedang</option>
+                <option value="tenang">tenang</option>
+                <option value="sangat tenang">sangat tenang</option>
+            </select>
+            <select id="trJatuh" class="form-select form-select-sm" style="width:auto;">
+                <option value="">Semua posisi</option>
+                <option value="jatuh &gt;40%">jatuh &gt;40%</option>
+                <option value="jatuh 20-40%">jatuh 20&ndash;40%</option>
+                <option value="dekat puncak">dekat puncak</option>
+            </select>
+            <input type="text" id="trFilter" class="form-control form-control-sm" placeholder="Cari kode&hellip;" style="width:150px;">
+            <span class="tr-sub" id="trHitung"></span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="tr-table">
+                <thead id="trThead"><tr>
+                    <th class="tr-left" data-sort="stock">Kode</th>
+                    <th data-sort="harga">Harga</th>
+                    <th data-sort="volat">Ayunan/hari</th>
+                    <th data-sort="dari_puncak">Dari puncak 60h</th>
+                    <th data-sort="x_rugi">Risiko</th>
+                    <th data-sort="x_naik">Peluang</th>
+                    <th class="tr-left">Kelas</th>
+                    <th data-sort="ukuran_setara">Ukuran setara</th>
+                </tr></thead>
+                <tbody id="trTbody"></tbody>
+            </table>
+        </div>
+        <div class="tr-note" id="trSurvivor"></div>
+    </div>
+</div>
+
+<script>
+    var trData = null;
+    var trSort = { key: 'x_naik', dir: 'desc' };
+
+    function trNum(v, d) { return (v === null || v === undefined) ? '&mdash;' : Number(v).toFixed(d === undefined ? 2 : d); }
+
+    function trRenderBukti(d) {
+        var b = d.bukti || {};
+        $('#trReplikasiBody').html((b.replikasi || []).map(function (r) {
+            var buruk = r.korelasi < 0.5;
+            return '<tr><td class="tr-left">' + r.yang_diramal + '</td>' +
+                   '<td class="' + (buruk ? 'tr-rugi' : 'tr-naik') + '">' +
+                   (r.korelasi > 0 ? '+' : '') + trNum(r.korelasi) + '</td></tr>';
+        }).join(''));
+        $('#trReplikasiNote').text(b.replikasi_catatan || '');
+
+        $('#trRegimeBody').html((b.regime || []).map(function (r) {
+            return '<tr><td class="tr-left">' + r.rezim + '</td>' +
+                   '<td class="tr-rugi">' + trNum(r.rugi, 1) + '%</td>' +
+                   '<td class="tr-naik">' + trNum(r.naik, 1) + '%</td></tr>';
+        }).join(''));
+        $('#trRegimeNote').text(b.regime_catatan || '');
+        $('#trSatuTuas').text(b.satu_tuas || '');
+        $('#trSurvivor').text(b.survivorship || '');
+    }
+
+    function trRenderGrid(d) {
+        var grid = d.grid || [];
+        var urutV = ['<1,5%', '1,5-2,5%', '2,5-3,5%', '3,5-5%', '>5%'];
+        var urutD = ['jatuh >40%', 'jatuh 20-40%', 'dekat puncak'];
+        var peta = {};
+        grid.forEach(function (g) { peta[g.volat + '|' + g.jatuh] = g; });
+        $('#trGridBody').html(urutV.map(function (v) {
+            var sel = urutD.map(function (dd) {
+                var g = peta[v + '|' + dd];
+                if (!g) { return '<td class="tr-dim">&mdash;</td>'; }
+                return '<td><span class="tr-rugi">' + trNum(g.x_rugi) + 'x</span>' +
+                       ' <span class="tr-dim">/</span> ' +
+                       '<span class="tr-naik">' + trNum(g.x_naik) + 'x</span>' +
+                       '<div class="tr-sub">n ' + g.n26 + ' / ' + g.n16 + '</div></td>';
+            }).join('');
+            return '<tr><td class="tr-left">' + v + '</td>' + sel + '</tr>';
+        }).join(''));
+    }
+
+    function trRenderStats(d) {
+        var b = d.baris || [];
+        function n(f) { return b.filter(f).length; }
+        var html = [
+            ['Emiten terukur', d.jumlah, 'likuid &ge; Rp1 M/hari'],
+            ['Dilewati tipis', d.dilewati_tipis, 'di bawah batas likuiditas'],
+            ['Sangat liar', n(function (r) { return r.label === 'sangat liar'; }), 'risiko &ge; 1,40x'],
+            ['Peluang &ge; 2x', n(function (r) { return r.x_naik >= 2; }), 'liar DAN baru jatuh dalam'],
+            ['Sangat tenang', n(function (r) { return r.label === 'sangat tenang'; }), 'risiko &lt; 0,55x']
+        ].map(function (s) {
+            return '<div><div class="tr-label">' + s[0] + '</div>' +
+                   '<div class="tr-val">' + s[1] + '</div>' +
+                   '<div class="tr-sub">' + s[2] + '</div></div>';
+        }).join('');
+        $('#trStats').html(html);
+    }
+
+    function trRenderTable() {
+        if (!trData) { return; }
+        var kelas = $('#trKelas').val(), jatuh = $('#trJatuh').val();
+        var q = ($('#trFilter').val() || '').trim().toUpperCase();
+        var rows = (trData.baris || []).filter(function (r) {
+            if (kelas && r.label !== kelas) { return false; }
+            if (jatuh && r.keranjang_jatuh !== jatuh) { return false; }
+            if (q && r.stock.indexOf(q) === -1) { return false; }
+            return true;
+        });
+        var k = trSort.key, dir = trSort.dir === 'asc' ? 1 : -1;
+        rows.sort(function (a, b) {
+            var x = a[k], y = b[k];
+            if (typeof x === 'string') { return x.localeCompare(y) * dir; }
+            return ((x === null ? -1e9 : x) - (y === null ? -1e9 : y)) * dir;
+        });
+        $('#trHitung').html(rows.length + ' emiten');
+        $('#trTbody').html(rows.map(function (r) {
+            return '<tr>' +
+                '<td class="tr-left"><a class="tr-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>' +
+                '<td>' + (r.harga === null ? '&mdash;' : Number(r.harga).toLocaleString('id-ID')) + '</td>' +
+                '<td>' + trNum(r.volat) + '%</td>' +
+                '<td class="' + (r.dari_puncak <= -40 ? 'tr-rugi' : '') + '">' + trNum(r.dari_puncak, 1) + '%</td>' +
+                '<td class="tr-rugi">' + trNum(r.x_rugi) + 'x</td>' +
+                '<td class="tr-naik">' + trNum(r.x_naik) + 'x</td>' +
+                '<td class="tr-left"><span class="tr-badge tr-' + r.verdict + '">' + r.label + '</span>' +
+                (r.interpolasi ? ' <span class="tr-sub">interpolasi</span>' : '') + '</td>' +
+                '<td>' + (r.ukuran_setara === null ? '&mdash;' : r.ukuran_setara + '%') + '</td>' +
+                '</tr>';
+        }).join(''));
+    }
+
+    function trLoad(force) {
+        $('#trBody').hide(); $('#trMessage').hide(); $('#trLoading').show();
+        $.post('/takaran-risiko-data', { force: force ? '1' : '0' }).done(function (d) {
+            if (!d || !d.available) {
+                $('#trLoading').hide();
+                $('#trMessage').show().text((d && d.message) || 'Data tidak tersedia.');
+                return;
+            }
+            trData = d;
+            trRenderBukti(d); trRenderGrid(d); trRenderStats(d); trRenderTable();
+            $('#trLoading').hide(); $('#trBody').show();
+        }).fail(function () {
+            $('#trLoading').hide();
+            $('#trMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}), jadi POST yang
+    // dipanggil lebih awal berangkat TANPA token dan ditolak 400.
+    $(document).ready(function () {
+        $('#trKelas, #trJatuh').on('change', trRenderTable);
+        $('#trFilter').on('input', trRenderTable);
+        $('#trRefresh').on('click', function () { trLoad(true); });
+        trSort = window.makeSortable('#trThead', function (key, dir) {
+            trSort.key = key; trSort.dir = dir; trRenderTable();
+        }, trSort.key, trSort.dir);
+        trLoad(false);
+    });
+</script>
+{% endblock %}

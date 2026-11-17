@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% block title %}Rontgen Portofolio{% endblock %}
+{% block page_title %}Rontgen Portofolio{% endblock %}
+
+{% block content %}
+
+<style>
+    .rx-finding:last-child { margin-bottom: 0; }
+    .rx-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .rx-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .rx-finding strong { color: var(--text); }
+
+    .rx-hero { display: flex; gap: 30px; align-items: center; flex-wrap: wrap; }
+    .rx-hero-main { flex: 0 0 auto; }
+    .rx-hero-val { font-family: var(--font-mono); font-size: 44px; font-weight: 700; line-height: 1; }
+    .rx-hero-lab { font-size: 10px; font-weight: 700; letter-spacing: 0.6px;
+                   text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+    .rx-hero-sub { font-size: 12px; color: var(--text-mid); margin-top: 8px; line-height: 1.6; max-width: 460px; }
+
+    .rx-stat-value { font-family: var(--font-mono); font-size: 20px; font-weight: 600; margin-top: 4px; }
+
+    .rx-bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 12px; }
+    .rx-bar-name { flex: 0 0 180px; color: var(--text-mid); }
+    .rx-bar-track { flex: 1 1 auto; height: 9px; border-radius: 5px; background: var(--raised); overflow: hidden; }
+    .rx-bar-fill { height: 100%; }
+    .rx-bar-val { font-family: var(--font-mono); width: 60px; text-align: right; }
+
+    .rx-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .rx-table th.rx-left { text-align: left; }
+    .rx-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .rx-table td.rx-left { text-align: left; font-family: var(--font-ui); }
+    .rx-table tbody tr:hover { background: var(--raised); }
+    .rx-ticker:hover { text-decoration: underline; }
+
+</style>
+
+<div id="rxLoading" class="rx-empty">Menjalankan portofolio melewati semua kalibrasi&hellip;</div>
+<div id="rxMessage" class="rx-empty" style="display:none;"></div>
+
+<div id="rxBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="rx-section-title">Menurut App Ini Sendiri, Portofolio Anda Seperti Apa</div>
+        <div class="rx-hero">
+            <div class="rx-hero-main">
+                <div class="rx-hero-lab">Win rate tertimbang modal</div>
+                <div class="rx-hero-val" id="rxHeroVal">&mdash;</div>
+                <div class="rx-hero-sub" id="rxHeroSub"></div>
+            </div>
+        </div>
+        <div class="rx-note" id="rxSumber"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="rx-section-title">Ringkasan</div>
+        <div class="rx-stat-grid" id="rxStats"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="rx-section-title">Eksposur Modal per Kalibrasi</div>
+        <div id="rxEksposur"></div>
+        <div class="rx-note">
+            Persentase <strong>modal</strong>, bukan jumlah saham &mdash; saham yang isinya 5% modal tidak dihitung
+            sama berat dengan yang isinya 60%.
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="rx-section-title">Penyumbang Risiko Terbesar</div>
+        <div style="overflow-x:auto;">
+            <table class="rx-table">
+                <thead id="rxRiskHead">
+                    <tr>
+                        <th class="rx-left" data-sort-key="stock">Kode</th>
+                        <th data-sort-key="bobot_pct">Bobot modal %</th>
+                        <th class="rx-left" data-sort-key="fake_cell">Sel</th>
+                        <th data-sort-key="fake_vs">Sel vs baseline</th>
+                        <th data-sort-key="dampak">Dampak</th>
+                    </tr>
+                </thead>
+                <tbody id="rxRiskBody"></tbody>
+            </table>
+        </div>
+        <div class="rx-note">
+            <strong>Dampak</strong> = bobot modal &times; seberapa jauh sel itu di bawah baseline. Saham dengan sel
+            buruk tapi bobot kecil tidak sepenting saham dengan sel agak buruk tapi bobot besar.
+        </div>
+    </div>
+
+    <div class="content-card" style="border-left:3px solid var(--accum);">
+        <div class="rx-section-title" style="color:var(--accum);">Porsi Modal vs Porsi Risiko</div>
+        <div class="rx-finding">
+            <h4>Satu-satunya bagian halaman ini yang berdiri di atas temuan yang lolos uji luar sampel.</h4>
+            <p>Semua kalibrasi lain di halaman ini soal <strong>arah</strong> &mdash; dan arah berkali-kali
+            gagal direplikasi di app ini. Besaran ayunan sebaliknya: korelasi antar sampel <strong>+0,90</strong>.
+            Sumbangan risiko = bobot modal &times; kelipatan risiko. Dua posisi berbobot 20% tidak menyumbang
+            risiko sama besar kalau yang satu 0,4x dan yang lain 1,8x.</p>
+        </div>
+        <div class="rx-stat-grid" id="rxTakaranStat" style="margin:14px 0;"></div>
+        <div style="overflow-x:auto;">
+            <table class="rx-table">
+                <thead><tr>
+                    <th class="rx-left">Kode</th>
+                    <th>Porsi modal %</th>
+                    <th>Porsi risiko %</th>
+                    <th>Selisih</th>
+                    <th>Risiko</th>
+                    <th>Peluang</th>
+                    <th class="rx-left">Kelas</th>
+                </tr></thead>
+                <tbody id="rxTakaranBody"></tbody>
+            </table>
+        </div>
+        <div class="rx-note" id="rxTakaranNote"></div>
+    </div>
+
+    <div class="content-card">
+        <div class="rx-section-title">Rincian per Saham</div>
+        <div style="overflow-x:auto;">
+            <table class="rx-table">
+                <thead id="rxThead">
+                    <tr>
+                        <th class="rx-left" data-sort-key="stock">Kode</th>
+                        <th data-sort-key="bobot_pct">Bobot %</th>
+                        <th data-sort-key="nilai_sekarang">Nilai (jt)</th>
+                        <th data-sort-key="pnl_pct">P&amp;L %</th>
+                        <th class="rx-left" data-sort-key="fake_cell">Harga &times; arus</th>
+                        <th data-sort-key="fake_win">Win sel %</th>
+                        <th class="rx-left" data-sort-key="float_label">Serapan float</th>
+                        <th class="rx-left" data-sort-key="crowd_label">Keramaian</th>
+                        <th data-sort-key="crowd_win">Win keramaian %</th>
+                        <th class="rx-left" data-sort-key="flow_label">Kesehatan arus</th>
+                        <th class="rx-left" data-sort-key="kering">Kering</th>
+                    </tr>
+                </thead>
+                <tbody id="rxTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="rx-section-title">Batas Angka Ini</div>
+        <div class="rx-finding">
+            <h4>Ini bukan ramalan, dan portofolio &quot;sel bagus&quot; tetap bisa rugi.</h4>
+            <p>Win rate sel adalah rata-rata <strong>kelompok</strong> dari periode Jan&ndash;Sep 2026 yang
+            didominasi pasar turun. Kalibrasinya juga <strong>belum pernah diuji di luar sampel</strong> &mdash;
+            dikalibrasi dan dinilai pada 8 bulan yang sama &mdash; jadi sebagian mungkin kebetulan. Selain itu
+            angka tertimbang menyembunyikan sebaran: dua portofolio dengan rata-rata sama bisa sangat berbeda
+            isinya, karena itu tabel per saham tetap ditampilkan di atas dan bukan diganti oleh satu angka.</p>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var rxData = null;
+    var rxSort = { key: 'bobot_pct', dir: 'desc' };
+    var rxRiskSort = { key: 'dampak', dir: 'desc' };
+
+    function rxNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function rxSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="rx-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'rx-up' : (v < 0 ? 'rx-down' : 'rx-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + rxNum(v, d) + '</span>';
+    }
+    var RX_COLOR = { hijau: 'var(--accum)', kuning: 'var(--warn)',
+                     merah: 'var(--distrib)', netral: 'var(--text-dim)',
+                     setara: 'var(--accum)', bawah: 'var(--text-dim)',
+                     jauh: 'var(--warn)', sangat_jauh: 'var(--distrib)' };
+
+    function rxRenderHero(d) {
+        var v = d.fake_win;
+        var diff = d.fake_vs_baseline;
+        var warna = (diff === null) ? 'var(--text-dim)'
+                  : (diff >= 2 ? 'var(--accum)' : (diff >= -2 ? 'var(--warn)' : 'var(--distrib)'));
+        $('#rxHeroVal').text(v === null ? '—' : rxNum(v, 1) + '%').css('color', warna);
+        if (v === null) {
+            $('#rxHeroSub').text('Belum bisa dihitung — data kalibrasi tidak tersedia untuk isi portofolio ini.');
+        } else {
+            $('#rxHeroSub').html('Portofolio Anda sedang duduk di sel-sel yang secara historis menang '
+                + '<strong>' + rxNum(v, 1) + '%</strong> dari waktu, sementara baseline pasar di periode yang sama '
+                + '<strong>' + rxNum(d.baseline, 1) + '%</strong> — selisih ' + rxSigned(diff, 1) + ' poin persen. '
+                + 'Mencakup ' + rxNum(d.fake_cover, 1) + '% modal.');
+        }
+        $('#rxSumber').text(d.catatan || '');
+    }
+
+    function rxRenderStats(d) {
+        var items = [];
+        if (d.dibobot_modal) {
+            items.push(['Nilai portofolio', 'Rp ' + rxNum((d.total_nilai || 0) / 1e6, 1) + ' jt', 'var(--text)']);
+            var pnl = (d.total_modal ? (d.total_nilai - d.total_modal) / d.total_modal * 100 : null);
+            items.push(['P&L keseluruhan', pnl === null ? '—' : (pnl > 0 ? '+' : '') + rxNum(pnl, 2) + '%',
+                        pnl > 0 ? 'var(--accum)' : 'var(--distrib)']);
+        }
+        items.push(['Jumlah saham', rxNum(d.n), 'var(--text)']);
+        items.push(['Win keramaian', d.crowd_win === null ? '—' : rxNum(d.crowd_win, 1) + '%', 'var(--text-mid)']);
+        items.push(['Di sel terburuk', rxNum(d.eksposur.sel_terburuk, 1) + '%', 'var(--distrib)']);
+        $('#rxStats').html(items.map(function (it) {
+            return '<div><div class="rx-stat-label">' + it[0] + '</div>'
+                 + '<div class="rx-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function rxRenderEksposur(d) {
+        var e = d.eksposur;
+        var baris = [
+            ['Sel terbaik (turun + Top5 beli)', e.sel_terbaik, 'var(--accum)'],
+            ['Serapan float ringan', e.serapan_ringan, 'var(--accum)'],
+            ['Bandar melepas', e.bandar_melepas, 'var(--distrib)'],
+            ['Sel akumulasi palsu', e.sel_terburuk, 'var(--distrib)'],
+            ['Ramai: jauh di bawah pasar', e.ramai_jauh, 'var(--warn)'],
+            ['Ramai: sangat jauh di bawah pasar', e.ramai_sangat_jauh, 'var(--distrib)'],
+            ['Kandidat Kering Screener', e.kandidat_kering, 'var(--text-mid)']
+        ];
+        $('#rxEksposur').html(baris.map(function (b) {
+            return '<div class="rx-bar-row">'
+                 + '<div class="rx-bar-name">' + b[0] + '</div>'
+                 + '<div class="rx-bar-track"><div class="rx-bar-fill" style="width:' + Math.min(100, b[1])
+                 +   '%; background:' + b[2] + ';"></div></div>'
+                 + '<div class="rx-bar-val">' + rxNum(b[1], 1) + '%</div></div>';
+        }).join(''));
+    }
+
+    function rxRenderRisk() {
+        var rows = window.sortRows(rxData.penyumbang_risiko || [], rxRiskSort.key, rxRiskSort.dir);
+        if (!rows.length) {
+            $('#rxRiskBody').html('<tr><td colspan="5" class="rx-empty">Tidak ada saham yang selnya di bawah baseline.</td></tr>');
+            return;
+        }
+        $('#rxRiskBody').html(rows.map(function (r) {
+            return '<tr>'
+                 + '<td class="rx-left"><a class="rx-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>'
+                 + '<td>' + rxNum(r.bobot_pct, 1) + '</td>'
+                 + '<td class="rx-left rx-dim">' + (r.fake_cell || '—') + '</td>'
+                 + '<td>' + rxSigned(r.fake_vs, 1) + '</td>'
+                 + '<td>' + rxNum(r.dampak, 2) + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function rxRenderTakaran() {
+        var t = (rxData && rxData.takaran) || {};
+        var rows = t.baris || [];
+        if (!rows.length) {
+            $('#rxTakaranBody').html('<tr><td colspan="7" class="rx-empty">Takaran risiko belum bisa dihitung untuk posisi ini.</td></tr>');
+            $('#rxTakaranStat').empty();
+            $('#rxTakaranNote').text('');
+            return;
+        }
+        $('#rxTakaranStat').html([
+            ['Risiko portofolio', (t.x_rugi === null ? '—' : t.x_rugi + 'x'), 'dibanding emiten rata-rata'],
+            ['Peluang portofolio', (t.x_naik === null ? '—' : t.x_naik + 'x'), 'kelipatan lonjakan +30%'],
+            ['Tiga teratas', rxNum(t.tiga_teratas, 1) + '%', 'porsi risiko di 3 posisi terbesar'],
+            ['Cakupan', rxNum(t.cakupan, 1) + '%', 'bobot modal yang terukur']
+        ].map(function (s) {
+            return '<div><div class="rx-stat-label">' + s[0] + '</div>'
+                 + '<div class="rx-stat-value">' + s[1] + '</div>'
+                 + '<div class="rx-stat-sub">' + s[2] + '</div></div>';
+        }).join(''));
+        $('#rxTakaranBody').html(rows.map(function (r) {
+            // Selisih positif = posisi ini memakan porsi risiko lebih besar
+            // daripada porsi modalnya. Itu angka yang layak dilihat, bukan
+            // bobot modalnya sendiri.
+            var warna = r.selisih > 5 ? 'var(--distrib)' : (r.selisih < -5 ? 'var(--accum)' : 'inherit');
+            return '<tr>'
+                 + '<td class="rx-left"><a class="rx-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>'
+                 + '<td>' + rxNum(r.bobot_pct, 1) + '</td>'
+                 + '<td>' + rxNum(r.risiko_pct, 1) + '</td>'
+                 + '<td style="color:' + warna + ';">' + rxSigned(r.selisih, 1) + '</td>'
+                 + '<td>' + rxNum(r.x_rugi, 2) + 'x</td>'
+                 + '<td>' + rxNum(r.x_naik, 2) + 'x</td>'
+                 + '<td class="rx-left rx-dim">' + (r.label || '—') + '</td>'
+                 + '</tr>';
+        }).join(''));
+        $('#rxTakaranNote').text(t.catatan || '');
+    }
+
+    function rxRenderTable() {
+        var rows = window.sortRows(rxData.rows || [], rxSort.key, rxSort.dir);
+        $('#rxTableBody').html(rows.map(function (r) {
+            var crowdColor = RX_COLOR[r.crowd_verdict] || 'var(--text-dim)';
+            var fakeColor = RX_COLOR[r.fake_verdict] || 'var(--text-dim)';
+            return '<tr>'
+                 + '<td class="rx-left"><a class="rx-ticker" href="/saham/' + r.stock + '">' + r.stock + '</a></td>'
+                 + '<td>' + rxNum(r.bobot_pct, 1) + '</td>'
+                 + '<td>' + (r.nilai_sekarang === null ? '<span class="rx-dim">&mdash;</span>' : rxNum(r.nilai_sekarang / 1e6, 1)) + '</td>'
+                 + '<td>' + rxSigned(r.pnl_pct, 2) + '</td>'
+                 + '<td class="rx-left"><span class="rx-badge" style="color:' + fakeColor
+                 +   '; border:1px solid ' + fakeColor + '55; background:' + fakeColor + '14;">'
+                 +   (r.fake_cell || '—') + '</span></td>'
+                 + '<td>' + rxNum(r.fake_win, 1) + '</td>'
+                 + '<td class="rx-left rx-dim">' + (r.float_label || '—')
+                 +   (r.float_pct === null || r.float_pct === undefined ? '' : ' <span class="rx-dim">(' + rxNum(r.float_pct, 2) + '%)</span>') + '</td>'
+                 + '<td class="rx-left"><span style="color:' + crowdColor + ';">' + (r.crowd_label || '—') + '</span></td>'
+                 + '<td>' + rxNum(r.crowd_win, 1) + '</td>'
+                 + '<td class="rx-left rx-dim">' + (r.flow_label || '—') + '</td>'
+                 + '<td class="rx-left">' + (r.kering ? '<span class="rx-badge" style="color:var(--warn); border:1px solid var(--warn)55; background:var(--warn)14;">kandidat</span>' : '<span class="rx-dim">—</span>') + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function rxLoad() {
+        $.post('/rontgen-portofolio-data', {}).done(function (d) {
+            $('#rxLoading').hide();
+            if (!d || d.available === false) {
+                $('#rxMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            rxData = d;
+            rxRenderHero(d);
+            rxRenderStats(d);
+            rxRenderEksposur(d);
+            rxRenderRisk();
+            rxRenderTakaran();
+            rxRenderTable();
+            $('#rxBody').show();
+        }).fail(function () {
+            $('#rxLoading').hide();
+            $('#rxMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // Di dalam document.ready: base.html memasang $.ajaxSetup untuk header
+    // X-CSRFToken di dalam $(function(){...}), jadi POST yang berangkat
+    // lebih awal akan ditolak 400.
+    $(document).ready(function () {
+        rxSort = window.makeSortable('#rxThead', function (key, dir) {
+            rxSort.key = key; rxSort.dir = dir;
+            if (rxData) { rxRenderTable(); }
+        }, rxSort.key, rxSort.dir);
+
+        rxRiskSort = window.makeSortable('#rxRiskHead', function (key, dir) {
+            rxRiskSort.key = key; rxRiskSort.dir = dir;
+            if (rxData) { rxRenderRisk(); }
+        }, rxRiskSort.key, rxRiskSort.dir);
+
+        rxLoad();
+    });
+</script>
+{% endblock %}

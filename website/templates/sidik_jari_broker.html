@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+{% block title %}Sidik Jari Broker{% endblock %}
+{% block page_title %}Sidik Jari Broker{% endblock %}
+
+{% block content %}
+
+<style>
+    .sj-finding:last-child { margin-bottom: 0; }
+    .sj-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .sj-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .sj-finding strong { color: var(--text); }
+
+    .sj-stat-value { font-family: var(--font-mono); font-size: 20px; font-weight: 600; margin-top: 4px; }
+
+    .sj-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .sj-table th.sj-left { text-align: left; }
+    .sj-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .sj-table td.sj-left { text-align: left; font-family: var(--font-ui); white-space: normal; }
+    .sj-table tbody tr:hover { background: var(--raised); }
+    .sj-broker { font-family: var(--font-ui); font-weight: 700; color: var(--accum); }
+
+
+    .sj-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+</style>
+
+<div class="sj-controls">
+    <div class="sj-field">
+        <label>Tampilan</label>
+        <select id="sjMode" class="form-select form-select-sm" style="width:230px;">
+            <option value="modal" selected>Harga modal bandar (terbukti)</option>
+            <option value="broker">Profil perilaku broker</option>
+        </select>
+    </div>
+    
+    <div class="sj-field sj-only-broker">
+        <label>Tipe perilaku</label>
+        <select id="sjTipe" class="form-select form-select-sm" style="width:230px;">
+            <option value="khas" selected>Hanya yang perilakunya khas</option>
+            <option value="all">Semua broker</option>
+            <option value="akumulator sabar">Akumulator sabar</option>
+            <option value="pemburu lemah">Pemburu lemah</option>
+            <option value="pengejar momentum">Pengejar momentum</option>
+            <option value="pedagang cepat">Pedagang cepat</option>
+            <option value="broker ritel luas">Broker ritel luas</option>
+        </select>
+    </div>
+    <div class="sj-field sj-only-broker">
+        <label>Cari kode broker</label>
+        <input type="text" id="sjFilter" class="form-control form-control-sm"
+               placeholder="YP" style="width:110px; text-transform:uppercase;">
+    </div>
+    <div class="sj-field">
+        <label>Lihat per saham</label>
+        <input type="text" id="sjStock" class="form-control form-control-sm" maxlength="6"
+               placeholder="BBRI" style="width:110px; text-transform:uppercase;">
+    </div>
+    <button type="button" class="btn btn-sm btn-primary" id="sjGo">Lihat Saham</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="sjBack" style="display:none;">Kembali ke daftar broker</button>
+</div>
+
+<div id="sjLoading" class="sj-empty">Menyusun sidik jari perilaku broker&hellip;</div>
+<div id="sjMessage" class="sj-empty" style="display:none;"></div>
+
+<div id="sjBody" style="display:none;">
+
+    <div class="content-card">
+        <div class="sj-section-title">Apa yang Terbukti, dan Apa yang Tidak</div>
+        <div class="sj-finding" style="border-color:var(--distrib);">
+            <h4>Halaman ini BUKAN alat &quot;ikuti broker pintar&quot; &mdash; itu sudah diuji dan gagal.</h4>
+            <p>Diuji di tingkat tipe perilaku terhadap baseline saham-hari: <strong>semua tipe edge-nya
+            negatif</strong> &mdash; pemburu lemah &minus;4,05, pengejar momentum &minus;5,65, netral &minus;5,75,
+            ritel luas &minus;5,77, pedagang cepat &minus;6,22. Semua potongan sifat (kontrarian, kesabaran,
+            keluasan) juga negatif. Artinya keunggulan satu-dua broker <strong>tidak menular ke tipenya</strong>.
+            Broker besar sedang membeli banyak justru sinyal negatif sekitar &minus;5 poin persen, karena itu
+            terjadi di hari yang ramai &mdash; dan hari ramai hasilnya buruk (lihat Lensa Keramaian).</p>
+        </div>
+        <div class="sj-finding" style="border-color:var(--accum);">
+            <h4>Yang terbukti: harga modal bandar &mdash; dan itu informasi yang harga saja tidak punya.</h4>
+            <p>Dari 98.950 pengamatan di 878 saham, <strong>dikendalikan terhadap drift harga</strong> supaya bukan
+            sekadar mengulang Akumulasi Palsu: pada saham yang sama-sama <strong>turun</strong>, kalau pembeli
+            besarnya masih <strong>rugi</strong> &gt;5% win rate-nya <strong>48,9%</strong>; kalau mereka masih
+            <strong>untung</strong> &gt;5% win rate-nya jatuh ke <strong>33,4%</strong>. Selisih
+            <strong>15,5 poin persen di dalam kelompok harga yang sama</strong>, dan konsisten di kedua paruh
+            periode. Mekanismenya masuk akal: bandar yang masih untung punya ruang dan insentif untuk terus
+            melepas; yang sudah rugi cenderung mempertahankan harga.</p>
+        </div>
+        <div class="sj-finding">
+            <h4>Kegunaan ketiga: mencegah salah baca yang umum.</h4>
+            <p>Tanpa klasifikasi keluasan, YP/PD/XL/CC akan terbaca sebagai &quot;bandar sabar sedang
+            mengumpulkan&quot; &mdash; padahal mereka menyentuh seluruh 881 saham setiap hari; itu platform ritel
+            dengan ribuan nasabah, bukan satu pihak. Buku besar: <strong id="sjLedgerMeta"></strong>.</p>
+        </div>
+    </div>
+
+    <div id="sjModalWrap">
+        <div class="content-card">
+            <div class="sj-section-title">Rekam Jejak Historis (Dalam Sampel &mdash; Gagal Direplikasi)
+                <span id="sjKalMeta" class="sj-dim"></span></div>
+            <div style="overflow-x:auto;">
+                <table class="sj-table">
+                    <thead><tr>
+                        <th class="sj-left">Drift harga 20h</th>
+                        <th class="sj-left">Posisi harga vs modal bandar</th>
+                        <th>n</th><th>Win %</th><th>Edge</th><th class="sj-left">Konsisten 2 paruh</th>
+                    </tr></thead>
+                    <tbody id="sjKalBody"></tbody>
+                </table>
+            </div>
+            <div class="sj-note" style="border-left:2px solid var(--distrib); padding-left:8px;">
+                <strong style="color:var(--distrib);">Angka di tabel ini tidak lolos uji luar sampel.</strong>
+                Semuanya berasal dari satu jendela sempit: 881 emiten, Jan&ndash;Sep 2026, satu rezim pasar,
+                8 bulan. Diuji ulang pada data terpisah &mdash; 21 emiten besar, 2016&ndash;2025, struktur
+                disamakan persis (antrean FIFO di-reset tiap awal tahun, burn-in 60 hari, horizon 20 hari,
+                jadi 10 replikasi mandiri) &mdash; hasilnya:
+                <strong>bandar rugi &gt;5%: +3,06 &rarr; &minus;0,10</strong>;
+                <strong>bandar untung &gt;5%: &minus;7,14 &rarr; +1,16</strong> (tanda terbalik).
+                Sisi peringatan hanya negatif di 5 dari 10 tahun &mdash; setara lempar koin.
+                Satu aturan turunan (&ldquo;bandar rugi tapi harga sudah naik &gt;20% = bahaya&rdquo;) sudah
+                <strong>dicabut</strong> dari kode: per periode tandanya berbalik-balik
+                (&minus;7,07 / +13,48 / &minus;2,33).
+            </div>
+            <div class="sj-note">
+                <strong>Yang belum bisa dipisahkan:</strong> kegagalan ini bisa karena rezim pasarnya berbeda,
+                atau karena semesta ujinya cuma 21 emiten besar sementara sinyalnya mungkin memang hanya hidup
+                di lapis tiga. Data yang tersedia tidak bisa memisahkan keduanya. Artinya angka di atas belum
+                terbukti salah &mdash; tapi juga tidak berhak dipakai seolah sudah terbukti benar.
+                <strong>Pakai kolom modal sebagai pengamatan, bukan sinyal beli.</strong>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="sj-section-title">Cara Modal Dihitung</div>
+            <div class="sj-finding">
+                <h4>Bukan rata-rata harga beli, dan bukan jendela bergulir.</h4>
+                <p>Tiap broker dilacak posisinya sendiri: pembelian menambah lot, penjualan
+                <strong>menghapus lot TERTUA lebih dulu (FIFO)</strong> &mdash; sehingga yang tersisa di
+                tangan adalah pembelian <strong>terbaru</strong>, dan harga terkini itulah yang menentukan
+                perilaku mereka sekarang. Modal bandar = rata-rata harga lot yang masih dipegang seluruh
+                broker, ditimbang besar posisinya.</p>
+            </div>
+            <div class="sj-finding">
+                <h4>Tiga versi sebelumnya dicoba dan dibuang &mdash; ini alasannya.</h4>
+                <p><strong>Rata-rata harga beli saja</strong>: mengabaikan penjualan sepenuhnya; sisi
+                peringatannya tidak konsisten antar paruh. <strong>Neto agregat semua broker</strong>: posisi
+                pasar selalu ~nol karena tiap transaksi punya dua sisi, sehingga modal cuma mengikuti harga
+                &mdash; hanya 13 dari 572 emiten yang bergerak &gt;5%. <strong>Biaya rata-rata bergerak</strong>:
+                benar secara akuntansi tapi memberi bobot sama pada pembelian setahun lalu dan kemarin; FIFO
+                mengunggulinya di 3 dari 4 sel &mdash; perbandingan ini juga in-sample, jadi ia
+                menjelaskan <em>kenapa metode ini yang dipilih</em>, bukan bukti metodenya berhasil. Modal juga <strong>tidak lagi bergantung jendela</strong> &mdash;
+                dihitung dari seluruh riwayat posisi, dan terbukti identik untuk jendela 5/20/60 hari.</p>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="sj-section-title">Ringkasan Pasar <span id="sjModalMeta" class="sj-dim"></span></div>
+            <div class="sj-stat-grid" id="sjModalStats"></div>
+        </div>
+
+        <div class="content-card">
+            <div class="sj-section-title">Posisi Modal Bandar per Emiten <span id="sjModalCount" class="sj-dim"></span></div>
+            <div style="overflow-x:auto;">
+                <table class="sj-table">
+                    <thead id="sjModalThead">
+                        <tr>
+                            <th class="sj-left" data-sort-key="stock">Kode</th>
+                            <th class="sj-left" data-sort-key="posisi">Posisi</th>
+                            <th data-sort-key="harga_modal">Harga modal bandar</th>
+                            <th data-sort-key="harga_sekarang">Harga sekarang</th>
+                            <th data-sort-key="rasio">Selisih %</th>
+                            <th data-sort-key="drift"><span id="sjDriftHead">Drift harga %</span></th>
+                            <th data-sort-key="n_broker_pemegang">Broker pemegang</th>
+                            <th data-sort-key="rasio_banding">vs modal 20h lalu</th>
+                            <th data-sort-key="adv_value_b">ADV (M)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sjModalBody"></tbody>
+                </table>
+            </div>
+            <div class="sj-note">
+                <strong>Harga modal bandar</strong> = biaya rata-rata bergerak posisi TIAP BROKER (beli menambah posisi di harga beli, jual mengurangi posisi di biaya rata-rata berjalan), lalu dirata-ratakan tertimbang posisi broker yang masih memegang. Versi awal cuma merata-rata harga beli tanpa memperhitungkan penjualan &mdash; sisi peringatannya ternyata tidak konsisten. Kolom <strong>VETO</strong> menandai saham yang terlihat aman tapi modalnya sudah turun jauh (bandar sudah average down).
+            </div>
+        </div>
+    </div>
+
+    <div class="content-card sj-only-broker">
+        <div class="sj-section-title">Ringkasan <span id="sjMeta" class="sj-dim"></span></div>
+        <div class="sj-stat-grid" id="sjStats"></div>
+    </div>
+
+    <div class="content-card sj-only-broker">
+        <div class="sj-section-title">Daftar Broker <span id="sjCount" class="sj-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="sj-table">
+                <thead id="sjThead">
+                    <tr>
+                        <th class="sj-left" data-sort-key="broker">Broker</th>
+                        <th class="sj-left" data-sort-key="tipe">Tipe perilaku</th>
+                        <th data-sort-key="total_lot">Total lot (jt)</th>
+                        <th data-sort-key="n_saham">Saham disentuh</th>
+                        <th data-sort-key="rata2_streak">Kesabaran (hari)</th>
+                        <th data-sort-key="drift_saat_beli">Harga saat masuk %</th>
+                        <th data-sort-key="konsentrasi_top10">Konsentrasi top10 %</th>
+                        <th data-sort-key="fwd_win">Win 20h % <span class="sj-dim">(jangan diikuti)</span></th>
+                        <th data-sort-key="fwd_vs_baseline">vs baseline <span class="sj-dim">(tipe: negatif)</span></th>
+                    </tr>
+                </thead>
+                <tbody id="sjTableBody"></tbody>
+            </table>
+        </div>
+        <div class="sj-note">
+            <strong>Harga saat masuk</strong> = rata-rata perubahan harga 20 hari SEBELUM broker itu net beli.
+            Negatif berarti cenderung masuk saat harga sedang turun. <strong>Kesabaran</strong> = rata-rata berapa
+            hari berturut-turut mereka bertahan net beli di saham yang sama. <strong>Win 20h</strong> adalah
+            korelasi, bukan sebab-akibat &mdash; broker berhasil bisa saja sekadar melayani nasabah yang kebetulan
+            pintar. Selisihnya juga kecil (±2&ndash;4 poin persen), jadi jangan diperlakukan sebagai keunggulan besar.
+        </div>
+    </div>
+
+</div>
+
+<div id="sjStockBody" style="display:none;">
+    <div class="content-card">
+        <div class="sj-section-title">Siapa yang Bergerak di <span id="sjStockName"></span>
+            <span id="sjStockMeta" class="sj-dim"></span></div>
+        <div id="sjStockModal" style="margin-bottom:14px; font-size:12px; color:var(--text-mid);"></div>
+        <div style="overflow-x:auto;">
+            <table class="sj-table">
+                <thead id="sjStockThead">
+                    <tr>
+                        <th class="sj-left" data-sort-key="broker">Broker</th>
+                        <th class="sj-left" data-sort-key="tipe">Tipe perilaku</th>
+                        <th data-sort-key="lot_net">Net lot</th>
+                        <th data-sort-key="nilai_m">Nilai (M)</th>
+                        <th data-sort-key="harga_rata2">Harga rata-rata</th>
+                        <th data-sort-key="fwd_win">Win 20h % <span class="sj-dim">(jangan diikuti)</span></th>
+                        <th data-sort-key="fwd_vs_baseline">vs baseline <span class="sj-dim">(tipe: negatif)</span></th>
+                    </tr>
+                </thead>
+                <tbody id="sjStockTableBody"></tbody>
+            </table>
+        </div>
+        <div class="sj-note">
+            Pertanyaan yang selama ini tidak bisa dijawab app: bukan &quot;berapa net Top5&quot;, tapi
+            <strong>siapa</strong> yang masuk dan <strong>tipe perilaku apa</strong> mereka.
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var sjData = null;
+    var sjStockData = null;
+    var sjModalData = null;
+    var sjModalSort = { key: 'rasio', dir: 'desc' };
+    var sjSort = { key: 'total_lot', dir: 'desc' };
+    var sjStockSort = { key: 'lot_net', dir: 'desc' };
+
+    var SJ_TIPE_WARNA = {
+        'akumulator sabar': 'var(--accum)',
+        'pemburu lemah': 'var(--warn)',
+        'pengejar momentum': 'var(--distrib)',
+        'pengikut tren': 'var(--distrib)',
+        'pedagang cepat': 'var(--text-dim)',
+        'broker ritel luas': 'var(--info)',
+        'netral': 'var(--text-dim)'
+    };
+
+    function sjNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function sjSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="sj-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'sj-up' : (v < 0 ? 'sj-down' : 'sj-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + sjNum(v, d) + '</span>';
+    }
+    function sjBadge(tipe) {
+        var c = SJ_TIPE_WARNA[tipe] || 'var(--text-dim)';
+        return '<span class="sj-badge" style="color:' + c + '; border:1px solid ' + c
+             + '55; background:' + c + '14;">' + (tipe || '—') + '</span>';
+    }
+
+    function sjRenderStats(d) {
+        var m = d.ledger_meta || {};
+        $('#sjLedgerMeta').text(sjNum(m.n_baris) + ' baris, ' + m.n_broker + ' broker, '
+            + m.n_saham + ' saham, ' + m.n_hari + ' hari');
+        $('#sjMeta').text('— baseline win ' + (d.baseline ? d.baseline.win : '—') + '%');
+        var t = d.tipe_counts || {};
+        var items = [
+            ['Broker dinilai', sjNum(d.n_broker), 'var(--text)'],
+            ['Ritel luas', sjNum(t['broker ritel luas'] || 0), 'var(--info)'],
+            ['Akumulator sabar', sjNum(t['akumulator sabar'] || 0), 'var(--accum)'],
+            ['Pemburu lemah', sjNum(t['pemburu lemah'] || 0), 'var(--warn)'],
+            ['Pengejar momentum', sjNum(t['pengejar momentum'] || 0), 'var(--distrib)']
+        ];
+        $('#sjStats').html(items.map(function (it) {
+            return '<div><div class="sj-stat-label">' + it[0] + '</div>'
+                 + '<div class="sj-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function sjRenderTable() {
+        if (!sjData) { return; }
+        var tipe = $('#sjTipe').val();
+        var q = ($('#sjFilter').val() || '').trim().toUpperCase();
+
+        var rows = (sjData.rows || []).filter(function (r) {
+            if (tipe === 'khas' && r.tipe === 'broker ritel luas') { return false; }
+            if (tipe !== 'khas' && tipe !== 'all' && r.tipe !== tipe) { return false; }
+            if (q && r.broker.indexOf(q) === -1) { return false; }
+            return true;
+        });
+        rows = window.sortRows(rows, sjSort.key, sjSort.dir);
+
+        $('#sjCount').text('— ' + rows.length + ' broker');
+        if (!rows.length) {
+            $('#sjTableBody').html('<tr><td colspan="9" class="sj-empty">Tidak ada broker yang cocok.</td></tr>');
+            return;
+        }
+
+        $('#sjTableBody').html(rows.map(function (r) {
+            return '<tr>'
+                 + '<td class="sj-left"><span class="sj-broker">' + r.broker + '</span></td>'
+                 + '<td class="sj-left">' + sjBadge(r.tipe)
+                 +   '<div class="sj-dim" style="font-size:10.5px; margin-top:3px;">' + (r.tipe_penjelasan || '') + '</div></td>'
+                 + '<td>' + sjNum((r.total_lot || 0) / 1e6, 1) + '</td>'
+                 + '<td>' + sjNum(r.n_saham) + '</td>'
+                 + '<td>' + sjNum(r.rata2_streak, 2) + '</td>'
+                 + '<td>' + sjSigned(r.drift_saat_beli, 2) + '</td>'
+                 + '<td>' + sjNum(r.konsentrasi_top10, 1) + '</td>'
+                 + '<td>' + sjNum(r.fwd_win, 1) + '</td>'
+                 + '<td>' + sjSigned(r.fwd_vs_baseline, 1) + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    function sjRenderStock() {
+        if (!sjStockData) { return; }
+        var rows = window.sortRows(sjStockData.rows || [], sjStockSort.key, sjStockSort.dir);
+        $('#sjStockName').text(sjStockData.stock);
+        var m = sjStockData.modal;
+        if (m && m.rasio !== null && m.rasio !== undefined) {
+            var mc = SJ_POSISI_WARNA[m.posisi] || 'var(--text-dim)';
+            $('#sjStockModal').html('<span class="sj-badge" style="color:' + mc + '; border:1px solid ' + mc
+                + '55; background:' + mc + '14;">' + m.posisi + '</span> &nbsp; harga modal bandar <strong>'
+                + sjNum(m.harga_modal, 2) + '</strong> vs harga sekarang <strong>'
+                + sjNum(m.harga_sekarang, 2) + '</strong> ('
+                + (m.rasio > 0 ? '+' : '') + sjNum(m.rasio, 2) + '%)'
+                + '<div class="sj-note" style="margin-top:6px;">' + m.penjelasan + '</div>').show();
+        } else { $('#sjStockModal').hide(); }
+        $('#sjStockMeta').text('— ' + sjStockData.hari + ' hari terakhir, ' + rows.length + ' broker bergerak');
+        $('#sjStockTableBody').html(rows.map(function (r) {
+            return '<tr>'
+                 + '<td class="sj-left"><span class="sj-broker">' + r.broker + '</span></td>'
+                 + '<td class="sj-left">' + sjBadge(r.tipe) + '</td>'
+                 + '<td>' + sjSigned(r.lot_net, 0) + '</td>'
+                 + '<td>' + sjSigned(r.nilai_m, 2) + '</td>'
+                 + '<td>' + sjNum(r.harga_rata2, 0) + '</td>'
+                 + '<td>' + sjNum(r.fwd_win, 1) + '</td>'
+                 + '<td>' + sjSigned(r.fwd_vs_baseline, 1) + '</td>'
+                 + '</tr>';
+        }).join(''));
+    }
+
+    // ---- Harga modal bandar (bagian yang terbukti) ----
+    var SJ_POSISI_WARNA = { 'bandar untung >5%': 'var(--distrib)', 'sekitar impas': 'var(--warn)',
+                            'bandar rugi >5%': 'var(--accum)' };
+
+    function sjRenderKalibrasi(kal) {
+        $('#sjKalMeta').text('\u2014 return ' + kal.horizon + ' hari, '
+            + Number(kal.n_total).toLocaleString('id-ID') + ' pengamatan, '
+            + kal.n_saham + ' saham, ' + kal.periode);
+        $('#sjKalBody').html(kal.baris.map(function (b) {
+            var w = b.edge > 0 ? 'var(--accum)' : (b.edge < -4 ? 'var(--distrib)' : 'var(--warn)');
+            return '<tr>'
+                 + '<td class="sj-left sj-dim">' + b.drift + '</td>'
+                 + '<td class="sj-left">' + b.posisi + '</td>'
+                 + '<td>' + sjNum(b.n) + '</td>'
+                 + '<td style="color:' + w + ';">' + sjNum(b.win, 1) + '</td>'
+                 + '<td>' + sjSigned(b.edge, 2) + '</td>'
+                 + '<td class="sj-left">' + (b.konsisten
+                     ? '<span class="sj-badge" style="color:var(--text); border:1px solid var(--line);">ya</span>'
+                     : '<span class="sj-dim">tidak</span>') + '</td></tr>';
+        }).join(''));
+    }
+
+
+    function sjRenderModalStats(d) {
+        var c = d.counts || {};
+        $('#sjModalMeta').text('\u2014 jendela ' + d.hari + ' hari');
+        var items = [
+            ['Emiten terukur', sjNum(d.total), 'var(--text)'],
+            ['Bandar untung >5%', sjNum(c['bandar untung >5%'] || 0), 'var(--distrib)'],
+            ['Sekitar impas', sjNum(c['sekitar impas'] || 0), 'var(--warn)'],
+            ['Bandar rugi >5%', sjNum(c['bandar rugi >5%'] || 0), 'var(--accum)']
+        ];
+        $('#sjModalStats').html(items.map(function (it) {
+            return '<div><div class="sj-stat-label">' + it[0] + '</div>'
+                 + '<div class="sj-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+    }
+
+    function sjRenderModalTable() {
+        if (!sjModalData) { return; }
+        var q = ($('#sjStock').val() || '').trim().toUpperCase();
+        var rows = (sjModalData.rows || []).filter(function (r) {
+            return !q || r.stock.indexOf(q) !== -1;
+        });
+        rows = window.sortRows(rows, sjModalSort.key, sjModalSort.dir);
+        $('#sjModalCount').text('\u2014 ' + rows.length + ' emiten');
+        $('#sjModalBody').html(rows.slice(0, 300).map(function (r) {
+            var c = SJ_POSISI_WARNA[r.posisi] || 'var(--text-dim)';
+            return '<tr>'
+                 + '<td class="sj-left"><a class="sj-broker" style="text-decoration:none;" href="/saham/'
+                 +   r.stock + '">' + r.stock + '</a></td>'
+                 + '<td class="sj-left"><span class="sj-badge" style="color:' + c + '; border:1px solid ' + c
+                 +   '55; background:' + c + '14;">' + r.posisi + '</span></td>'
+                 + '<td>' + sjNum(r.harga_modal, 2) + '</td>'
+                 + '<td>' + sjNum(r.harga_sekarang, 2) + '</td>'
+                 + '<td>' + sjSigned(r.rasio, 2) + '</td>'
+                 + '<td>' + sjSigned(r.drift, 2) + '</td>'
+                 + '<td>' + sjNum(r.n_broker_pemegang) + '</td>'
+                 + '<td>' + (r.veto ? '<span class="sj-badge" style="color:var(--distrib); border:1px solid var(--distrib)55; background:var(--distrib)14;">VETO ' + sjNum(r.rasio_banding,1) + '%</span>' : sjSigned(r.rasio_banding, 2)) + '</td>'
+                 + '<td' + (r.likuid ? '' : ' title="Di bawah Rp2 M/hari -- posisi bandar di sini nilainya semu, ongkos keluar-masuk sendiri bisa memakan habis selisihnya sebelum sempat direalisasikan."') + '>'
+                 +   sjNum(r.adv_value_b, 2) + (r.likuid ? '' : ' <span class="sj-dim">&#9888;</span>') + '</td></tr>';
+        }).join(''));
+    }
+
+    function sjLoadModal() {
+        $('#sjLoading').show().html(window.skeleton('tabel', 9, 'Menghitung harga modal bandar seluruh bursa'));
+        $('#sjBody').hide(); $('#sjStockBody').hide(); $('#sjMessage').hide(); $('#sjBack').hide();
+        $.post('/sidik-jari-broker-data',
+               { mode: 'modal' }).done(function (d) {
+            $('#sjLoading').hide();
+            if (!d || d.available === false) {
+                $('#sjMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            sjModalData = d;
+            $('#sjDriftHead').text('Drift harga ' + d.hari + 'h %');
+            sjRenderKalibrasi(d.kalibrasi);
+            sjRenderModalStats(d);
+            sjRenderModalTable();
+            $('#sjBody').show();
+        }).fail(function () {
+            $('#sjLoading').hide();
+            $('#sjMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    function sjTerapkanMode() {
+        var modal = $('#sjMode').val() === 'modal';
+        $('.sj-only-broker').toggle(!modal);
+        $('.sj-only-modal').toggle(modal);
+        $('#sjModalWrap').toggle(modal);
+        if (modal) { sjLoadModal(); } else { sjLoad(); }
+    }
+
+    function sjLoad() {
+        $('#sjLoading').show();
+        $('#sjBody').hide();
+        $('#sjStockBody').hide();
+        $('#sjMessage').hide();
+        $('#sjBack').hide();
+        $.post('/sidik-jari-broker-data', {}).done(function (d) {
+            $('#sjLoading').hide();
+            if (!d || d.available === false) {
+                $('#sjMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            sjData = d;
+            sjRenderStats(d);
+            sjRenderTable();
+            $('#sjBody').show();
+        }).fail(function () {
+            $('#sjLoading').hide();
+            $('#sjMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    function sjLoadStock() {
+        var stock = ($('#sjStock').val() || '').trim().toUpperCase();
+        if (!stock) { return; }
+        $('#sjLoading').show().html(window.skeleton('tabel', 6, 'Memuat broker untuk ' + stock));
+        $('#sjBody').hide();
+        $('#sjStockBody').hide();
+        $('#sjMessage').hide();
+        $.post('/sidik-jari-broker-data', { stock: stock }).done(function (d) {
+            $('#sjLoading').hide();
+            if (!d || d.available === false) {
+                $('#sjMessage').show().text((d && d.message) || 'Gagal memuat.');
+                $('#sjBack').show();
+                return;
+            }
+            sjStockData = d;
+            sjRenderStock();
+            $('#sjStockBody').show();
+            $('#sjBack').show();
+        }).fail(function () {
+            $('#sjLoading').hide();
+            $('#sjMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // Di dalam document.ready: base.html memasang $.ajaxSetup untuk header
+    // X-CSRFToken di dalam $(function(){...}), jadi POST yang berangkat
+    // lebih awal akan ditolak 400.
+    $(document).ready(function () {
+        $('#sjTipe').on('change', sjRenderTable);
+        $('#sjFilter').on('input', sjRenderTable);
+        $('#sjMode').on('change', sjTerapkanMode);
+        $('#sjStock').on('input', function () {
+            if ($('#sjMode').val() === 'modal') { sjRenderModalTable(); }
+        });
+
+        sjModalSort = window.makeSortable('#sjModalThead', function (key, dir) {
+            sjModalSort.key = key; sjModalSort.dir = dir;
+            sjRenderModalTable();
+        }, sjModalSort.key, sjModalSort.dir);
+        $('#sjGo').on('click', sjLoadStock);
+        $('#sjStock').on('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); sjLoadStock(); }
+        });
+        $('#sjBack').on('click', function () { $('#sjStock').val(''); sjLoad(); });
+
+        sjSort = window.makeSortable('#sjThead', function (key, dir) {
+            sjSort.key = key; sjSort.dir = dir;
+            sjRenderTable();
+        }, sjSort.key, sjSort.dir);
+
+        sjStockSort = window.makeSortable('#sjStockThead', function (key, dir) {
+            sjStockSort.key = key; sjStockSort.dir = dir;
+            sjRenderStock();
+        }, sjStockSort.key, sjStockSort.dir);
+
+        sjTerapkanMode();
+    });
+</script>
+{% endblock %}

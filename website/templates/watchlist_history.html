@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Watchlist History{% endblock %}
+{% block page_title %}Watchlist History{% endblock %}
+
+{% block content %}
+
+<style>
+    .history-filter { display: flex; gap: 8px; margin-bottom: 16px; }
+    .history-table { width: 100%; }
+    .history-table th {
+        font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+        letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim);
+        text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    }
+    .history-table td {
+        font-family: var(--font-mono); font-size: 12.5px;
+        padding: 9px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text);
+    }
+    .history-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    .history-badge {
+        font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+    }
+    .history-badge.added { color: var(--accum); background: var(--accum-glow); }
+    .history-badge.removed { color: var(--distrib); background: var(--distrib-glow); }
+    .history-empty { color: var(--text-dim); font-size: 13px; padding: 18px 4px; }
+    .history-stock-link { color: var(--accum); text-decoration: none; font-weight: 600; }
+    .history-stock-link:hover { text-decoration: underline; }
+    .history-new-badge {
+        font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 5px;
+        color: var(--void); background: var(--accum); margin-left: 6px; letter-spacing: 0.05em;
+        vertical-align: middle;
+    }
+    .history-since-up { color: var(--accum); }
+    .history-since-down { color: var(--distrib); }
+    .history-since-na { color: var(--text-dim); }
+</style>
+
+<div class="history-filter">
+    <a href="/watchlist-history" class="btn btn-sm {{ 'btn-primary' if not listType else 'btn-outline-secondary' }}">All</a>
+    {% for t in list_types %}
+    <a href="/watchlist-history?type={{ t }}" class="btn btn-sm {{ 'btn-primary' if listType == t else 'btn-outline-secondary' }}">{{ t }}</a>
+    {% endfor %}
+</div>
+
+<div class="content-card">
+    {% if entries %}
+    <div class="table-responsive">
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Stock</th>
+                    <th>List</th>
+                    <th>Action</th>
+                    <th>Entry Close</th>
+                    <th>Close</th>
+                    <th>Value (B)</th>
+                    <th>Return</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr>
+                    <td>{{ e.timestamp.strftime('%d %b %Y %H:%M') if e.timestamp else '' }}</td>
+                    <td><a href="/search?searched={{ e.stock }}" class="history-stock-link" title="Chart {{ e.stock }}">{{ e.stock }}</a></td>
+                    <td>{{ e.listType }}</td>
+                    <td>
+                        <span class="history-badge {{ e.action }}">{{ e.action }}</span>
+                        {% if e.action == 'added' and e.timestamp and (now - e.timestamp).total_seconds() < 86400 %}
+                        <span class="history-new-badge">NEW</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ e.avgPrice if e.avgPrice is not none else '—' }}</td>
+                    <td>{{ e.currentClose if e.currentClose is not none else '—' }}</td>
+                    <td>{{ '%.2f'|format(e.retailValue) if e.retailValue is not none else '—' }}</td>
+                    <td>
+                        {% if e.pctSinceAdded is not none %}
+                        <span class="{{ 'history-since-up' if e.pctSinceAdded >= 0 else 'history-since-down' }}">{{ '+' if e.pctSinceAdded >= 0 else '' }}{{ e.pctSinceAdded }}%</span>
+                        {% else %}
+                        <span class="history-since-na">&mdash;</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="history-empty">No history yet — this fills in as stocks get added to or removed from a watchlist.</div>
+    {% endif %}
+</div>
+
+{% endblock %}

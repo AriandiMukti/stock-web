@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Konsistensi Broker{% endblock %}
+{% block page_title %}Konsistensi Broker{% endblock %}
+{% block page_subtitle %}Top 5 broker net beli dan net jual · 5 hari bursa terakhir tersedia{% endblock %}
+{% block content %}
+<style>
+.kb-form{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin-bottom:22px}.kb-form label{display:block;margin-bottom:6px}.kb-form input{max-width:180px;text-transform:uppercase}.kb-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.kb-panel{min-width:0;padding:18px;border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--surface)}.kb-panel h2{font-size:17px;margin-bottom:16px}.kb-table{width:100%;font-size:12px}.kb-table th,.kb-table td{padding:10px 8px;border-bottom:1px solid var(--line-soft);text-align:right;white-space:nowrap}.kb-table th:first-child,.kb-table td:first-child{text-align:left}.kb-table th{color:var(--text-dim);font-weight:500}.kb-table td{font-family:var(--font-mono)}.kb-table tbody tr:hover{background:var(--raised)}.kb-buy{color:var(--accum)}.kb-sell{color:var(--distrib)}.kb-note{color:var(--text-mid);font-size:12px;line-height:1.7;margin:16px 0}.kb-table caption{caption-side:top;color:var(--text-mid)}@media(max-width:1400px){.kb-panels{grid-template-columns:1fr}}
+</style>
+<form class="kb-form" method="get">
+  <div><label for="kbStock">Kode saham</label><input class="form-control" id="kbStock" name="stock" value="{{ stock }}" maxlength="4" pattern="[A-Za-z]{4}" required list="kbStocks"><datalist id="kbStocks">{% for ticker in all_stocks %}<option value="{{ ticker }}">{% endfor %}</datalist></div>
+  <button class="btn btn-primary" type="submit">Lihat broker</button>
+  {% if report %}<a class="btn btn-outline-secondary" href="/stock-chart-data/{{ stock }}">Chart {{ stock }}</a><button class="btn btn-outline-secondary" name="backtest" value="1" type="submit">Lihat backtest</button>{% endif %}
+</form>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+{% if report %}
+{% if report.dates %}<p class="kb-note">{{ report.stock }} · {{ report.dates[0] }} sampai {{ report.dates[-1] }} · Data saham tersedia {{ report.available_days }}/{{ report.dates|length }} sesi.</p>{% endif %}
+{% if report.missing or report.dates|length < 5 %}<div class="alert alert-warning">Data belum lengkap untuk 5 sesi terakhir.{% if report.missing %} Tidak tersedia/kosong: {{ report.missing|join(', ') }}.{% endif %} Hari yang hilang tidak diganti dengan tanggal lebih lama.</div>{% endif %}
+<div class="kb-panels">
+{% for side, title, color in [('buy','Top 5 konsisten net beli','kb-buy'),('sell','Top 5 konsisten net jual','kb-sell')] %}
+<section class="kb-panel"><h2 class="{{ color }}">{{ title }}</h2><div class="table-responsive"><table class="kb-table">
+<thead><tr><th>Broker</th><th>Hari / 5</th><th>Rentetan kini</th>{% for day in report.dates %}<th>{{ day[8:] }}/{{ day[5:7] }}</th>{% endfor %}<th>Total net lot</th></tr></thead>
+<tbody>{% for row in report[side] %}<tr><td><strong>{{ row.broker }}</strong></td><td class="{{ color }}">{{ row.days }}/5</td><td>{{ row.streak }} hari</td>{% for value in row['values'] %}<td class="{% if value is not none %}{{ 'kb-buy' if value > 0 else 'kb-sell' if value < 0 else '' }}{% endif %}">{% if value is none %}<span title="Broker tidak tercatat atau data sesi tidak tersedia">—</span>{% else %}{{ '{:+,.0f}'.format(value) }}{% endif %}</td>{% endfor %}<td class="{{ 'kb-buy' if row.net_lot > 0 else 'kb-sell' if row.net_lot < 0 else '' }}">{{ '{:+,.0f}'.format(row.net_lot) }}</td></tr>{% else %}<tr><td colspan="{{ 4 + report.dates|length }}">Belum ada broker yang dapat diperingkat.</td></tr>{% endfor %}</tbody>
+</table></div></section>{% endfor %}
+</div>
+<p class="kb-note">Urutan: jumlah hari searah → rentetan searah hingga sesi terakhir → total net lot searah. Net lot = lot beli dikurangi lot jual dari sumber broker. “—” berarti tidak tercatat/data tidak tersedia, bukan bukti tidak bertransaksi. Broker bisa masuk kedua daftar jika berganti arah. Total net lot dapat berlawanan dengan arah mayoritas harinya. Kode broker mewakili agregat nasabah.</p>
+{% endif %}
+{% if backtest is defined and backtest %}
+<section class="kb-panel" style="margin-top:24px"><h2>Backtest {{ stock }}</h2>
+{% if backtest.error %}<p class="kb-note">{{ backtest.error }}</p>{% else %}
+<p class="kb-note">{{ backtest.start }} – {{ backtest.end }} · {{ backtest.observations }} jendela lengkap. Sinyal saat penutupan; masuk pada open sesi berikutnya, keluar pada close sesi ke-1/5/10/20. Return sebelum biaya. Pembanding adalah hari-hari saham ini tanpa syarat sinyal, pada periode yang sama.</p>
+{% for c in backtest.comparisons|default([]) if c.period == 'Akhir 30%' and c.horizon == 5 %}<p class="kb-note"><strong>Periode akhir · horizon 5 hari:</strong> selisih rata-rata return kelompok beli versus jual {{ '{:+.2f}'.format(c.spread) }} pp. Interval bootstrap blok 95%: {{ '{:+.2f}'.format(c.low) }} hingga {{ '{:+.2f}'.format(c.high) }} pp. {% if c.low <= 0 and c.high >= 0 %}Rentang mencakup nol: belum ada bukti hubungan yang kuat.{% else %}Rentang tidak mencakup nol pada sampel ini; perlu validasi lanjutan.{% endif %}</p>{% endfor %}
+<div class="table-responsive"><table class="kb-table"><thead><tr><th>Periode / sinyal</th><th>Horizon</th><th>Sampel</th><th>Rata-rata</th><th>Median</th><th>Naik</th><th>Baseline</th><th>Selisih</th></tr></thead><tbody>
+{% for row in backtest.rows %}<tr><td>{{ row.period }} · {{ row.label }}</td><td>{{ row.horizon }} hari</td><td>{{ row.n }}</td><td>{{ '{:+.2f}%'.format(row.mean) }}</td><td>{{ '{:+.2f}%'.format(row.median) }}</td><td>{{ '{:.1f}%'.format(row.win_rate) }}</td><td>{{ '{:+.2f}%'.format(row.baseline) }}</td><td>{{ '{:+.2f} pp'.format(row.excess) }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="kb-note">Bandingkan rata-rata jumlah hari searah dari masing-masing Top 5 (slot kosong bernilai 0). “Beli lebih konsisten” berarti rata-rata sisi beli lebih tinggi daripada jual; “seimbang” berarti sama. Aturan ditetapkan tanpa optimasi parameter. Periode awal 70% tanggal; periode akhir 30% disisihkan untuk pemeriksaan kestabilan (mulai {{ backtest.split }}). Horizon yang melintasi batas periode dikeluarkan. Sampel saling tumpang tindih dan bukan transaksi independen. Hubungan historis tidak membuktikan sebab-akibat atau keuntungan yang dapat dieksekusi. Data yang tidak lengkap dikeluarkan.</p>
+{% endif %}</section>
+{% endif %}
+{% endblock %}

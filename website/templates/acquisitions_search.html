@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Cari Berita Akuisisi{% endblock %}
+{% block page_title %}Cari Berita Akuisisi{% endblock %}
+
+{% block content %}
+
+<style>
+    .acqs-form-row { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; align-items: flex-end; }
+    .acqs-field { display: flex; flex-direction: column; gap: 3px; }
+    .acqs-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .acqs-field input { width: 150px; }
+    .acqs-field input[name="q"] { width: 220px; }
+
+    .acqs-note { font-size: 12.5px; color: var(--text-dim); margin-bottom: 14px; line-height: 1.5; }
+
+    .acqs-table { width: 100%; }
+    .acqs-table th {
+        font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+        letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim);
+        text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    }
+    .acqs-table td {
+        font-size: 12.5px; padding: 9px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text);
+        vertical-align: top;
+    }
+    .acqs-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    .acqs-empty { color: var(--text-dim); font-size: 13px; padding: 18px 4px; }
+    .acqs-title-link { color: var(--text); text-decoration: none; }
+    .acqs-title-link:hover { color: var(--accum); text-decoration: underline; }
+    .acqs-source { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }
+    .acqs-ticker-badge {
+        font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+        color: var(--accum); background: var(--accum-glow); padding: 2px 7px; border-radius: 6px;
+    }
+    .acqs-add-form { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+    .acqs-add-form input {
+        font-family: var(--font-mono); font-size: 11.5px; padding: 3px 6px; width: 70px;
+        background: rgba(255,255,255,0.035); border: 1px solid var(--line); border-radius: 6px; color: var(--text);
+    }
+    .acqs-add-btn {
+        background: none; border: 1px solid var(--accum-dim); border-radius: 7px;
+        padding: 3px 8px; cursor: pointer; color: var(--accum); font-size: 11.5px;
+    }
+    .acqs-add-btn:hover { background: var(--accum-glow); }
+    .acqs-add-btn:disabled { opacity: 0.5; cursor: default; }
+    .acqs-added { color: var(--accum); font-size: 11.5px; font-weight: 700; }
+</style>
+
+<div class="acqs-note">
+    Cari berita akuisisi/pengambilalihan/suspensi lewat Google News, langsung dari sini — tidak perlu minta dicarikan manual lagi.
+    Sumber pencarian: {{ 'akuisisi saham BEI, pengambilalihan saham BEI, pengendali baru saham BEI, ganti pengendali saham BEI, tender offer saham BEI' }}
+    (bisa ditambah lewat kolom kata kunci ekstra, atau tambahkan lebih banyak query permanen di <code>ACQUISITION_NEWS_QUERIES</code> pada utilities.py).
+</div>
+
+<div class="content-card" style="margin-bottom: 18px;">
+    <form class="acqs-form-row" method="get">
+        <div class="acqs-field">
+            <label>Dari Tanggal</label>
+            <input type="date" name="from" class="form-control form-control-sm" value="{{ date_from or '' }}">
+        </div>
+        <div class="acqs-field">
+            <label>Sampai Tanggal</label>
+            <input type="date" name="to" class="form-control form-control-sm" value="{{ date_to or '' }}">
+        </div>
+        <div class="acqs-field">
+            <label>Kata Kunci Tambahan</label>
+            <input type="text" name="q" class="form-control form-control-sm" placeholder="mis. akuisisi tambang" value="{{ extra_query or '' }}">
+        </div>
+        <input type="hidden" name="searched" value="1">
+        <button type="submit" class="btn btn-sm btn-primary">Cari Berita</button>
+        <a href="/akuisisi/search?saved=1{% if date_from %}&from={{ date_from }}{% endif %}{% if date_to %}&to={{ date_to }}{% endif %}" class="btn btn-sm btn-outline-secondary">Berita Tersimpan</a>
+        <a href="/akuisisi" class="btn btn-sm btn-outline-secondary">Kembali ke Akuisisi</a>
+    </form>
+</div>
+
+<div class="content-card">
+    {% if show_saved %}
+    <div class="acqs-note" style="margin-bottom:14px;">Menampilkan berita yang sudah pernah dicari sebelumnya (dari cache), bukan pencarian baru.</div>
+    {% endif %}
+    {% if error %}
+    <div class="acqs-empty text-danger">{{ error }}</div>
+    {% elif not searched %}
+    <div class="acqs-empty">Pilih rentang tanggal (atau kata kunci) lalu klik Cari Berita, atau lihat Berita Tersimpan.</div>
+    {% elif not results %}
+    <div class="acqs-empty">Tidak ada berita ditemukan untuk rentang/kata kunci ini.</div>
+    {% else %}
+    <div class="table-responsive">
+        <table class="acqs-table">
+            <thead>
+                <tr>
+                    <th>Tanggal</th>
+                    <th>Berita</th>
+                    <th>Ticker</th>
+                    <th>Tambahkan ke Akuisisi</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in results %}
+                <tr>
+                    <td style="white-space:nowrap;">{{ r.published_date or '—' }}</td>
+                    <td>
+                        <a href="{{ r.link }}" target="_blank" rel="noopener" class="acqs-title-link">{{ r.title }}</a><br>
+                        <span class="acqs-source">{{ r.source or '' }}</span>
+                    </td>
+                    <td>
+                        {% if r.ticker_guess %}<span class="acqs-ticker-badge">{{ r.ticker_guess }}</span>{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <form class="acqs-add-form js-acq-add-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="text" name="stock" placeholder="TICKER" maxlength="6" value="{{ r.ticker_guess or '' }}" required>
+                            <input type="date" name="announcement_date" value="{{ r.published_date or '' }}" required>
+                            <input type="text" name="new_controller" placeholder="Pengendali baru" style="width:130px;">
+                            <input type="hidden" name="description" value="{{ r.title }}">
+                            <button type="submit" class="acqs-add-btn">Tambah</button>
+                            <span class="acqs-added" style="display:none;">Ditambahkan ✓</span>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $('.js-acq-add-form').on('submit', function (e) {
+        e.preventDefault();
+        var $form = $(this);
+        var $btn = $form.find('.acqs-add-btn');
+        var $done = $form.find('.acqs-added');
+        $btn.prop('disabled', true);
+        $.post('/akuisisi/add', $form.serialize())
+            .done(function (data) {
+                if (data.rsp === 'success') {
+                    $btn.hide();
+                    $form.find('input').prop('disabled', true);
+                    $done.show();
+                } else {
+                    alert(data.message || 'Gagal menambahkan.');
+                    $btn.prop('disabled', false);
+                }
+            })
+            .fail(function () {
+                alert('Gagal menambahkan.');
+                $btn.prop('disabled', false);
+            });
+    });
+</script>
+{% endblock %}

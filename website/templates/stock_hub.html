@@ -1,0 +1,875 @@
+{% extends "base.html" %}
+{% block title %}{{ stock }}{% endblock %}
+{% block page_title %}{{ stock }}{% endblock %}
+
+{% block content %}
+
+<style>
+    .hb-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; }
+    @media (max-width: 1000px) { .hb-top { grid-template-columns: minmax(0, 1fr); } }
+
+    .hb-price { font-family: var(--font-mono); font-size: 30px; font-weight: 600; line-height: 1; }
+    .hb-sub { color: var(--text-mid); font-size: 12.5px; margin-top: 3px; }
+    .hb-sector { color: var(--text-dim); font-size: 10.5px; text-transform: uppercase;
+                 letter-spacing: 0.6px; margin-top: 6px; }
+
+    .hb-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                gap: 12px; margin-top: 18px; }
+    .hb-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                     text-transform: uppercase; color: var(--text-dim); }
+    .hb-stat-val { font-family: var(--font-mono); font-size: 16px; margin-top: 3px; }
+
+
+
+    .hb-chart { width: 100%; height: 620px; }
+
+    /* Kartu screen: rekomendasi datang BERSAMA rekam jejaknya, tidak
+       terpisah -- angka "screen ini historisnya kalah 3,27pp dari pasar"
+       harus terbaca di saat yang sama dengan rekomendasinya. */
+    .hb-screen { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+    .hb-screen-name { font-family: var(--font-ui); font-size: 15px; font-weight: 600; color: var(--text); }
+    .hb-record { background: var(--void); border: 1px solid var(--line); border-radius: 8px;
+                 padding: 10px 12px; font-size: 11.5px; color: var(--text-mid); line-height: 1.65; flex: 1 1 320px; }
+    .hb-record strong { color: var(--text); }
+
+    .hb-sig { border-bottom: 1px solid var(--line-soft); padding: 10px 0; }
+    .hb-ins-row { display: flex; align-items: baseline; gap: 8px; padding: 7px 0;
+                  border-bottom: 1px solid var(--line-soft); font-size: 12px; flex-wrap: wrap; }
+    .hb-ins-row:last-child { border-bottom: 0; }
+    .hb-ins-date { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); flex: 0 0 76px; }
+    .hb-ins-name { color: var(--text-mid); }
+    .hb-ins-purpose { flex-basis: 100%; min-width: 0; color: var(--text-mid); overflow-wrap: anywhere; }
+    .hb-ins-badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 9.5px;
+                    font-family: var(--font-ui); font-weight: 600; }
+    .hb-ins-buy { color: var(--accum); border: 1px solid rgba(22,224,174,0.35); background: rgba(22,224,174,0.08); }
+    .hb-ins-sell { color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08); }
+    .hb-ins-value { margin-left: auto; font-family: var(--font-mono); color: var(--text); }
+    .hb-sig:last-child { border-bottom: 0; }
+    .hb-sig-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+    .hb-sig-date { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); }
+    .hb-sig-name { font-family: var(--font-ui); font-size: 12.5px; color: var(--text); }
+    .hb-score { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+    .hb-score-bar { width: 40px; height: 5px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+    .hb-score-fill { height: 100%; }
+    .hb-reason { font-size: 11px; line-height: 1.65; color: var(--text-mid); margin-top: 4px; }
+    .hb-reason-baik::before { content: '+ '; color: var(--accum); font-family: var(--font-mono); }
+    .hb-reason-buruk::before { content: '- '; color: var(--distrib); font-family: var(--font-mono); }
+    .hb-reason-netral::before { content: '· '; color: var(--text-dim); font-family: var(--font-mono); }
+
+    .hb-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 9.5px;
+                font-family: var(--font-ui); font-weight: 600; }
+
+    /* Sama persis dengan Scanner Lab & Kering Screener -- warna berarti
+       sama di ketiga halaman: hijau = arus masih akumulasi, kuning =
+       arah tidak jelas, merah = arus sudah berbalik. */
+    .hb-flow-row { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px;
+                  line-height: 1.7; padding: 3px 0; flex-wrap: wrap; }
+    .hb-flow-h { font-family: var(--font-mono); color: var(--text-dim); flex: 0 0 42px; }
+
+    .hb-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+    .hb-note { color: var(--text-dim); font-size: 11px; line-height: 1.65; margin-top: 10px; }
+
+    /* ---- Chart Termirip (chart_mirip.py) ----
+       Yang digambar RENTANG hasil tetangga dibanding rentang emiten biasa,
+       bukan titik ramalan: arah tetangga tidak lolos uji luar sampel,
+       lebarnya lolos. */
+    .hb-mirip-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 18px; align-items: start; }
+    @media (max-width: 1000px) { .hb-mirip-top { grid-template-columns: minmax(0, 1fr); } }
+    .hb-mirip-lead { font-size: 13px; color: var(--text-mid); line-height: 1.6; }
+    .hb-mirip-lead b { color: var(--text); font-family: var(--font-mono); font-weight: 600; }
+    .hb-skor-chip { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-radius: 10px;
+                    border: 1px solid var(--line); background: rgba(255,255,255,0.02); font-size: 12.5px; margin-bottom: 12px; color: var(--text-mid); }
+    .hb-skor-chip:hover { border-color: var(--accum-dim); color: var(--text); }
+    .hb-skor-chip b { font-family: var(--font-mono); }
+    .hb-rentang { position: relative; height: 58px; margin: 6px 0 4px; }
+    .hb-rentang .sumbu { position: absolute; left: 0; right: 0; top: 29px; border-top: 1px solid var(--line); }
+    .hb-rentang .nol { position: absolute; top: 8px; bottom: 8px; border-left: 1px dashed var(--text-dim); opacity: 0.6; }
+    .hb-rentang .pita { position: absolute; border-radius: 4px; }
+    .hb-rentang .pop { top: 36px; height: 8px; background: rgba(148,163,184,0.28); }
+    .hb-rentang .tet { top: 14px; height: 12px; background: rgba(132,171,255,0.30); }
+    .hb-rentang .tet-inti { top: 14px; height: 12px; background: rgba(132,171,255,0.55); }
+    .hb-rentang .med { position: absolute; top: 10px; height: 20px; border-left: 2px solid var(--text); }
+    .hb-rentang .lbl { position: absolute; font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); top: 46px; transform: translateX(-50%); white-space: nowrap; }
+    .hb-mirip-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 12px; }
+    .hb-mirip-stats > div { padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.02); }
+    .hb-mirip-contoh { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+    @media (max-width: 1100px) { .hb-mirip-contoh { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 600px) { .hb-mirip-contoh { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .hb-contoh { border: 1px solid var(--line-soft); border-radius: 10px; padding: 8px 9px 6px; background: rgba(255,255,255,0.015); }
+    .hb-contoh svg { width: 100%; height: 64px; display: block; }
+    .hb-contoh .k { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; margin-top: 4px; }
+    .hb-contoh .k a { font-weight: 700; color: var(--text); }
+    .hb-contoh .t { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); }
+    .hb-warn { border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.07); color: var(--text-mid);
+               border-radius: 10px; padding: 9px 12px; font-size: 12px; margin-bottom: 12px; }
+    .hb-empty { color: var(--text-dim); font-size: 12.5px; padding: 18px 0; }
+
+    .hb-own-row { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+                  border-bottom: 1px solid var(--line-soft); font-size: 12px; }
+    .hb-own-row:last-child { border-bottom: 0; }
+    .hb-own-name { color: var(--text-mid); flex: 0 0 150px; }
+    .hb-own-track { flex: 1 1 auto; height: 7px; border-radius: 4px; background: var(--raised); overflow: hidden; }
+    .hb-own-fill { height: 100%; }
+    .hb-own-val { font-family: var(--font-mono); width: 74px; text-align: right; }
+
+    /* Kartu keputusan: ringkasan sumber sinyal yang sudah dihitung di
+       tempat lain (scanner.py score_signal, flow_health FLOW_COLOR),
+       TANPA menggabungkannya jadi satu skor -- tiap kartu berdiri
+       sendiri, warnanya cuma menandai arah bukti masing-masing.
+       "Screen otomatis" dan "Aktivitas insider" sengaja TIDAK dimasukkan:
+       screen otomatis nyaris selalu merah/netral (cuma Consol Low yang
+       historisnya positif, screen_eval.py), dan cluster insider tidak
+       pernah divalidasi sebagai sinyal hijau (insider_activity.
+       buy_cluster_count()) -- dimensi yang secara struktural tidak
+       pernah bisa hijau cuma menambah bising, jadi dibuang dari kartu
+       ini (datanya sendiri tetap ada di bawah, di bagian Screen &
+       Aktivitas Insider). */
+    .hb-decision-head { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; margin-bottom: 16px; }
+    .hb-decision-ring-wrap { position: relative; width: 132px; height: 132px; flex: 0 0 auto; }
+    .hb-decision-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column;
+                               align-items: center; justify-content: center; pointer-events: none; }
+    .hb-decision-headline { font-family: var(--font-mono); font-size: 26px; font-weight: 700; line-height: 1; }
+    .hb-decision-sub { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+    .hb-decision-legend { display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: var(--text-mid); }
+    .hb-decision-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; }
+    .hb-flags { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+    .hb-flag { border-radius: 10px; padding: 12px 14px; }
+    .hb-flag-name { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+    .hb-flag-detail { font-size: 11.5px; line-height: 1.55; color: var(--text-mid); }
+    .hb-flag-hijau { background: rgba(22,224,174,0.08); border: 1px solid rgba(22,224,174,0.3); }
+    .hb-flag-hijau .hb-flag-name { color: var(--accum); }
+    .hb-flag-kuning { background: rgba(255,195,82,0.08); border: 1px solid rgba(255,195,82,0.3); }
+    .hb-flag-kuning .hb-flag-name { color: var(--warn); }
+    .hb-flag-merah { background: rgba(255,96,118,0.08); border: 1px solid rgba(255,96,118,0.3); }
+    .hb-flag-merah .hb-flag-name { color: var(--distrib); }
+    .hb-flag-netral { background: var(--void); border: 1px solid var(--line); }
+    .hb-flag-netral .hb-flag-name { color: var(--text); }
+
+    .hb-wl-wrap { position: relative; }
+    .hb-wl-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 280px;
+                   background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+                   box-shadow: var(--shadow-card); padding: 12px; display: none; }
+    .hb-wl-panel.open { display: block; }
+    .hb-wl-group-name { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+                        color: var(--text-dim); margin: 8px 0 6px; }
+    .hb-wl-group-name:first-child { margin-top: 0; }
+    .hb-wl-chip { display: inline-block; padding: 3px 9px; margin: 0 4px 4px 0; border-radius: 999px;
+                 font-size: 11px; font-family: var(--font-mono); background: var(--raised);
+                 color: var(--text-mid); cursor: pointer; }
+    .hb-wl-chip:hover { color: var(--accum); background: var(--void); }
+    .hb-wl-chip.active { color: var(--void); background: var(--accum); }
+
+    /* Kartu Penemu Pola per-saham: statistik PERSIS sama dengan tabel
+       Penemu Pola (win rate, vs baseline, q FDR, hasil Maju bebas
+       lookahead), cuma disaring ke pola yang cocok dengan emiten ini
+       HARI INI. "Kecenderungan" di atasnya BUKAN rekomendasi baru --
+       ia cuma menjumlahkan warna yang sudah ada di tabel di bawahnya
+       (lolos FDR, vs_baseline arah mana), supaya tidak butuh menafsirkan
+       tabel sendiri. Tetap dibungkus catatan luar-sampel yang sama. */
+    .hb-lean { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+               border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+    .hb-lean-tag { font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
+    .hb-lean-text { font-size: 12px; line-height: 1.6; color: var(--text-mid); flex: 1 1 320px; }
+    .hb-lean-hijau { background: rgba(22,224,174,0.08); border: 1px solid rgba(22,224,174,0.3); }
+    .hb-lean-hijau .hb-lean-tag { color: var(--accum); }
+    .hb-lean-merah { background: rgba(255,96,118,0.08); border: 1px solid rgba(255,96,118,0.3); }
+    .hb-lean-merah .hb-lean-tag { color: var(--distrib); }
+    .hb-lean-netral { background: var(--void); border: 1px solid var(--line); }
+    .hb-lean-netral .hb-lean-tag { color: var(--text); }
+
+    .hb-pattern-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .hb-pattern-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .hb-pattern-table th.hb-left { text-align: left; }
+    .hb-pattern-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .hb-pattern-table td.hb-left { text-align: left; font-family: var(--font-ui); white-space: normal; }
+    .hb-pattern-table tbody tr:hover { background: var(--raised); }
+    .hb-pattern-badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 9.5px;
+                        font-family: var(--font-ui); font-weight: 600; }
+</style>
+
+<div class="sl-controls" style="display:flex; gap:8px; align-items:flex-end; margin-bottom:18px;">
+    <div style="display:flex; flex-direction:column; gap:3px;">
+        <label style="font-size:9px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:var(--text-dim);">Kode Saham</label>
+        <input type="text" id="hbStock" class="form-control form-control-sm" maxlength="6"
+               style="width:120px; text-transform:uppercase;" value="{{ stock }}">
+    </div>
+    <button type="button" class="btn btn-sm btn-primary" id="hbGo">Tampilkan</button>
+    <div class="hb-wl-wrap">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="hbWlToggle">Watchlist saya &#9662;</button>
+        <div class="hb-wl-panel" id="hbWlPanel"></div>
+    </div>
+
+    <div style="display:flex; gap:6px; margin-left:auto;">
+        <button type="button" class="btn btn-sm btn-outline-primary hb-add" data-type="BestStocks">+ Best</button>
+        <button type="button" class="btn btn-sm btn-outline-primary hb-add" data-type="BestLowStocks">+ Best Low</button>
+        <button type="button" class="btn btn-sm btn-outline-primary hb-add" data-type="PatternUpStocks">+ Pattern Up</button>
+    </div>
+</div>
+
+{% if candle_research %}
+    {% include "stock_candle_research.html" %}
+{% endif %}
+
+<div id="hbLoading"></div>
+<script>document.getElementById('hbLoading').innerHTML = window.skeleton('panel', 5, 'Mengumpulkan data emiten');</script>
+<div id="hbMessage" class="hb-empty" style="display:none;"></div>
+
+<div id="hbBody" style="display:none;">
+
+    <div class="content-card" style="margin-bottom:16px;">
+        <div class="hb-section-title">Ringkasan Sinyal</div>
+        <div class="hb-decision-head">
+            <div class="hb-decision-ring-wrap">
+                <canvas id="hbRingChart"></canvas>
+                <div class="hb-decision-ring-center">
+                    <div class="hb-decision-headline" id="hbDecisionHeadline">—</div>
+                    <div class="hb-decision-sub" id="hbDecisionSub"></div>
+                </div>
+            </div>
+            <div class="hb-decision-legend" id="hbDecisionLegend"></div>
+        </div>
+        <div class="hb-flags" id="hbFlags"></div>
+        <div class="hb-note">Bukan skor gabungan dan bukan rekomendasi beli/jual &mdash; tiap warna berdiri sendiri
+            per sumber data, dihitung dari rekam jejak historis yang sama dengan Scanner Lab, Kesehatan Arus,
+            dan Screen di bawah.</div>
+    </div>
+
+    <div class="content-card" style="margin-bottom:16px;">
+        <div class="hb-section-title">Pola Penemu Pola yang Cocok Sekarang</div>
+        <div id="hbPatternBody"></div>
+    </div>
+
+    <div class="content-card" style="margin-bottom:16px;">
+        <div class="hb-section-title">Chart Termirip dalam Sejarah &amp; Skor Kecondongan</div>
+        <div id="hbMirip"><div class="hb-empty">Mencari 100 chart paling mirip&hellip;</div></div>
+    </div>
+
+    <div class="hb-top">
+        <div class="content-card">
+            <div class="hb-price" id="hbPrice">—</div>
+            <div class="hb-sub" id="hbName"></div>
+            <div class="hb-sector" id="hbSector"></div>
+
+            <div class="hb-stats">
+                <div><div class="hb-stat-label">Volume vs 20h</div><div class="hb-stat-val" id="hbVolMult">—</div></div>
+                <div><div class="hb-stat-label">Nilai transaksi</div><div class="hb-stat-val" id="hbValue">—</div></div>
+                <div><div class="hb-stat-label">Net Top5 20h</div><div class="hb-stat-val" id="hbNet">—</div></div>
+                <div><div class="hb-stat-label">Retail 20h</div><div class="hb-stat-val" id="hbRetail">—</div></div>
+            </div>
+
+            <div class="hb-links" style="margin-top:16px;">
+                <a class="btn btn-sm btn-outline-secondary" id="hbLinkOwn" href="#">Kepemilikan Saham</a>
+                <a class="btn btn-sm btn-outline-secondary" id="hbLinkFoot" href="/broker-footprint">Broker Footprint</a>
+                <a class="btn btn-sm btn-outline-secondary" id="hbLinkTrend" href="/broker-trend">Broker Trend</a>
+                <a class="btn btn-sm btn-outline-secondary" id="hbLinkScanner" href="/scanner-lab">Scanner Lab</a>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="hb-section-title">Struktur Kepemilikan</div>
+            <div id="hbOwnership"></div>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Screen &amp; Rekam Jejaknya</div>
+        <div id="hbScreen"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Sinyal Scanner Berjalan</div>
+        <div id="hbSignals"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Aktivitas Insider (180 hari terakhir)</div>
+        <div class="hb-note" id="hbInsiderCluster" style="display:none;"></div>
+        <div id="hbInsider"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Chart</div>
+        <div class="hb-chart" id="hbChart"></div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/stock_chart.js') }}"></script>
+<script>
+    function idNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d || 0, maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function pct(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        return idNum(v, d === undefined ? 2 : d) + '%';
+    }
+    function esc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+    function signed(v, suffix, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="hb-flat">—</span>'; }
+        var cls = v > 0 ? 'hb-up' : (v < 0 ? 'hb-down' : 'hb-flat');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '')
+             + idNum(v, d === undefined ? 2 : d) + (suffix || '') + '</span>';
+    }
+    function lotShort(v) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        var abs = Math.abs(v);
+        if (abs >= 1e6) { return idNum(v / 1e6, 2) + ' jt lot'; }
+        if (abs >= 1e3) { return idNum(v / 1e3, 1) + ' rb lot'; }
+        return idNum(v, 0) + ' lot';
+    }
+    function rupiahShort(v) {
+        if (v === null || v === undefined || isNaN(v)) { return '—'; }
+        var abs = Math.abs(v);
+        if (abs >= 1e12) { return idNum(v / 1e12, 2) + ' T'; }
+        if (abs >= 1e9) { return idNum(v / 1e9, 2) + ' M'; }
+        if (abs >= 1e6) { return idNum(v / 1e6, 1) + ' jt'; }
+        return idNum(v, 0);
+    }
+
+    // Hitungan pasif, bukan sinyal -- backtest awal (n=774 episode) tidak
+    // menunjukkan korelasi umum; hanya episode >=10 transaksi yang tampak
+    // lebih baik tapi n=72 dan ditemukan lewat pemotongan post-hoc, jadi
+    // sengaja ditampilkan sebagai teks netral, tanpa badge/warna hijau.
+    function renderInsiderCluster(n) {
+        var el = $('#hbInsiderCluster');
+        if (!n || n < 2) { el.hide(); return; }
+        el.text(n + ' transaksi Beli insider (pasar) dalam 5 hari terakhir — dicatat untuk dipantau, '
+            + 'bukan sinyal yang tervalidasi (baru terlihat mengungguli pada cluster ≥10 transaksi, n=72, belum cukup bukti).').show();
+    }
+
+    function renderInsider(list) {
+        if (!list || !list.length) {
+            $('#hbInsider').html('<div class="hb-empty">Tidak ada transaksi Beli/Jual insider dalam 180 hari terakhir.</div>');
+            return;
+        }
+        $('#hbInsider').html(list.map(function (r) {
+            var cls = r.action_type === 'ACTION_TYPE_BUY' ? 'hb-ins-buy' : 'hb-ins-sell';
+            var sign = r.shares_changed >= 0 ? '+' : '';
+            var sourceHtml = r.source
+                ? '<span class="hb-badge" style="' + (r.cross_source_confirmed
+                    ? 'color:var(--accum); border:1px solid rgba(22,224,174,0.35); background:rgba(22,224,174,0.08);'
+                    : 'color:var(--text-dim); border:1px solid var(--line);')
+                  + '" title="' + (r.cross_source_confirmed
+                    ? 'Dilaporkan terpisah oleh KSEI dan IDX untuk transaksi yang sama -- digabung jadi satu baris.'
+                    : 'Sumber data transaksi ini.') + '">' + esc(r.source) + (r.cross_source_confirmed ? ' ✓' : '') + '</span>'
+                : '';
+            return '<div class="hb-ins-row">'
+                 + '<span class="hb-ins-date">' + esc(r.date) + '</span>'
+                 + '<span class="hb-badge ' + cls + '">' + esc(r.action_label) + '</span>'
+                 + sourceHtml
+                 + (r.is_controller ? '<span class="hb-badge" style="color:var(--warn); border:1px solid rgba(255,195,82,0.35); background:rgba(255,195,82,0.08);">Pengendali</span>' : '')
+                 + '<span class="hb-ins-name">' + esc(r.name) + '</span>'
+                 + '<span class="hb-ins-value">' + sign + idNum(r.shares_changed) + ' lembar'
+                 +   (r.value_idr ? ' &middot; Rp' + rupiahShort(r.value_idr)
+                        + (r.price_source === 'estimated_close' ? ' (estimasi)' : '') : '') + '</span>'
+                 + '<span class="hb-ins-purpose">Tujuan: ' + esc(r.purpose || 'Tidak dicantumkan') + '</span>'
+                 + '</div>';
+        }).join(''));
+    }
+    function scoreColor(s) {
+        if (s >= 65) { return '#16E0AE'; }
+        if (s < 40) { return '#FF6076'; }
+        return '#93A2B6';
+    }
+
+    function renderOwnership(o) {
+        if (!o) {
+            $('#hbOwnership').html('<div class="hb-empty">Data kepemilikan belum ditarik untuk emiten ini. '
+                + 'Buka halaman Kepemilikan Saham untuk menariknya.</div>');
+            return;
+        }
+        var slices = [
+            { label: 'Foreign Named', v: o.pct_foreign_named, c: '#4C7DF0' },
+            { label: 'Foreign Hidden', v: o.pct_foreign_hidden, c: '#7DA6FF' },
+            { label: 'Retail (Pahlawan Bursa)', v: o.pct_retail, c: '#16E0AE' },
+            { label: 'Lokal Non-Ritel', v: o.pct_local_non_retail, c: '#586479' }
+        ];
+        var html = slices.map(function (s) {
+            return '<div class="hb-own-row">'
+                 + '<span class="hb-own-name">' + s.label + '</span>'
+                 + '<span class="hb-own-track"><span class="hb-own-fill" style="width:'
+                 +   Math.max(0, Math.min(100, s.v || 0)) + '%; background:' + s.c + ';"></span></span>'
+                 + '<span class="hb-own-val">' + pct(s.v) + '</span></div>';
+        }).join('');
+
+        html += '<div class="hb-note">Free float <strong>' + pct(o.free_float) + '</strong>'
+              + (o.free_float_source ? ' (' + esc(o.free_float_source) + ')' : '')
+              + ' · Scripless <strong>' + pct(o.scripless_pct_of_listed) + '</strong>'
+              + (o.sid ? ' · <strong>' + idNum(o.sid) + '</strong> pemegang saham' : '')
+              + '. Posisi ' + esc(o.month_label || '-') + '.</div>';
+        $('#hbOwnership').html(html);
+    }
+
+    function renderScreen(s, baseline) {
+        if (!s) {
+            $('#hbScreen').html('<div class="hb-empty">Saham ini sedang tidak masuk screen otomatis mana pun.</div>');
+            return;
+        }
+        var rec = s.record;
+        var recHtml = rec
+            ? '<div class="hb-record">Screen <strong>' + esc(s.label) + '</strong> secara historis: '
+              + '<strong>' + idNum(rec.n) + '</strong> kemunculan, rata-rata <strong>' + pct(rec.mean) + '</strong> '
+              + 'dalam 20 hari, win rate <strong>' + pct(rec.win_rate, 1) + '</strong> &mdash; '
+              + signed(rec.vs_baseline, 'pp') + ' dibanding baseline pasar ' + pct(baseline) + '. '
+              + (rec.vs_baseline < 0
+                    ? '<strong>Screen ini historisnya kalah dari pasar</strong>, jadi masuknya sebuah saham ke sini '
+                      + 'bukan alasan untuk membeli.'
+                    : 'Ini satu-satunya kelompok yang mengungguli pasar, walau tipis.')
+              + '</div>'
+            : '';
+
+        $('#hbScreen').html(
+            '<div class="hb-screen">'
+            + '<div style="flex:0 0 auto;">'
+            +   '<div class="hb-screen-name">' + esc(s.label) + '</div>'
+            +   '<div class="hb-note" style="margin-top:4px;">' + s.streak_days + ' hari beruntun · '
+            +     'nilai transaksi ' + idNum(s.value_b, 2) + ' M</div>'
+            +   (s.type ? '<div style="margin-top:8px;"><a class="btn btn-sm btn-outline-secondary" '
+            +     'href="/display-analyze?type=' + encodeURIComponent(s.type) + '">Buka screen ini</a></div>' : '')
+            + '</div>'
+            + recHtml
+            + '</div>');
+    }
+
+    // Sama persis dengan Scanner Lab & Kering Screener.
+    var FLOW_COLOR = { akumulasi: 'hijau', netral: 'kuning', distribusi: 'merah' };
+
+    function bestFlowCheckpoint(flow) {
+        var available = (flow || []).filter(function (f) { return f.available; });
+        if (!available.length) { return null; }
+        return available.reduce(function (best, f) { return f.horizon > best.horizon ? f : best; });
+    }
+
+    function flowBadge(flow) {
+        var best = bestFlowCheckpoint(flow);
+        if (!best) { return ''; }
+        var cls = 'hb-badge-flow-' + (FLOW_COLOR[best.arah_arus] || 'kuning');
+        return '<span class="hb-badge ' + cls + '">' + esc(best.label) + '</span>';
+    }
+
+    function flowDetailHtml(flow) {
+        var lines = (flow || []).filter(function (f) { return f.available; }).map(function (f) {
+            var cls = 'hb-badge-flow-' + (FLOW_COLOR[f.arah_arus] || 'kuning');
+            return '<div class="hb-flow-row">'
+                 + '<span class="hb-flow-h">H+' + f.horizon + '</span>'
+                 + '<span class="hb-badge ' + cls + '">' + esc(f.label) + '</span>'
+                 + '<span class="hb-note" style="margin:0;">harga ' + signed(f.price_pct, '%')
+                 +   ' &middot; skor arus ' + (f.skor_post > 0 ? '+' : '') + f.skor_post.toFixed(2)
+                 +   (f.low_sample ? ' (sampel kecil)' : '') + ' &mdash; ' + esc(f.penjelasan)
+                 + '</span>'
+                 + '</div>';
+        });
+        return lines.join('');
+    }
+
+    var hbWlLoaded = null;
+    function renderWlPanel() {
+        var current = ($('#hbStock').val() || '').toUpperCase();
+        $('#hbWlPanel').html(hbWlLoaded.groups.map(function (g) {
+            return '<div class="hb-wl-group-name">' + esc(g.label) + '</div>'
+                 + g.tickers.map(function (t) {
+                     return '<span class="hb-wl-chip' + (t === current ? ' active' : '') + '" data-ticker="' + esc(t) + '">' + esc(t) + '</span>';
+                   }).join('');
+        }).join(''));
+    }
+    // ---- Tambah ke watchlist (+ Best / + Best Low / + Pattern Up) ----
+    // Memakai endpoint yang sama dengan chart viewer (/admin?param=add),
+    // TAPI tanpa parameter &source= -- di sini saham tidak sedang berada
+    // di dalam suatu daftar, jadi tidak ada daftar asal yang perlu
+    // dibersihkan server.
+    var HB_LABEL = { BestStocks: 'Best', BestLowStocks: 'Best Low', PatternUpStocks: 'Pattern Up' };
+
+    function hbFeedback(msg, type) {
+        var el = $('<div class="alert alert-' + type + ' alert-dismissible fade show" '
+                 + 'style="position:fixed; top:70px; right:16px; z-index:2000; max-width:320px;">'
+                 + msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+        $('body').append(el);
+        setTimeout(function () { el.alert('close'); }, 3000);
+    }
+
+    // Tombol menunjukkan kalau sahamnya SUDAH ada di daftar itu, supaya
+    // tidak menambah dua kali (server menolaknya, tapi lebih baik terlihat
+    // sebelum diklik).
+    function hbPaintAddButtons() {
+        var current = ($('#hbStock').val() || '').trim().toUpperCase();
+        var anggota = {};
+        if (hbWlLoaded && hbWlLoaded.groups) {
+            hbWlLoaded.groups.forEach(function (g) {
+                if ((g.tickers || []).indexOf(current) !== -1) { anggota[g.label] = true; }
+            });
+        }
+        $('.hb-add').each(function () {
+            var $b = $(this);
+            var label = HB_LABEL[$b.data('type')];
+            var sudah = !!anggota[label];
+            $b.prop('disabled', sudah)
+              .toggleClass('btn-outline-primary', !sudah)
+              .toggleClass('btn-outline-secondary', sudah)
+              .text((sudah ? '✓ ' : '+ ') + label);
+        });
+    }
+
+    function hbAddTo(type) {
+        var stock = ($('#hbStock').val() || '').trim().toUpperCase();
+        if (!stock) { return; }
+        var $btn = $('.hb-add[data-type="' + type + '"]');
+        $btn.prop('disabled', true);
+        $.post('/admin?param=add&type=' + type + '&stock=' + encodeURIComponent(stock)).done(function (data) {
+            if (data && data.rsp === 'success') {
+                hbFeedback(data.message || (stock + ' ditambahkan ke ' + HB_LABEL[type]), 'success');
+                hbWlLoaded = null;          // paksa muat ulang keanggotaan
+                hbRefreshWatchlist(hbPaintAddButtons);
+            } else {
+                hbFeedback((data && data.message) || ('Gagal menambahkan ' + stock), 'danger');
+                hbPaintAddButtons();
+            }
+        }).fail(function () {
+            hbFeedback('Permintaan gagal', 'danger');
+            hbPaintAddButtons();
+        });
+    }
+
+    // Dipakai bersama panel watchlist dan status tombol, supaya keanggotaan
+    // cuma ditarik sekali per halaman.
+    function hbRefreshWatchlist(cb) {
+        $.get('/saham-watchlist-data', function (d) {
+            hbWlLoaded = (d && d.available) ? d : null;
+            if (cb) { cb(); }
+        }).fail(function () { if (cb) { cb(); } });
+    }
+
+    function loadWatchlistPanel() {
+        if (hbWlLoaded) { renderWlPanel(); return; }
+        $('#hbWlPanel').html('<div class="hb-flat">Memuat...</div>');
+        hbRefreshWatchlist(function () {
+            if (!hbWlLoaded || !hbWlLoaded.groups || !hbWlLoaded.groups.length) {
+                $('#hbWlPanel').html('<div class="hb-flat">Watchlist kosong.</div>');
+                return;
+            }
+            renderWlPanel();
+            hbPaintAddButtons();
+        });
+    }
+
+    function renderSignals(list) {
+        if (!list || !list.length) {
+            $('#hbSignals').html('<div class="hb-empty">Tidak ada sinyal scanner untuk saham ini dalam 90 hari terakhir.</div>');
+            return;
+        }
+        $('#hbSignals').html(list.map(function (s) {
+            var reasons = (s.reasons || []).map(function (r) {
+                return '<div class="hb-reason hb-reason-' + r.kind + '">' + esc(r.text) + '</div>';
+            }).join('');
+            var flow = flowDetailHtml(s.flow);
+            return '<div class="hb-sig">'
+                 + '<div class="hb-sig-head">'
+                 +   '<span class="hb-sig-date">' + esc(s.signal_date) + '</span>'
+                 +   '<span class="hb-sig-name">' + esc(s.scanner_label) + '</span>'
+                 +   (s.pending ? '<span class="hb-badge hb-badge-pending">'
+                        + s.forward_needed + 'h lagi</span>' : '')
+                 +   flowBadge(s.flow)
+                 +   '<span class="hb-score">'
+                 +     '<span class="hb-score-bar"><span class="hb-score-fill" style="width:' + s.score
+                 +       '%; background:' + scoreColor(s.score) + ';"></span></span>'
+                 +     '<span style="font-family:var(--font-mono); color:' + scoreColor(s.score) + ';">'
+                 +       s.score + '</span>'
+                 +   '</span>'
+                 + '</div>' + reasons + flow + '</div>';
+        }).join(''));
+    }
+
+    // Sel kolom Maju: bebas lookahead (dicatat sebelum hasil ada,
+    // pola_jurnal.py), tapi jurnalnya baru mulai -- em-dash sampai
+    // pola itu ada checkpoint yang matang, BUKAN 0 (0 akan terbaca
+    // "tidak ada edge" padahal artinya "belum diukur").
+    function patternMajuCell(t) {
+        var m = t.maju;
+        if (!m) { return '<span class="hb-flat">—</span>'; }
+        return '<span title="n=' + m.n + ', win ' + m.win + '%, rata-rata ' + m.mean
+             + '%, median ' + m.median + '%">' + signed(m.vs_baseline, 'pp', 1) + '</span>';
+    }
+
+    // "Kecenderungan" di sini BUKAN skor baru -- ia cuma membaca pola
+    // TERKUAT (|vs_baseline| terbesar) yang (a) cocok dengan kondisi
+    // emiten ini sekarang dan (b) lolos koreksi FDR (q<0,10), lalu
+    // menuliskan arahnya. Kalau tidak ada yang lolos, tidak ada
+    // kecenderungan yang bisa dituliskan -- itu ditandai NETRAL, bukan
+    // dipaksakan condong ke salah satu arah.
+    function renderPatternMatches(pm) {
+        if (!pm || !pm.available) {
+            $('#hbPatternBody').html('<div class="hb-empty">'
+                + esc((pm && pm.message) || 'Penemu Pola belum dihitung untuk emiten ini.')
+                + ' Buka halaman <a href="/penemu-pola">Penemu Pola</a> untuk menghitungnya.</div>');
+            return;
+        }
+        var temuan = pm.temuan || [];
+        var lolosList = temuan.filter(function (t) { return t.lolos; });
+        var kuat = lolosList[0]; // sudah terurut |vs_baseline| lalu q, sama seperti tabel Penemu Pola
+
+        var leanCls, leanTag, leanText;
+        if (!kuat) {
+            leanCls = 'netral'; leanTag = 'NETRAL / TAHAN';
+            leanText = temuan.length
+                ? 'Ada ' + temuan.length + ' pola yang cocok, tapi tidak satu pun lolos koreksi FDR (q&lt;0,10) '
+                  + '-- tidak ada dasar statistik yang cukup kuat untuk condong ke salah satu arah.'
+                : 'Tidak ada pola Penemu Pola yang cocok dengan kondisi emiten ini saat ini.';
+        } else {
+            leanCls = kuat.vs_baseline > 0 ? 'hijau' : (kuat.vs_baseline < 0 ? 'merah' : 'netral');
+            leanTag = kuat.vs_baseline > 0 ? 'CONDONG BELI' : (kuat.vs_baseline < 0 ? 'CONDONG JUAL/HINDARI' : 'NETRAL / TAHAN');
+            leanText = 'Pola terkuat yang cocok: <strong>' + esc(kuat.label) + '</strong> &mdash; win rate '
+                + pct(kuat.win, 1) + ' (n=' + idNum(kuat.n) + '), ' + signed(kuat.vs_baseline, 'pp', 1)
+                + ' dibanding baseline pasar' + (pm.baseline ? ' ' + pct(pm.baseline.win, 1) : '')
+                + ', q=' + idNum(kuat.q, 3) + ' (lolos FDR).';
+        }
+
+        $('#hbPatternBody').html(
+            '<div class="hb-lean hb-lean-' + leanCls + '">'
+            +   '<div class="hb-lean-tag">' + leanTag + '</div>'
+            +   '<div class="hb-lean-text">' + leanText + '<br><br><em>'
+            +     esc(pm.validasi_oos_kesimpulan || '') + '</em></div>'
+            + '</div>'
+            + (temuan.length ? '<div style="overflow-x:auto;"><table class="hb-pattern-table">'
+              + '<thead><tr><th class="hb-left">Pola</th><th>n</th><th>Win %</th><th>vs baseline</th>'
+              +   '<th>q (FDR)</th><th>Lolos</th><th>Maju</th></tr></thead><tbody>'
+              + temuan.map(function (t) {
+                    return '<tr><td class="hb-left">' + esc(t.label) + '</td>'
+                         + '<td>' + idNum(t.n) + '</td>'
+                         + '<td>' + pct(t.win, 1) + '</td>'
+                         + '<td>' + signed(t.vs_baseline, 'pp', 1) + '</td>'
+                         + '<td>' + idNum(t.q, 3) + '</td>'
+                         + '<td>' + (t.lolos
+                              ? '<span class="hb-pattern-badge" style="color:var(--accum); border:1px solid rgba(22,224,174,0.35); background:rgba(22,224,174,0.08);">lolos</span>'
+                              : '<span class="hb-pattern-badge" style="color:var(--text-dim); border:1px solid var(--line);">tidak</span>')
+                         + '</td>'
+                         + '<td>' + patternMajuCell(t) + '</td></tr>';
+                }).join('') + '</tbody></table></div>'
+              : '')
+            + '<div class="hb-note">Dari mesin Penemu Pola yang sama (statistik identik), disaring ke pola yang cocok '
+            +   'dengan kondisi emiten ini per ' + esc(pm.kini_tanggal || '-') + '. Kolom Maju bebas lookahead '
+            +   '(dicatat sebelum hasil ada, lihat Jurnal Maju di halaman Penemu Pola) tapi jurnalnya baru mulai, '
+            +   'jadi kebanyakan pola belum matang (&mdash;).</div>'
+        );
+    }
+
+    function miripSvg(jalur, kueri, naik) {
+        // 50 titik: 30 jendela + 20 sesudah. Skala y bersama supaya jendela
+        // contoh dan chart emiten ini (garis putus) bisa dibandingkan.
+        var semua = jalur.concat(kueri || []);
+        var lo = Math.min.apply(null, semua), hi = Math.max.apply(null, semua);
+        if (hi - lo < 1e-6) { hi = lo + 0.01; }
+        var W = 200, H = 64, n = jalur.length;
+        function x(i) { return (i / (n - 1)) * W; }
+        function y(v) { return H - 4 - (v - lo) / (hi - lo) * (H - 8); }
+        function garis(arr, dari, sampai) {
+            var t = [];
+            for (var i = dari; i <= sampai; i++) { t.push(x(i).toFixed(1) + ',' + y(arr[i]).toFixed(1)); }
+            return t.join(' ');
+        }
+        var warna = naik ? 'var(--accum)' : 'var(--distrib)';
+        var out = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">'
+            + '<line x1="' + x(29) + '" y1="0" x2="' + x(29) + '" y2="' + H + '" stroke="rgba(148,163,184,0.35)" stroke-dasharray="2 3"/>'
+            + '<polyline fill="none" stroke="rgba(244,247,251,0.75)" stroke-width="1.6" points="' + garis(jalur, 0, 29) + '"/>'
+            + '<polyline fill="none" stroke="' + warna + '" stroke-width="1.8" points="' + garis(jalur, 29, n - 1) + '"/>';
+        if (kueri && kueri.length === 30) {
+            out += '<polyline fill="none" stroke="rgba(132,171,255,0.9)" stroke-width="1.2" stroke-dasharray="3 2" points="'
+                 + garis(kueri, 0, 29) + '"/>';
+        }
+        return out + '</svg>';
+    }
+
+    function renderMirip(m) {
+        if (!m || !m.available) {
+            $('#hbMirip').html('<div class="hb-empty">' + esc((m && m.message) || 'Chart termirip tidak tersedia.') + '</div>');
+            return;
+        }
+        var t = m.tetangga || {}, p = m.populasi || {}, sk = m.skor;
+        var skorHtml;
+        if (sk && sk.desil) {
+            var warna = sk.desil >= 9 ? 'var(--accum)' : (sk.desil <= 2 ? 'var(--distrib)' : 'var(--text)');
+            skorHtml = '<a class="hb-skor-chip" href="/skor-kecondongan" title="Peringkat dekat puncak 52 minggu + tenang, di antara '
+                + idNum(sk.n_layak) + ' emiten layak">Skor Kecondongan <b style="color:' + warna + ';">desil ' + sk.desil + '</b>'
+                + ' <span style="color:var(--text-dim);">skor ' + idNum(sk.skor, 0) + ' &middot; ' + esc(sk.as_of || '') + '</span>'
+                + (sk.desil === 1 ? ' <span style="color:var(--distrib);">&mdash; kelompok yang konsisten kalah</span>' : '') + '</a>';
+        } else {
+            skorHtml = '<span class="hb-skor-chip" style="color:var(--text-dim);">Skor Kecondongan: tidak diperingkat hari ini (tidak lolos saringan layak)</span>';
+        }
+
+        // Sumbu -30%..+30%, dipotong di ujung.
+        var MIN = -30, MAX = 30;
+        function kx(v) { return Math.max(0, Math.min(100, (v - MIN) / (MAX - MIN) * 100)); }
+        function pita(cls, a, b) {
+            return '<span class="pita ' + cls + '" style="left:' + kx(a) + '%; width:' + Math.max(0.6, kx(b) - kx(a)) + '%;"></span>';
+        }
+        function tanda(v) { return (v > 0 ? '+' : '') + idNum(v, 1) + '%'; }
+        var rentang = '<div class="hb-rentang">'
+            + '<span class="sumbu"></span><span class="nol" style="left:' + kx(0) + '%;"></span>'
+            + pita('pop', p.p10, p.p90)
+            + pita('tet', t.p10, t.p90) + pita('tet-inti', t.p25, t.p75)
+            + '<span class="med" style="left:' + kx(t.p50) + '%;" title="median tetangga - arah tidak terbukti"></span>'
+            + '<span class="lbl" style="left:' + kx(t.p10) + '%;">' + tanda(t.p10) + '</span>'
+            + '<span class="lbl" style="left:' + kx(t.p90) + '%;">' + tanda(t.p90) + '</span>'
+            + '</div>';
+
+        var kata = m.lebar_rasio >= 1.15 ? 'lebih liar dari emiten biasa'
+                 : (m.lebar_rasio <= 0.85 ? 'lebih kalem dari emiten biasa' : 'kurang lebih seperti emiten biasa');
+        var warn = (m.di_luar_semesta && m.di_luar_semesta.length)
+            ? '<div class="hb-warn">Emiten ini di luar semesta pengujian (' + esc(m.di_luar_semesta.join(', '))
+              + '). Tetangganya bisa jendela yang harganya "nyangkut" di satu fraksi &mdash; rentang di bawah kurang bisa dipercaya.</div>'
+            : '';
+        var lead = '<div class="hb-mirip-lead">' + m.k + ' chart 30 hari paling mirip dengan ' + esc(m.ticker) + ' per '
+            + esc(m.tanggal) + ', dari ' + idNum(m.pustaka.n) + ' jendela ' + idNum(m.pustaka.n_emiten) + ' emiten (2013&ndash;2026). '
+            + '20 hari bursa sesudahnya, 80% hasilnya antara <b>' + tanda(t.p10) + '</b> dan <b>' + tanda(t.p90) + '</b> &mdash; <b>'
+            + idNum(m.lebar_rasio, 2) + '&times;</b> lebar rentang emiten biasa (' + tanda(p.p10) + ' s.d. ' + tanda(p.p90) + '): '
+            + kata + '.</div>';
+
+        // Tiga angka, tiga tingkat bukti: peluang KENA +/-10% (lolos luar
+        // sampel), asimetri naik/turun dulu (kecil, sudah tercakup Skor
+        // Kecondongan), dan median (arah tidak terbukti).
+        var kena = (t.naik10_dulu || 0) + (t.turun10_dulu || 0);
+        var kenaPop = (p.naik10_dulu || 0) + (p.turun10_dulu || 0);
+        var stats = '<div class="hb-mirip-stats">'
+            + '<div title="Lolos uji luar sampel: IC +' + idNum(m.uji.ic_kena, 3) + '"><div class="hb-stat-label">Kena &plusmn;10% dlm 60h</div>'
+            + '<div class="hb-stat-val">' + idNum(kena, 0) + '% <span style="font-size:11px; color:var(--text-dim);">biasa '
+            + idNum(kenaPop, 0) + '%</span></div></div>'
+            + '<div title="Asimetri kecil (IC +' + idNum(m.uji.ic_asim, 3) + ') yang hilang setelah dikurangi dekat-puncak & volatilitas'
+            + ' -- sudah tercakup Skor Kecondongan"><div class="hb-stat-label">Naik dulu / turun dulu &middot; sudah di skor</div>'
+            + '<div class="hb-stat-val">' + idNum(t.naik10_dulu, 0) + '% / ' + idNum(t.turun10_dulu, 0)
+            + '% <span style="font-size:11px; color:var(--text-dim);">biasa ' + idNum(p.naik10_dulu, 0) + ' / '
+            + idNum(p.turun10_dulu, 0) + '</span></div></div>'
+            + '<div title="Tidak terbukti di uji luar sampel"><div class="hb-stat-label">Median 20h &middot; arah tidak terbukti</div>'
+            + '<div class="hb-stat-val" style="color:var(--text-dim);">' + tanda(t.p50) + '</div></div>'
+            + '</div>';
+
+        var contoh = (m.contoh || []).map(function (c) {
+            return '<div class="hb-contoh">' + miripSvg(c.jalur, m.kueri, c.hasil20 >= 0)
+                 + '<div class="k"><a href="/saham/' + esc(c.stock) + '">' + esc(c.stock) + '</a>' + signed(c.hasil20, '%', 0) + '</div>'
+                 + '<div class="t">' + esc(c.tanggal) + '</div></div>';
+        }).join('');
+
+        $('#hbMirip').html(warn + skorHtml
+            + '<div class="hb-mirip-top"><div>' + lead + stats + '</div><div>' + rentang
+            + '<div class="hb-note" style="margin-top:14px;"><span style="color:rgba(132,171,255,0.9);">&#9632;</span> rentang 10&ndash;90% '
+            + 'chart mirip (bagian gelap 25&ndash;75%), <span style="color:rgba(148,163,184,0.7);">&#9632;</span> rentang emiten biasa, '
+            + 'garis putih = median. Sumbu &minus;30% s.d. +30%.</div></div></div>'
+            + '<div class="hb-mirip-contoh">' + contoh + '</div>'
+            + '<div class="hb-note">Contoh: garis putih = 30 hari chart contoh, garis putus biru = chart ' + esc(m.ticker)
+            + ' sekarang, garis hijau/merah = 20 hari sesudahnya. <strong>Baca rentangnya, bukan arahnya:</strong> di uji luar sampel '
+            + 'arah rata-rata chart mirip tidak memprediksi apa pun (IC +' + idNum(m.uji.ic_arah, 3) + ', t ' + idNum(m.uji.t_arah, 1)
+            + '), sedangkan lebar sebarannya iya (IC besar gerak +' + idNum(m.uji.ic_gerak, 3) + ', peluang kena &plusmn;10% +'
+            + idNum(m.uji.ic_kena, 3) + '). Asimetri naik dulu/turun dulu kecil dan sudah tercakup Skor Kecondongan.</div>');
+    }
+
+    function load() {
+        var stock = ($('#hbStock').val() || '').trim().toUpperCase();
+        if (!stock) { return; }
+        // Arsip BRPT dirender oleh Flask, jadi perpindahan masuk atau keluar
+        // BRPT perlu memuat halaman baru sebelum memperbarui data via AJAX.
+        var renderedStock = {{ stock|tojson }};
+        if ((stock === 'BRPT') !== (renderedStock === 'BRPT')) {
+            window.location.assign('/saham/' + encodeURIComponent(stock));
+            return;
+        }
+        $('#hbBody').hide();
+        $('#hbMessage').hide();
+        $('#hbLoading').show();
+
+        $.post('/saham-data/' + encodeURIComponent(stock)).done(function (d) {
+            $('#hbLoading').hide();
+            if (!d || !d.available) {
+                $('#hbMessage').text((d && d.message) || 'Data tidak tersedia.').show();
+                return;
+            }
+
+            var p = d.price || {};
+            $('#hbPrice').html(idNum(p.close) + ' <span style="font-size:15px;">'
+                + signed(p.change_pct, '%') + '</span>');
+            $('#hbName').text((d.ownership && d.ownership.name) || d.ticker);
+            $('#hbSector').text(d.ownership
+                ? [d.ownership.sector, d.ownership.sub_sector].filter(Boolean).join(' · ') : '');
+
+            // Volume relatif diberi warna terbalik: lonjakan itu SINYAL
+            // BURUK menurut backtest, jadi merah saat tinggi.
+            var vm = p.vol_mult;
+            $('#hbVolMult').html(vm === null || vm === undefined ? '—'
+                : '<span class="' + (vm >= 2 ? 'hb-down' : (vm < 1 ? 'hb-up' : '')) + '">'
+                  + idNum(vm, 2) + 'x</span>');
+            $('#hbValue').text(idNum(p.value_b, 2) + ' M');
+            $('#hbNet').html(signed(p.net_top5_20d ? p.net_top5_20d / 1000 : null, ' rb lot', 1));
+            $('#hbRetail').html(signed(p.retail_20d ? p.retail_20d / 1000 : null, ' rb lot', 1));
+
+            $('#hbLinkOwn').attr('href', '/kepemilikan-saham?stock=' + encodeURIComponent(d.ticker));
+
+            renderOwnership(d.ownership);
+            renderScreen(d.screen, d.baseline);
+            renderPatternMatches(d.pattern_matches);
+            renderSignals(d.signals);
+            renderInsiderCluster(d.insider_buy_cluster_5d);
+            renderInsider(d.insider);
+
+            $('#hbBody').show();
+            // Ring Chart.js diukur dari lebar kontainernya -- harus digambar
+            // SETELAH #hbBody terlihat, kalau tidak Chart.js mengukur 0x0
+            // (bug yang sama pernah terjadi di sparkline Kepemilikan Saham).
+            DecisionCard.render({ ring: 'hbRingChart', headline: 'hbDecisionHeadline',
+                sub: 'hbDecisionSub', legend: 'hbDecisionLegend', flags: 'hbFlags' }, d);
+
+            $('#hbMirip').html('<div class="hb-empty">Mencari 100 chart paling mirip&hellip;</div>');
+            $.getJSON('/chart-mirip-data/' + encodeURIComponent(d.ticker), renderMirip)
+                .fail(function () { renderMirip({ available: false, message: 'Gagal memuat chart termirip.' }); });
+
+            // Chart digambar setelah kontainer terlihat -- Plotly salah
+            // ukur lebar kalau kontainernya masih display:none.
+            $.getJSON('/stock-chart-data/' + encodeURIComponent(d.ticker), function (cd) {
+                if (cd && cd.found) { renderChart(cd, 'hbChart'); }
+                else { $('#hbChart').html('<div class="hb-empty">Chart tidak tersedia.</div>'); }
+            });
+
+            document.title = d.ticker;
+            $('#appPageTitle').text(d.ticker);
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState({}, '', '/saham/' + encodeURIComponent(d.ticker));
+            }
+        }).fail(function () {
+            $('#hbLoading').hide();
+            $('#hbMessage').text('Gagal memuat data.').show();
+        });
+    }
+
+    $(document).ready(function () {
+        $('#hbGo').on('click', function () { load(); hbPaintAddButtons(); });
+        $('.hb-add').on('click', function () { hbAddTo($(this).data('type')); });
+        $('#hbStock').on('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); load(); }
+        });
+
+        $('#hbWlToggle').on('click', function (e) {
+            e.stopPropagation();
+            var panel = $('#hbWlPanel');
+            panel.toggleClass('open');
+            if (panel.hasClass('open')) { loadWatchlistPanel(); }
+        });
+        $('#hbWlPanel').on('click', '.hb-wl-chip', function () {
+            $('#hbStock').val($(this).data('ticker'));
+            $('#hbWlPanel').removeClass('open');
+            load();
+            hbPaintAddButtons();
+        });
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('.hb-wl-wrap').length) { $('#hbWlPanel').removeClass('open'); }
+        });
+
+        load();
+        hbRefreshWatchlist(hbPaintAddButtons);
+    });
+</script>
+{% endblock %}

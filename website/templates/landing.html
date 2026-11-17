@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="google" content="notranslate">
+    <title>BDM — Baca arus bandar, uji sebelum percaya</title>
+    <meta name="description" content="BDM merangkum arus broker harian, kepemilikan KSEI, aktivitas insider, dan harga emiten BEI — dan memberi setiap temuannya status bukti yang jujur.">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#04060A">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>document.documentElement.classList.add('js');</script>
+    <style>
+        /* Landing page publik. Token warnanya SAMA dengan base.html (lihat
+           :root di sana) -- aksen toska = akumulasi, merah = distribusi --
+           supaya pindah dari halaman ini ke dalam app tidak terasa pindah
+           aplikasi. Halaman ini tidak memakai base.html karena butuh lebar
+           penuh tanpa sidebar. */
+        :root {
+            --void: #04060A;
+            --deep: #0A0E15;
+            --surface: #111823;
+            --raised: #1B2330;
+            --line: rgba(148, 163, 184, 0.13);
+            --line-strong: rgba(148, 163, 184, 0.24);
+            --accum: #16E0AE;
+            --accum-2: #06B6D4;
+            --accum-glow: rgba(22, 224, 174, 0.14);
+            --distrib: #FF6076;
+            --warn: #FFC352;
+            --info: #84ABFF;
+            --text: #F4F7FB;
+            --text-mid: #B3C0D1;
+            --text-dim: #8C9BB0;
+            --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+            --radius: 18px;
+            --maxw: 1180px;
+        }
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0; background: var(--void); color: var(--text);
+            font-family: var(--font-ui); font-size: 16px; line-height: 1.6;
+            -webkit-font-smoothing: antialiased; overflow-x: hidden;
+        }
+        a { color: inherit; text-decoration: none; }
+        :focus-visible { outline: 2px solid var(--accum); outline-offset: 3px; border-radius: 6px; }
+        ::selection { background: var(--accum); color: #04211D; }
+        .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+        .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+        /* ---------- latar: aurora + grid yang memudar ---------- */
+        .lp-aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+        .lp-aurora::before {
+            content: ''; position: absolute; inset: -20% -10% auto -10%; height: 90vh;
+            background:
+                radial-gradient(40% 50% at 18% 20%, rgba(22, 224, 174, 0.16), transparent 70%),
+                radial-gradient(38% 45% at 82% 12%, rgba(132, 171, 255, 0.13), transparent 70%),
+                radial-gradient(30% 35% at 60% 70%, rgba(6, 182, 212, 0.08), transparent 70%);
+            filter: blur(10px);
+        }
+        .lp-aurora::after {
+            content: ''; position: absolute; inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+            background-size: 64px 64px;
+            -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 30%, transparent 75%);
+                    mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 30%, transparent 75%);
+        }
+        main, header, footer { position: relative; z-index: 1; }
+
+        /* ---------- navigasi ---------- */
+        .lp-nav {
+            position: sticky; top: 0; z-index: 20;
+            transition: background-color 0.25s ease, border-color 0.25s ease, backdrop-filter 0.25s ease;
+            border-bottom: 1px solid transparent;
+        }
+        .lp-nav.scrolled { background: rgba(4, 6, 10, 0.72); backdrop-filter: blur(16px); border-bottom-color: var(--line); }
+        .lp-nav .wrap { display: flex; align-items: center; gap: 28px; height: 68px; }
+        .lp-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.03em; }
+        .lp-mark {
+            width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+            background: linear-gradient(135deg, var(--accum), var(--accum-2));
+            box-shadow: 0 0 22px rgba(22, 224, 174, 0.35);
+        }
+        .lp-mark svg { width: 16px; height: 16px; color: #04211D; }
+        .lp-links { display: flex; gap: 26px; margin-left: 12px; }
+        .lp-links a { color: var(--text-mid); font-size: 14px; font-weight: 500; transition: color 0.15s ease; }
+        .lp-links a:hover { color: var(--text); }
+        .lp-nav .lp-btn { margin-left: auto; }
+        @media (max-width: 760px) { .lp-links { display: none; } }
+
+        /* ---------- tombol ---------- */
+        .lp-btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 11px 20px; border-radius: 12px; font-weight: 700; font-size: 14.5px;
+            border: 1px solid var(--line-strong); color: var(--text); background: rgba(255,255,255,0.03);
+            transition: transform 0.18s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+        }
+        .lp-btn:hover { transform: translateY(-1px); background: rgba(255,255,255,0.06); border-color: rgba(148,163,184,0.4); }
+        .lp-btn svg { width: 16px; height: 16px; transition: transform 0.18s ease; }
+        .lp-btn:hover svg { transform: translateX(2px); }
+        .lp-btn-primary {
+            border: none; color: #04211D;
+            background: linear-gradient(135deg, var(--accum), var(--accum-2));
+            box-shadow: 0 8px 28px -8px rgba(22, 224, 174, 0.6), inset 0 1px 0 rgba(255,255,255,0.35);
+        }
+        .lp-btn-primary:hover { background: linear-gradient(135deg, #2BF0C0, #22C9E4); box-shadow: 0 12px 34px -8px rgba(22, 224, 174, 0.75), inset 0 1px 0 rgba(255,255,255,0.4); }
+        .lp-btn-sm { padding: 8px 15px; font-size: 13.5px; border-radius: 10px; }
+
+        /* ---------- hero ---------- */
+        .lp-hero { padding: 72px 0 40px; }
+        .lp-hero .wrap { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.98fr); gap: 56px; align-items: center; }
+        @media (max-width: 1024px) { .lp-hero .wrap { grid-template-columns: 1fr; gap: 48px; } }
+        .lp-eyebrow {
+            display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px;
+            border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(255,255,255,0.03);
+            font-size: 12.5px; color: var(--text-mid); font-weight: 600;
+        }
+        .lp-eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accum); box-shadow: 0 0 0 4px var(--accum-glow); }
+        .lp-hero h1 {
+            font-size: clamp(38px, 5vw, 60px); line-height: 1.05; letter-spacing: -0.045em;
+            font-weight: 800; margin: 22px 0 20px; text-wrap: balance;
+        }
+        .grad {
+            background: linear-gradient(100deg, var(--accum) 10%, var(--accum-2) 55%, var(--info) 100%);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        .lp-lede { font-size: clamp(16px, 1.5vw, 18px); color: var(--text-mid); max-width: 56ch; margin: 0 0 30px; }
+        .lp-cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
+        .lp-trust {
+            display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 30px;
+            font-size: 13px; color: var(--text-dim);
+        }
+        .lp-trust b { color: var(--text); font-family: var(--font-mono); font-weight: 600; }
+        .lp-trust span { display: inline-flex; align-items: center; gap: 7px; }
+        .lp-trust span::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--line-strong); }
+
+        /* ---------- kartu produk di hero ---------- */
+        .lp-mock-wrap { position: relative; }
+        .lp-mock {
+            position: relative; border-radius: 22px; padding: 22px;
+            background: linear-gradient(180deg, rgba(27,35,48,0.92), rgba(12,17,25,0.92));
+            border: 1px solid var(--line-strong);
+            box-shadow: 0 40px 90px -30px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.02) inset, 0 1px 0 rgba(255,255,255,0.07) inset;
+        }
+        .lp-mock::before {
+            content: ''; position: absolute; inset: -1px; border-radius: 22px; padding: 1px; pointer-events: none;
+            background: linear-gradient(140deg, rgba(22,224,174,0.55), transparent 35%, transparent 65%, rgba(132,171,255,0.35));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+        }
+        .lp-mock-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+        .lp-ticker {
+            font-family: var(--font-mono); font-weight: 600; font-size: 13px; letter-spacing: 0.04em;
+            padding: 5px 10px; border-radius: 8px; background: var(--accum-glow); color: var(--accum);
+        }
+        .lp-mock-title { font-weight: 700; font-size: 14.5px; line-height: 1.3; }
+        .lp-mock-sub { font-size: 12px; color: var(--text-dim); }
+        .lp-live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-dim); font-family: var(--font-mono); }
+        .lp-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--accum); animation: pulse 2.2s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(22,224,174,0.5); } 50% { box-shadow: 0 0 0 6px rgba(22,224,174,0); } }
+        .lp-chart { width: 100%; height: auto; display: block; }
+        .lp-chart .draw { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: draw 2.4s cubic-bezier(0.4,0,0.2,1) 0.3s forwards; }
+        @keyframes draw { to { stroke-dashoffset: 0; } }
+        .lp-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+        .lp-metric { padding: 11px 12px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); }
+        .lp-metric .k { font-size: 11px; color: var(--text-dim); line-height: 1.35; }
+        .lp-metric .v { font-family: var(--font-mono); font-size: 17px; font-weight: 600; margin-top: 3px; }
+        .lp-mock-note { margin: 12px 2px 0; font-size: 11.5px; line-height: 1.5; color: var(--text-dim); }
+        .up { color: var(--accum); }
+        .down { color: var(--distrib); }
+        .lp-float {
+            position: absolute; display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px; border-radius: 14px; font-size: 12.5px; font-weight: 600;
+            background: rgba(17, 24, 35, 0.9); border: 1px solid var(--line-strong); backdrop-filter: blur(10px);
+            box-shadow: 0 18px 40px -16px rgba(0,0,0,0.8);
+            animation: float 6s ease-in-out infinite;
+        }
+        .lp-float small { display: block; font-weight: 500; color: var(--text-dim); font-size: 11px; }
+        .lp-float .ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; }
+        .lp-float .ic svg { width: 15px; height: 15px; }
+        .lp-float-a { top: -46px; left: -30px; }
+        .lp-float-b { bottom: -60px; right: -16px; animation-delay: -3s; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @media (max-width: 1100px) { .lp-float-a { left: 8px; } .lp-float-b { right: 8px; } }
+        @media (max-width: 560px) { .lp-float { display: none; } .lp-metrics { grid-template-columns: 1fr 1fr; } .lp-metric:last-child { grid-column: span 2; } }
+
+        /* ---------- angka ---------- */
+        .lp-stats { padding: 56px 0 24px; }
+        .lp-stats .grid {
+            display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+            border: 1px solid var(--line); border-radius: var(--radius);
+            background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
+        }
+        .lp-stat { padding: 26px 26px; }
+        .lp-stat + .lp-stat { border-left: 1px solid var(--line); }
+        .lp-stat .n { font-family: var(--font-mono); font-size: clamp(28px, 3.2vw, 40px); font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
+        .lp-stat .l { color: var(--text-dim); font-size: 13.5px; margin-top: 6px; }
+        @media (max-width: 760px) {
+            .lp-stats .grid { grid-template-columns: 1fr 1fr; }
+            .lp-stat:nth-child(3) { border-left: none; }
+            .lp-stat:nth-child(n+3) { border-top: 1px solid var(--line); }
+        }
+
+        /* ---------- bagian umum ---------- */
+        .lp-section { padding: 96px 0 24px; }
+        .lp-kicker { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accum); font-weight: 600; }
+        .lp-h2 { font-size: clamp(30px, 3.6vw, 44px); line-height: 1.1; letter-spacing: -0.035em; font-weight: 800; margin: 12px 0 14px; text-wrap: balance; }
+        .lp-p { color: var(--text-mid); max-width: 62ch; margin: 0; font-size: 16.5px; }
+        .lp-head { margin-bottom: 40px; }
+
+        /* ---------- fitur (bento) ---------- */
+        .lp-bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+        @media (max-width: 1024px) { .lp-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 640px) { .lp-bento { grid-template-columns: 1fr; } }
+        .lp-card {
+            position: relative; overflow: hidden; border-radius: var(--radius); padding: 24px;
+            background: linear-gradient(180deg, rgba(27,35,48,0.7), rgba(15,21,31,0.7));
+            border: 1px solid var(--line);
+            transition: transform 0.25s cubic-bezier(0.2,0.8,0.2,1), border-color 0.25s ease, box-shadow 0.25s ease;
+        }
+        .lp-card:hover { transform: translateY(-3px); border-color: var(--line-strong); box-shadow: 0 24px 50px -24px rgba(0,0,0,0.9); }
+        .lp-card::after {
+            content: ''; position: absolute; width: 220px; height: 220px; right: -80px; top: -90px; border-radius: 50%;
+            background: radial-gradient(circle, var(--glow, rgba(22,224,174,0.14)), transparent 70%);
+            opacity: 0.7; transition: opacity 0.25s ease; pointer-events: none;
+        }
+        .lp-card:hover::after { opacity: 1; }
+        .lp-card.span-2 { grid-column: span 2; }
+        @media (max-width: 640px) { .lp-card.span-2 { grid-column: span 1; } }
+        .lp-ic {
+            width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 18px;
+            background: var(--icbg, var(--accum-glow)); color: var(--icfg, var(--accum));
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .lp-ic svg { width: 20px; height: 20px; }
+        .lp-card h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -0.02em; font-weight: 700; }
+        .lp-card p { margin: 0; color: var(--text-mid); font-size: 14.5px; line-height: 1.6; }
+        .lp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+        .lp-chip {
+            font-family: var(--font-mono); font-size: 12px; padding: 5px 10px; border-radius: 999px;
+            border: 1px solid var(--line-strong); color: var(--text-mid); background: rgba(255,255,255,0.03);
+        }
+        .lp-chip b { color: var(--accum); font-weight: 600; }
+
+        /* ---------- status bukti ---------- */
+        .lp-proof { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 28px; align-items: start; }
+        @media (max-width: 1024px) { .lp-proof { grid-template-columns: 1fr; } }
+        .lp-tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .lp-tier { padding: 18px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,0.02); }
+        .lp-tier .n { font-family: var(--font-mono); font-size: 34px; font-weight: 600; line-height: 1; }
+        .lp-tier .t { font-weight: 700; margin-top: 10px; font-size: 14.5px; }
+        .lp-tier .d { color: var(--text-dim); font-size: 12.5px; margin-top: 4px; line-height: 1.5; }
+        .tier-hijau .n { color: var(--accum); }
+        .tier-kuning .n { color: var(--warn); }
+        .tier-merah .n { color: var(--distrib); }
+        .tier-netral .n { color: var(--text-mid); }
+        .lp-quote {
+            margin-top: 12px; padding: 20px 22px; border-radius: 16px;
+            border: 1px solid rgba(255, 96, 118, 0.28); background: linear-gradient(180deg, rgba(255,96,118,0.08), rgba(255,96,118,0.02));
+            color: var(--text-mid); font-size: 14.5px;
+        }
+        .lp-quote b { color: var(--text); }
+        .lp-menu { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: rgba(255,255,255,0.015); }
+        .lp-menu-row { display: grid; grid-template-columns: minmax(0, 190px) auto minmax(0, 1fr); gap: 14px; align-items: center; padding: 13px 18px; }
+        .lp-menu-row + .lp-menu-row { border-top: 1px solid var(--line); }
+        .lp-menu-row .m { font-weight: 600; font-size: 14px; }
+        .lp-menu-row .r { color: var(--text-dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        @media (max-width: 640px) { .lp-menu-row { grid-template-columns: 1fr auto; } .lp-menu-row .r { display: none; } }
+        .lp-badge { font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+        .b-hijau { color: var(--accum); background: rgba(22,224,174,0.12); }
+        .b-kuning { color: var(--warn); background: rgba(255,195,82,0.12); }
+        .b-merah { color: var(--distrib); background: rgba(255,96,118,0.12); }
+        .b-netral { color: var(--text-mid); background: rgba(148,163,184,0.12); }
+
+        /* ---------- cara kerja ---------- */
+        .lp-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; counter-reset: langkah; }
+        @media (max-width: 1024px) { .lp-steps { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 560px) { .lp-steps { grid-template-columns: 1fr; } }
+        .lp-step { position: relative; padding: 24px 22px; border-radius: var(--radius); border: 1px solid var(--line); background: rgba(255,255,255,0.02); }
+        .lp-step::before {
+            counter-increment: langkah; content: '0' counter(langkah);
+            font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--accum);
+            display: inline-block; padding: 4px 9px; border-radius: 8px; background: var(--accum-glow); margin-bottom: 16px;
+        }
+        .lp-step h3 { margin: 0 0 8px; font-size: 17px; letter-spacing: -0.02em; }
+        .lp-step p { margin: 0; color: var(--text-mid); font-size: 14px; }
+
+        /* ---------- ajakan akhir ---------- */
+        .lp-final { padding: 110px 0 90px; }
+        .lp-final .box {
+            position: relative; overflow: hidden; text-align: center; padding: 64px 28px; border-radius: 28px;
+            border: 1px solid var(--line-strong);
+            background: radial-gradient(60% 120% at 50% 0%, rgba(22,224,174,0.18), transparent 70%), linear-gradient(180deg, #111823, #0A0E15);
+        }
+        .lp-final h2 { font-size: clamp(30px, 4vw, 48px); letter-spacing: -0.04em; line-height: 1.08; margin: 0 0 14px; font-weight: 800; }
+        .lp-final p { color: var(--text-mid); margin: 0 auto 30px; max-width: 52ch; }
+
+        footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--text-dim); font-size: 13px; }
+        footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; }
+
+        /* ---------- muncul saat digulir ----------
+           Hanya kalau JS jalan (kelas .js dipasang di <head>): tanpa JS,
+           semua isi tetap terlihat -- animasi bukan syarat membaca. */
+        .js .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s cubic-bezier(0.2,0.8,0.2,1), transform 0.7s cubic-bezier(0.2,0.8,0.2,1); }
+        .js .reveal.in { opacity: 1; transform: none; }
+        @media (prefers-reduced-motion: reduce) {
+            .js .reveal { opacity: 1; transform: none; transition: none; }
+            *, *::before, *::after { animation: none !important; }
+            .lp-chart .draw { stroke-dashoffset: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="lp-aurora" aria-hidden="true"></div>
+
+{% macro ikon(nama) -%}
+{%- if nama == 'trend' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+{%- elif nama == 'radar' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+{%- elif nama == 'gauge' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+{%- elif nama == 'users' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+{%- elif nama == 'pie' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+{%- elif nama == 'search' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+{%- elif nama == 'diff' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
+{%- elif nama == 'book' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+{%- elif nama == 'check' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+{%- elif nama == 'alert' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+{%- elif nama == 'arrow' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+{%- endif -%}
+{%- endmacro %}
+
+{% set c = contoh or {} %}
+{% set cb = c.bukti or {} %}
+{% set s = c.seri %}
+
+<header class="lp-nav" id="lpNav">
+    <div class="wrap">
+        <a class="lp-brand" href="/" aria-label="BDM, halaman depan">
+            <span class="lp-mark">{{ ikon('trend') }}</span>BDM
+        </a>
+        <nav class="lp-links" aria-label="Bagian halaman">
+            <a href="#fitur">Fitur</a>
+            <a href="#bukti">Status bukti</a>
+            <a href="#cara-kerja">Cara kerja</a>
+        </nav>
+        <a class="lp-btn lp-btn-sm lp-btn-primary" href="/login">Masuk {{ ikon('arrow') }}</a>
+    </div>
+</header>
+
+<main>
+    <section class="lp-hero">
+        <div class="wrap">
+            <div class="reveal">
+                <span class="lp-eyebrow"><span class="dot"></span>Riset bandarmologi untuk saham BEI</span>
+                <h1>Baca arus bandar.<br><span class="grad">Uji sebelum percaya.</span></h1>
+                <p class="lp-lede">BDM merangkum arus broker harian, kepemilikan KSEI, aktivitas insider, dan harga
+                    {{ fakta.n_emiten or '~880' }} emiten jadi satu meja kerja &mdash; lalu memberi setiap temuannya
+                    status bukti yang jujur: lolos uji luar sampel, masih kalibrasi, atau gagal.</p>
+                <div class="lp-cta-row">
+                    <a class="lp-btn lp-btn-primary" href="/login">Masuk ke dashboard {{ ikon('arrow') }}</a>
+                    <a class="lp-btn" href="#cara-kerja">Lihat cara kerjanya</a>
+                </div>
+                <div class="lp-trust">
+                    <span><b>{{ fakta.n_emiten or '—' }}</b>&nbsp;emiten</span>
+                    {% if fakta.data_sampai_id %}<span>data s/d&nbsp;<b>{{ fakta.data_sampai_id }}</b></span>{% endif %}
+                    <span>diperiksa&nbsp;<b>tiap malam</b></span>
+                </div>
+            </div>
+
+            <div class="lp-mock-wrap reveal" style="transition-delay: 0.12s;">
+                <div class="lp-mock" role="img"
+                     aria-label="Contoh sinyal Tembus Basis: harga bergerak datar dalam basis sempit lalu menembus ke atas dengan volume besar.">
+                    <div class="lp-mock-head">
+                        <span class="lp-ticker">{{ c.stock or 'CONTOH' }}</span>
+                        <div>
+                            <div class="lp-mock-title">{{ c.label or 'Tembus basis + volume' }}</div>
+                            <div class="lp-mock-sub">{% if c.as_of_id %}Sinyal Tembus Basis terbaru &middot; {{ c.as_of_id }}{% else %}Bentuk sinyal Tembus Basis{% endif %}</div>
+                        </div>
+                        {% if s %}<span class="lp-live"><i></i>harga asli</span>{% else %}<span class="lp-live">ilustrasi</span>{% endif %}
+                    </div>
+                    <svg class="lp-chart" viewBox="0 0 560 250" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#16E0AE" stop-opacity="0.32"/>
+                                <stop offset="100%" stop-color="#16E0AE" stop-opacity="0"/>
+                            </linearGradient>
+                            <linearGradient id="gLine" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stop-color="#84ABFF"/>
+                                <stop offset="62%" stop-color="#16E0AE"/>
+                                <stop offset="100%" stop-color="#2BF0C0"/>
+                            </linearGradient>
+                            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="4" result="b"/>
+                                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                            </filter>
+                        </defs>
+                        <g stroke="rgba(148,163,184,0.10)" stroke-width="1">
+                            <line x1="0" y1="50" x2="560" y2="50"/><line x1="0" y1="100" x2="560" y2="100"/>
+                            <line x1="0" y1="150" x2="560" y2="150"/><line x1="0" y1="200" x2="560" y2="200"/>
+                        </g>
+                        {% if s %}
+                        {# Harga asli emiten contoh (views._seri_contoh): close, basis 30 hari, volume. #}
+                        <rect x="{{ '%.1f'|format(s.basis.x) }}" y="{{ '%.1f'|format(s.basis.y) }}" width="{{ '%.1f'|format(s.basis.w) }}" height="{{ '%.1f'|format(s.basis.h) }}" rx="6"
+                              fill="rgba(132,171,255,0.07)" stroke="rgba(132,171,255,0.45)" stroke-dasharray="4 4"/>
+                        <text x="{{ '%.1f'|format(s.basis.x + 6) }}" y="{{ '%.1f'|format(s.basis.y - 8 if s.basis.y > 24 else s.basis.y + s.basis.h + 16) }}" fill="#84ABFF"
+                              font-family="JetBrains Mono, monospace" font-size="10.5" letter-spacing="0.06em">BASIS 30 HARI &#183; RENTANG {{ '%.1f'|format(c.basis30) if c.basis30 is not none else '—' }}%</text>
+                        <path d="{{ s.area }}" fill="url(#gArea)"/>
+                        <path class="draw" d="{{ s.garis }}" fill="none" stroke="url(#gLine)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+                        <g>
+                            {% for v in s.volume %}
+                            <rect x="{{ '%.1f'|format(v.x) }}" y="{{ '%.1f'|format(v.y) }}" width="{{ '%.1f'|format(s.lebar_bar) }}" height="{{ '%.1f'|format(v.h) }}" rx="1.5"
+                                  fill="{{ '#16E0AE' if v.sinyal else 'rgba(148,163,184,0.28)' }}"{% if v.sinyal %} filter="url(#glow)"{% endif %}/>
+                            {% endfor %}
+                        </g>
+                        <line x1="{{ '%.1f'|format(s.titik.x) }}" y1="{{ '%.1f'|format(s.titik.y) }}" x2="{{ '%.1f'|format(s.titik.x) }}" y2="202"
+                              stroke="rgba(22,224,174,0.35)" stroke-dasharray="3 4"/>
+                        <circle cx="{{ '%.1f'|format(s.titik.x) }}" cy="{{ '%.1f'|format(s.titik.y) }}" r="5.5" fill="#04060A" stroke="#16E0AE" stroke-width="3" filter="url(#glow)"/>
+                        <g transform="translate({{ '%.1f'|format(s.label_x) }} {{ '%.1f'|format(s.label_y) }})">
+                            <rect width="108" height="26" rx="8" fill="rgba(4,6,10,0.72)" stroke="rgba(22,224,174,0.55)"/>
+                            <text x="54" y="17" text-anchor="middle" fill="#2BF0C0" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">VOL {{ '%.1f'|format(c.vol_x) if c.vol_x is not none else '—' }}&#215;</text>
+                        </g>
+                        <text x="20" y="249" fill="#8C9BB0" font-family="JetBrains Mono, monospace" font-size="10">{{ s.mulai_id }}</text>
+                        <text x="540" y="249" text-anchor="end" fill="#8C9BB0" font-family="JetBrains Mono, monospace" font-size="10">{{ s.akhir_id }}</text>
+                        {% else %}
+                        {# Ilustrasi: belum ada contoh sinyal di cache. #}
+                        <rect x="20" y="146" width="340" height="30" rx="6" fill="rgba(132,171,255,0.07)"
+                              stroke="rgba(132,171,255,0.45)" stroke-dasharray="4 4"/>
+                        <text x="26" y="138" fill="#84ABFF" font-family="JetBrains Mono, monospace" font-size="10.5" letter-spacing="0.06em">BASIS 30 HARI &#183; RENTANG &lt;20%</text>
+                        <path d="M20 168 L44 160 L68 166 L92 155 L116 163 L140 157 L164 167 L188 158 L212 164 L236 154 L260 162 L284 156 L308 165 L332 157 L356 161 L380 128 L404 114 L428 103 L452 92 L476 82 L500 70 L524 58 L548 50 L548 200 L20 200 Z"
+                              fill="url(#gArea)"/>
+                        <path class="draw" d="M20 168 L44 160 L68 166 L92 155 L116 163 L140 157 L164 167 L188 158 L212 164 L236 154 L260 162 L284 156 L308 165 L332 157 L356 161 L380 128 L404 114 L428 103 L452 92 L476 82 L500 70 L524 58 L548 50"
+                              fill="none" stroke="url(#gLine)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+                        <g fill="rgba(148,163,184,0.28)">
+                            <rect x="16" y="228" width="10" height="8" rx="2"/><rect x="40" y="226" width="10" height="10" rx="2"/>
+                            <rect x="64" y="229" width="10" height="7" rx="2"/><rect x="88" y="227" width="10" height="9" rx="2"/>
+                            <rect x="112" y="229" width="10" height="7" rx="2"/><rect x="136" y="228" width="10" height="8" rx="2"/>
+                            <rect x="160" y="230" width="10" height="6" rx="2"/><rect x="184" y="228" width="10" height="8" rx="2"/>
+                            <rect x="208" y="229" width="10" height="7" rx="2"/><rect x="232" y="227" width="10" height="9" rx="2"/>
+                            <rect x="256" y="230" width="10" height="6" rx="2"/><rect x="280" y="228" width="10" height="8" rx="2"/>
+                            <rect x="304" y="229" width="10" height="7" rx="2"/><rect x="328" y="228" width="10" height="8" rx="2"/>
+                            <rect x="352" y="227" width="10" height="9" rx="2"/>
+                            <rect x="400" y="216" width="10" height="20" rx="2"/><rect x="424" y="220" width="10" height="16" rx="2"/>
+                            <rect x="448" y="222" width="10" height="14" rx="2"/><rect x="472" y="223" width="10" height="13" rx="2"/>
+                            <rect x="496" y="224" width="10" height="12" rx="2"/><rect x="520" y="223" width="10" height="13" rx="2"/>
+                        </g>
+                        <rect x="376" y="196" width="10" height="40" rx="2" fill="#16E0AE" filter="url(#glow)"/>
+                        <line x1="380" y1="128" x2="380" y2="196" stroke="rgba(22,224,174,0.35)" stroke-dasharray="3 4"/>
+                        <circle cx="380" cy="128" r="6" fill="#04060A" stroke="#16E0AE" stroke-width="3" filter="url(#glow)"/>
+                        <g transform="translate(262 92)">
+                            <rect width="108" height="26" rx="8" fill="rgba(22,224,174,0.14)" stroke="rgba(22,224,174,0.5)"/>
+                            <text x="54" y="17" text-anchor="middle" fill="#2BF0C0" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">VOL &gt;2&#215;</text>
+                        </g>
+                        {% endif %}
+                    </svg>
+                    {% set cp = c.pembanding or {} %}
+                    <div class="lp-metrics">
+                        <div class="lp-metric"><div class="k">+10% sebelum &minus;10%</div><div class="v up">{{ '%.1f'|format(cb.dulu10) if cb.dulu10 is defined else '56.5' }}%</div></div>
+                        <div class="lp-metric"><div class="k">vs pasar, 60 hari</div><div class="v up">{{ '%+.1f'|format(cb.vs_pasar) if cb.vs_pasar is defined else '+4.7' }}%</div></div>
+                        <div class="lp-metric"><div class="k">Hari biasa (pembanding)</div><div class="v" style="color: var(--text-mid);">{{ '%.1f'|format(cp.dulu10) if cp.dulu10 is defined else '47.3' }}%</div></div>
+                    </div>
+                    <p class="lp-mock-note">Angka populasi aturan {{ 'ini' if cb else 'tembus basis' }} di uji validasi 2020&ndash;2026{% if c.aturan == 'keduanya' %} &mdash; kombinasi ini dipilih setelah data validasi dilihat, jadi buktinya lebih lemah{% endif %}.
+                        Bukan ramalan untuk {{ c.stock or 'satu emiten' }}.</p>
+                </div>
+                <div class="lp-float lp-float-a">
+                    <span class="ic" style="background: rgba(255,96,118,0.14); color: var(--distrib);">{{ ikon('alert') }}</span>
+                    <span>Insider JUAL, peringatan dini<small>Radar Insider &middot; diuji ke depan</small></span>
+                </div>
+                <div class="lp-float lp-float-b">
+                    <span class="ic" style="background: rgba(22,224,174,0.14); color: var(--accum);">{{ ikon('check') }}</span>
+                    <span>Tembus basis: teruji luar sampel<small>vs pasar positif 13 dari 14 tahun</small></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-stats">
+        <div class="wrap">
+            <div class="grid reveal">
+                <div class="lp-stat"><div class="n">{{ fakta.n_emiten or '—' }}</div><div class="l">emiten BEI dipantau tiap hari bursa</div></div>
+                <div class="lp-stat"><div class="n">{{ fakta.n_hari or '—' }}</div><div class="l">hari bursa arus broker tercatat</div></div>
+                <div class="lp-stat"><div class="n">{{ (bukti.total if bukti else 16) }}</div><div class="l">menu dengan status bukti tertulis</div></div>
+                <div class="lp-stat"><div class="n" style="color: var(--accum);">{{ (bukti.hitung.teruji if bukti else 2) }}</div><div class="l">temuan yang lolos uji luar sampel</div></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section" id="fitur">
+        <div class="wrap">
+            <div class="lp-head reveal">
+                <div class="lp-kicker">Fitur</div>
+                <h2 class="lp-h2">Satu meja kerja untuk membaca bursa.</h2>
+                <p class="lp-p">Dari sinyal harian sampai kalibrasi keputusanmu sendiri. Setiap layar menjawab satu pertanyaan,
+                    dan menyebut batas jawabannya.</p>
+            </div>
+            <div class="lp-bento">
+                <article class="lp-card span-2 reveal">
+                    <div class="lp-ic">{{ ikon('trend') }}</div>
+                    <h3>Tembus Basis</h3>
+                    <p>Saham yang keluar dari basis harga tenang, atau mencetak puncak 52 minggu, dengan volume di atas 2&times;
+                        rata-rata. Lahir dari hipotesis yang gagal: harga yang tenang saja justru menurunkan peluang naik
+                        &ge;10% sebulan (10,9% lawan 18,7% hari biasa). Yang bertahan adalah <em>saat</em> basisnya ditembus.</p>
+                    <div class="lp-chips">
+                        <span class="lp-chip"><b>+4,7%</b> vs pasar per 60 hari</span>
+                        <span class="lp-chip"><b>13/14</b> tahun positif</span>
+                        <span class="lp-chip">diuji di ~750 emiten, 2013&ndash;2026</span>
+                    </div>
+                </article>
+                <article class="lp-card reveal" style="--glow: rgba(255,96,118,0.14); --icbg: rgba(255,96,118,0.13); --icfg: var(--distrib);">
+                    <div class="lp-ic">{{ ikon('radar') }}</div>
+                    <h3>Radar Insider</h3>
+                    <p>Transaksi direksi, komisaris, dan pengendali dibaca dalam konteks harga. Insider JUAL sebagai peringatan dini &mdash; kini diuji ke depan per tanggal terlihat.</p>
+                </article>
+                <article class="lp-card reveal" style="--glow: rgba(255,195,82,0.13); --icbg: rgba(255,195,82,0.12); --icfg: var(--warn);">
+                    <div class="lp-ic">{{ ikon('gauge') }}</div>
+                    <h3>Takaran Risiko</h3>
+                    <p>Seberapa keras sebuah saham akan berayun, bukan ke mana. Kalibrasi pertama yang lolos uji luar sampel.</p>
+                </article>
+                <article class="lp-card reveal" style="--glow: rgba(132,171,255,0.14); --icbg: rgba(132,171,255,0.13); --icfg: var(--info);">
+                    <div class="lp-ic">{{ ikon('users') }}</div>
+                    <h3>Sidik Jari Broker</h3>
+                    <p>Buku besar broker harian: siapa yang memborong, di harga berapa, dan apakah bandar sedang untung atau rugi.</p>
+                </article>
+                <article class="lp-card reveal">
+                    <div class="lp-ic">{{ ikon('pie') }}</div>
+                    <h3>Kepemilikan Saham</h3>
+                    <p>Komposisi pemegang saham bulanan KSEI dan registri IDX &mdash; siapa yang memegang, dan ke mana arah free float-nya.</p>
+                </article>
+                <article class="lp-card reveal" style="--glow: rgba(132,171,255,0.14); --icbg: rgba(132,171,255,0.13); --icfg: var(--info);">
+                    <div class="lp-ic">{{ ikon('search') }}</div>
+                    <h3>Halaman Saham</h3>
+                    <p>Semua yang diketahui tentang satu emiten di satu layar: chart fase, kartu keputusan, kepemilikan, dan pola yang cocok.</p>
+                </article>
+                <article class="lp-card reveal">
+                    <div class="lp-ic">{{ ikon('diff') }}</div>
+                    <h3>Apa Berubah Hari Ini</h3>
+                    <p>Siapa yang masuk dan keluar dari tiap layar sejak hari bursa kemarin &mdash; tanpa membuka menu satu per satu.</p>
+                </article>
+                <article class="lp-card reveal" style="--glow: rgba(255,195,82,0.13); --icbg: rgba(255,195,82,0.12); --icfg: var(--warn);">
+                    <div class="lp-ic">{{ ikon('book') }}</div>
+                    <h3>Jurnal Keputusan &amp; P&amp;L</h3>
+                    <p>Catatan posisi sungguhan dan kalibrasi keputusanmu sendiri: waktu masuk, kartu bilang apa, hasilnya berapa.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section" id="bukti">
+        <div class="wrap">
+            <div class="lp-head reveal">
+                <div class="lp-kicker">Status bukti</div>
+                <h2 class="lp-h2">Jujur soal apa yang terbukti.</h2>
+                <p class="lp-p">Setiap menu dinilai dengan satu pertanyaan: pernah diuji di luar data tempat ia ditemukan, dan lolos?
+                    Angka yang rapi tidak otomatis benar &mdash; statusnya yang bilang.</p>
+            </div>
+            {% if bukti %}
+            <div class="lp-proof">
+                <div class="reveal">
+                    <div class="lp-tiers">
+                        {% for kunci in ['teruji', 'kalibrasi', 'gagal', 'alat'] %}
+                        {% set t = bukti.tingkat[kunci] %}
+                        <div class="lp-tier tier-{{ t.warna }}">
+                            <div class="n">{{ bukti.hitung[kunci] }}</div>
+                            <div class="t">{{ t.label }}</div>
+                            <div class="d">{{ t.arti }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="lp-quote"><b>Termasuk yang gagal.</b> Jatuh Dalam pernah berstatus teruji. Diuji ulang di
+                        ~750 emiten likuid, aturan yang sama kalah dari pasar &mdash; statusnya diturunkan, dan halamannya
+                        sekarang mengatakan itu di baris pertama.</div>
+                </div>
+                <div class="lp-menu reveal" style="transition-delay: 0.1s;">
+                    {% for m in bukti.menu %}
+                    {% set t = bukti.tingkat[m.status] %}
+                    <div class="lp-menu-row">
+                        <span class="m">{{ m.menu }}</span>
+                        <span class="lp-badge b-{{ t.warna }}">{{ t.label }}</span>
+                        <span class="r" title="{{ m.ringkas }}">{{ m.ringkas }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="lp-section" id="cara-kerja">
+        <div class="wrap">
+            <div class="lp-head reveal">
+                <div class="lp-kicker">Cara kerja</div>
+                <h2 class="lp-h2">Dari unduhan malam ke layar pagi.</h2>
+                <p class="lp-p">Datanya tidak dihitung di depan matamu. Semuanya dibangun, diperiksa, dan dicatat sebelum kamu membuka app.</p>
+            </div>
+            <div class="lp-steps">
+                <div class="lp-step reveal"><h3>Unduh</h3><p>Arus broker harian (IPOT &amp; Stockbit), harga (Yahoo), kepemilikan (KSEI &amp; IDX), dan transaksi insider.</p></div>
+                <div class="lp-step reveal" style="transition-delay: 0.06s;"><h3>Susun</h3><p>Ringkasan harian per emiten dan buku besar broker jutaan baris &mdash; satu sumber untuk semua layar.</p></div>
+                <div class="lp-step reveal" style="transition-delay: 0.12s;"><h3>Periksa</h3><p>Pemeriksa kesehatan membangun ulang cache, mencatat jurnal maju, dan menjalankan uji asap setiap malam.</p></div>
+                <div class="lp-step reveal" style="transition-delay: 0.18s;"><h3>Baca</h3><p>Dashboard, halaman saham, dan palet perintah <span class="mono">Ctrl K</span> &mdash; ke layar mana pun dalam dua ketukan.</p></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-final">
+        <div class="wrap">
+            <div class="box reveal">
+                <h2>Datanya sudah menunggu.</h2>
+                <p>Masuk untuk melihat sinyal hari ini, watchlist, dan apa yang berubah sejak kemarin.</p>
+                <a class="lp-btn lp-btn-primary" href="/login">Masuk ke BDM {{ ikon('arrow') }}</a>
+            </div>
+        </div>
+    </section>
+</main>
+
+<footer>
+    <div class="wrap">
+        <span>BDM &middot; alat riset pribadi untuk saham BEI. Bukan rekomendasi beli/jual &mdash; setiap angka adalah kecondongan populasi, bukan ramalan per emiten.</span>
+        {% if fakta.data_sampai_id %}<span class="mono">data s/d {{ fakta.data_sampai_id }}</span>{% endif %}
+    </div>
+</footer>
+
+<script>
+    (function () {
+        var nav = document.getElementById('lpNav');
+        function onScroll() { nav.classList.toggle('scrolled', window.scrollY > 8); }
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+
+        var items = document.querySelectorAll('.reveal');
+        if (!('IntersectionObserver' in window)) {
+            items.forEach(function (el) { el.classList.add('in'); });
+            return;
+        }
+        // Yang sudah terlihat di layar pertama tidak menunggu observer --
+        // callback-nya bisa telat kalau tab sedang sibuk, dan hero yang
+        // kosong sedetik terasa seperti halaman rusak. Dua rAF supaya
+        // transisinya tetap jalan; setTimeout sebagai jaring pengaman.
+        function layarPertama() {
+            items.forEach(function (el) {
+                if (el.getBoundingClientRect().top < window.innerHeight) { el.classList.add('in'); }
+            });
+        }
+        requestAnimationFrame(function () { requestAnimationFrame(layarPertama); });
+        setTimeout(layarPertama, 700);
+        var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+            });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+        items.forEach(function (el) { io.observe(el); });
+    })();
+</script>
+</body>
+</html>

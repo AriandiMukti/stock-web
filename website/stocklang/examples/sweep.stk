@@ -1,0 +1,14 @@
+# Which moving-average lengths work? Try several, but judge them on the
+# part of the data they weren't picked on.
+#
+#   python -m stocklang stocklang/examples/sweep.stk
+
+stock BBRI
+
+param fast = [5, 10]
+param slow = [20, 30, 40]
+
+buy  = cross_up(sma(close, fast), sma(close, slow))
+sell = cross_down(sma(close, fast), sma(close, slow))
+
+backtest(buy, sell, stop_loss = 8%, trailing_stop = 12%, split = 60%)

@@ -1,0 +1,14 @@
+# Out-of-sample check: a rule is only worth something on data it hasn't
+# seen. split= runs the backtest twice, before and after the date, each
+# side starting with fresh capital. In a universe it also runs one real
+# portfolio: a single pot of money, at most `positions` stocks at once.
+#
+#   python -m stocklang stocklang/examples/out_of_sample.stk
+
+universe all
+
+liquid = sma(volume * close, 20) > 1B          # avg daily value above Rp 1 billion
+buy  = cross_up(sma(close, 10), sma(close, 30)) and liquid
+sell = cross_down(sma(close, 10), sma(close, 30))
+
+backtest(buy, sell, split = "2026-07-01", positions = 10, stop_loss = 8%, trades = false)

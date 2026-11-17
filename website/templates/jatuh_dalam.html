@@ -1,0 +1,646 @@
+{% extends "base.html" %}
+{% block title %}Jatuh Dalam{% endblock %}
+{% block page_title %}Jatuh Dalam{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="jdRefresh">Hitung Ulang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .jd-finding { background: var(--void); border: 1px solid var(--line); border-radius: 10px;
+                  padding: 14px 16px; margin-bottom: 14px; }
+    .jd-finding:last-child { margin-bottom: 0; }
+    .jd-finding h4 { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .jd-finding p { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin: 0; }
+    .jd-finding strong { color: var(--text); }
+
+    .jd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .jd-table th { text-align: right; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+                   text-transform: uppercase; color: var(--text-dim); padding: 0 10px 9px;
+                   border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .jd-table th.jd-left { text-align: left; }
+    .jd-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); white-space: nowrap; }
+    .jd-table td.jd-left { text-align: left; font-family: var(--font-ui); }
+    .jd-table tbody tr:hover { background: var(--raised); }
+    .jd-ticker:hover { text-decoration: underline; }
+
+    .jd-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 9.5px;
+                font-family: var(--font-ui); font-weight: 600; white-space: nowrap; }
+    .jd-badge-dalam { color: var(--accum); border: 1px solid rgba(22,224,174,0.35); background: rgba(22,224,174,0.08); }
+    .jd-badge-manis { color: var(--accum); border: 1px solid rgba(22,224,174,0.55); background: rgba(22,224,174,0.16); font-weight: 700; }
+    .jd-badge-gejolak { color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08); }
+    .jd-badge-adem { color: var(--text-dim); border: 1px solid var(--line); }
+    .jd-badge-siap { color: var(--void); background: var(--accum); font-weight: 700; }
+    .jd-badge-lewat { color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08); }
+    .jd-badge-keluar { color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08); }
+
+    .jd-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+    .jd-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-dim); }
+    .jd-stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 600; margin-top: 4px; }
+
+    .jd-bukti { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .jd-bukti th { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+                   color: var(--text-dim); padding: 0 10px 9px; border-bottom: 1px solid var(--line); text-align: right; }
+    .jd-bukti th.jd-left { text-align: left; }
+    .jd-bukti td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right;
+                   font-family: var(--font-mono); }
+    .jd-bukti td.jd-left { text-align: left; font-family: var(--font-ui); color: var(--text-mid); }
+
+    .jd-up { color: var(--accum); }
+    .jd-down { color: var(--distrib); }
+    .jd-dim { color: var(--text-dim); }
+    .jd-note { font-size: 11px; color: var(--text-dim); line-height: 1.6; margin-top: 10px; }
+    .jd-empty { color: var(--text-dim); text-align: center; padding: 30px; font-size: 12px; }
+    .jd-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+
+    .jd-chart-btn { cursor: pointer; color: var(--text-dim); margin-left: 5px; font-size: 11px; }
+    .jd-chart-btn:hover { color: var(--accum); }
+
+    /* Modal chart -- pola & ID kelas sama persis dgn scanner_lab.html
+       (sl-modal) supaya perilakunya konsisten lintas halaman. */
+    .jd-modal { position: fixed; inset: 0; z-index: 1200; display: none;
+                background: rgba(4, 7, 13, 0.82); backdrop-filter: blur(3px); }
+    .jd-modal.open { display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .jd-modal-box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+                    width: 100%; max-width: 1180px; height: 100%; max-height: 92vh;
+                    display: flex; flex-direction: column; overflow: hidden; }
+    .jd-modal-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+                     border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+    .jd-modal-title { font-family: var(--font-ui); font-size: 17px; font-weight: 700; color: var(--text); }
+    .jd-modal-sub { font-size: 11.5px; color: var(--text-dim); font-family: var(--font-mono); }
+    .jd-modal-close { margin-left: auto; background: transparent; border: 1px solid var(--line);
+                      color: var(--text-mid); border-radius: 8px; width: 30px; height: 30px;
+                      cursor: pointer; font-size: 15px; line-height: 1; }
+    .jd-modal-close:hover { color: var(--text); background: var(--raised); }
+    .jd-modal-body { flex: 1 1 auto; overflow: auto; padding: 10px 14px 16px; }
+    .jd-modal-chart { width: 100%; height: 640px; }
+    .jd-modal-foot { padding: 10px 18px 14px; border-top: 1px solid var(--line); flex: 0 0 auto;
+                     display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+</style>
+
+<div class="sl-controls" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:18px;">
+    <div class="jd-field" style="display:flex; flex-direction:column; gap:3px;">
+        <label>Kedalaman</label>
+        <select id="jdTier" class="form-select form-select-sm" style="width:220px;">
+            <option value="all" selected>Semua (jatuh &gt;40%)</option>
+            <option value="dalam_sekali">Hanya jatuh &gt;60%</option>
+            <option value="titik_manis">Titik manis (60-70%)</option>
+        </select>
+    </div>
+    <div class="jd-field" style="display:flex; flex-direction:column; gap:3px;">
+        <label>Status pemicu</label>
+        <select id="jdStatus" class="form-select form-select-sm" style="width:270px;">
+            <option value="siap" selected>Siap &mdash; pemicu baru nyala (&le;5 hari)</option>
+            <option value="siap_lewat">Sudah ada pemicu (&le;20 hari)</option>
+            <option value="all">Semua status</option>
+            <option value="menunggu">Belum ada pemicu</option>
+        </select>
+    </div>
+    <div class="jd-field" style="display:flex; flex-direction:column; gap:3px;">
+        <label>Likuiditas</label>
+        <select id="jdLikuid" class="form-select form-select-sm" style="width:230px;">
+            <option value="likuid" selected>&ge; Rp2 M/hari (slippage kecil)</option>
+            <option value="all">Semua</option>
+        </select>
+    </div>
+    <div class="jd-field" style="display:flex; flex-direction:column; gap:3px;">
+        <label>Gejolak</label>
+        <select id="jdGejolak" class="form-select form-select-sm" style="width:200px;">
+            <option value="all" selected>Semua</option>
+            <option value="gejolak">Masih bergejolak</option>
+            <option value="adem">Sudah melandai</option>
+        </select>
+    </div>
+    <div class="jd-field" style="display:flex; flex-direction:column; gap:3px;">
+        <label>Cari kode</label>
+        <input type="text" id="jdFilter" class="form-control form-control-sm"
+               placeholder="BBRI" style="width:120px; text-transform:uppercase;">
+    </div>
+</div>
+
+<div id="jdLoading" class="jd-empty">Memindai seluruh emiten&hellip;</div>
+<div id="jdMessage" class="jd-empty" style="display:none;"></div>
+
+<div id="jdBody" style="display:none;">
+
+    <div class="content-card" style="border-left:3px solid var(--distrib); background:rgba(255,96,118,0.05);">
+        <div class="hb-section-title" style="color:var(--distrib);">Uji Ulang 23 Sep 2026: Gagal di Semesta Luas</div>
+        <div class="jd-finding">
+            <h4>Bukti &quot;lolos luar sampel&quot; di halaman ini datang dari 20 emiten yang dipilih karena besar hari ini.</h4>
+            <p>Diuji ulang di ~750 emiten likuid 2013&ndash;2026, aturan yang sama <strong>kalah dari pasar</strong>.
+            Status di <a href="/status-bukti">Status Bukti</a> sudah diturunkan ke &quot;gagal&quot;. Untuk pola yang
+            lolos di semesta luas, lihat <a href="/tembus-basis">Tembus Basis</a>.</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="jd-bukti">
+                <thead><tr><th class="jd-left">Uji</th><th class="jd-left">Hasil</th></tr></thead>
+                <tbody id="jdUlangBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note" id="jdUlangNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px; border-left:3px solid var(--distrib);">
+        <div class="hb-section-title" style="color:var(--distrib);">Hipotesis Aslinya Ditolak Datanya</div>
+        <div class="jd-finding">
+            <h4>Pertanyaan awalnya "cari saham yang naik banyak setelah melandai". Itu diuji dan gagal.</h4>
+            <p id="jdTolak"></p>
+        </div>
+        <div class="jd-finding">
+            <h4>Dari 104 pemenang 2026, nol yang sedang melandai.</h4>
+            <p>Emiten yang naik &ge;30% dalam 20 hari setelah jatuh dalam dari puncak: median rentang
+            20 harinya <strong>67,7%</strong> &mdash; masih liar, bukan adem. Yang gagal justru rentangnya
+            lebih sempit (median 56,8%). Kesan &quot;pemenang selalu melandai dulu&quot; datang dari melihat
+            pemenangnya saja; yang melandai lalu tetap diam jumlahnya jauh lebih banyak dan tidak ikut terlihat.</p>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Yang Bertahan di Dua Sampel Terpisah</div>
+        <div style="overflow-x:auto;">
+            <table class="jd-bukti">
+                <thead>
+                    <tr>
+                        <th class="jd-left">Setup</th>
+                        <th colspan="2">Luar sampel 2016&ndash;2025</th>
+                        <th colspan="2">Kalibrasi 2026</th>
+                    </tr>
+                    <tr>
+                        <th class="jd-left"></th>
+                        <th>peluang rally</th><th>return H+20</th>
+                        <th>peluang rally</th><th>return H+20</th>
+                    </tr>
+                </thead>
+                <tbody id="jdBuktiBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note" id="jdBuktiNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px; border-left:3px solid var(--accum);">
+        <div class="hb-section-title" style="color:var(--accum);">Jangan Beli Waktu Jatuhnya &mdash; Tunggu Pemicunya</div>
+        <div class="jd-finding">
+            <h4>Menunggu harga naik 10% dari dasar 20 hari mengalahkan beli di titik terendah.</h4>
+            <p>Diuji sebagai aturan utuh di dua sampel terpisah. Angka = return 20 hari terhadap pasar.</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="jd-bukti">
+                <thead><tr>
+                    <th class="jd-left">Cara masuk</th>
+                    <th>Luar sampel 2016&ndash;2025</th>
+                    <th>2026 semesta penuh</th>
+                    <th>2026 likuid</th>
+                    <th>Win rate</th>
+                </tr></thead>
+                <tbody id="jdKombinasiBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note" id="jdKombinasiNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Kenapa Likuiditas Disaring: Slippage</div>
+        <div class="jd-finding">
+            <h4>Slippage bukan risiko yang mungkin terjadi &mdash; ia pasti dibayar, menang atau kalah.</h4>
+            <p>Selisih antara harga di layar dan harga yang benar-benar didapat. Di emiten tipis
+            antrean jualnya pendek, jadi order langsung menyapu sampai harga jauh di atas.</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="jd-bukti">
+                <thead><tr>
+                    <th class="jd-left">Likuiditas</th>
+                    <th>Slippage sekali jalan</th>
+                    <th>Hasil bersih (H+21)</th>
+                </tr></thead>
+                <tbody id="jdSlipBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note" id="jdSlipNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Cirinya Dipilih Data, Bukan Ditebak</div>
+        <div class="jd-finding">
+            <h4>Keberatan yang wajar: &quot;cirinya kan kamu yang tentukan duluan&quot;.</h4>
+            <p>Betul &mdash; versi pertama halaman ini menguji ciri yang sudah ditebak lebih dulu.
+            Karena itu pencariannya diulang <strong>terbalik</strong>: 30 ukuran dihitung mekanis dari
+            seluruh riwayat, tiap desilnya diuji, lalu data yang menunjuk mana yang membedakan.
+            Di bawah ini yang dipilih data, diuji ulang di sampel terpisah.</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="jd-bukti">
+                <thead><tr>
+                    <th class="jd-left">Ukuran (desil terpilih)</th>
+                    <th>Kalibrasi 2026</th>
+                    <th>Luar sampel: rally</th>
+                    <th>Luar sampel: return</th>
+                    <th class="jd-left">Bertahan?</th>
+                </tr></thead>
+                <tbody id="jdCiriBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note" id="jdCiriNote"></div>
+        <div class="jd-note" id="jdVolat" style="color:var(--warn);"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Bukan Cuma Ekor yang Panjang &mdash; Seluruh Sebarannya Bergeser</div>
+        <div style="overflow-x:auto;">
+            <table class="jd-bukti">
+                <thead><tr>
+                    <th class="jd-left">Sampel</th><th class="jd-left">Kelompok</th>
+                    <th>Rata-rata</th><th>Median</th><th>Berakhir rugi</th>
+                </tr></thead>
+                <tbody id="jdSebaranBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note">Return 20 hari. Kekhawatiran wajarnya: rata-rata bisa terangkat segelintir
+        peledak seperti DEFI (+448%). Ternyata bukan itu &mdash; mediannya ikut bergerak dan sisi ruginya
+        ikut mengecil, jadi yang bergeser seluruh sebarannya, bukan cuma ekornya.</div>
+        <div class="jd-note" id="jdSurvivor" style="color:var(--distrib);"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Detail yang Menentukan: Jangan yang Sudah Adem</div>
+        <div style="overflow-x:auto;">
+            <table class="jd-bukti">
+                <thead><tr><th class="jd-left">Varian</th><th>peluang rally</th><th>return H+60</th></tr></thead>
+                <tbody id="jdGejolakBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note" id="jdGejolakNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px; border-left:3px solid var(--accum);">
+        <div class="hb-section-title" style="color:var(--accum);">Titik Manis: -60% sampai -70%</div>
+        <div class="jd-finding">
+            <h4>Dalam &gt;60% bukan kelompok seragam &mdash; dipecah per 10 poin kedalaman, satu zona menonjol jelas.</h4>
+            <p>Bukan &quot;makin dalam makin bagus&quot; tanpa batas: lewat &minus;70% (kalibrasi 2026), hasilnya
+            memburuk lagi dan makin liar (crash&ge;30% naik ke 26,1%, hampir menyamai peluang rally-nya).
+            Batas atasnya baru tervalidasi di satu sampel &mdash; 21 emiten luar sampel tidak pernah jatuh sedalam itu.</p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="jd-bukti">
+                <thead><tr>
+                    <th class="jd-left">Sampel</th><th>n</th><th>Return H+20</th>
+                    <th>vs baseline</th><th>Win rate</th><th>Crash&ge;30%</th>
+                </tr></thead>
+                <tbody id="jdManisBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note" id="jdManisNote"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Ringkasan <span id="jdMeta" class="jd-dim"></span></div>
+        <div class="jd-stat-grid" id="jdStats"></div>
+        <div class="jd-note" id="jdBasi"></div>
+    </div>
+
+    <div class="content-card" style="margin-top:16px;">
+        <div class="hb-section-title">Kandidat <span id="jdCount" class="jd-dim"></span></div>
+        <div style="overflow-x:auto;">
+            <table class="jd-table">
+                <thead id="jdThead">
+                    <tr>
+                        <th class="jd-left" data-sort-key="stock">Kode</th>
+                        <th class="jd-left" data-sort-key="status">Status</th>
+                        <th data-sort-key="pemicu_hari">Pemicu</th>
+                        <th data-sort-key="close">Harga</th>
+                        <th data-sort-key="dari_puncak">Dari puncak 60h</th>
+                        <th data-sort-key="slippage_pct">Slippage</th>
+                        <th data-sort-key="value_b">Nilai/hari</th>
+                        <th data-sort-key="range20">Rentang 20h</th>
+                        <th data-sort-key="chg20">Chg 20h</th>
+                        <th class="jd-left">Tanda</th>
+                    </tr>
+                </thead>
+                <tbody id="jdTableBody"></tbody>
+            </table>
+        </div>
+        <div class="jd-note" id="jdGagal"></div>
+    </div>
+
+</div>
+
+<div class="jd-modal" id="jdModal">
+    <div class="jd-modal-box">
+        <div class="jd-modal-head">
+            <span class="jd-modal-title" id="jdModalTicker">—</span>
+            <span class="jd-modal-sub" id="jdModalSub"></span>
+            <button type="button" class="jd-modal-close" id="jdModalClose" aria-label="Tutup">&times;</button>
+        </div>
+        <div class="jd-modal-body">
+            <div class="jd-modal-chart" id="jdModalChart"></div>
+        </div>
+        <div class="jd-modal-foot">
+            <a class="btn btn-sm btn-primary" id="jdModalHub" href="#">Buka Halaman Saham</a>
+            <span class="jd-note" style="margin:0;">Segitiga hijau/merah di chart = pemicu (sentuhan
+                pertama &plusmn;10% dari ekstrem 20 hari), aturan yang sama persis dipakai kolom Status.
+                Garis putus-putus = tanggal pemicu/masuk zona yang ditampilkan tabel ini.</span>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="{{ url_for('static', filename='js/stock_chart.js') }}"></script>
+<script>
+    var jdData = null;
+    var jdSort = { key: 'pemicu_hari', dir: 'asc' };
+
+    // Status = gabungan "sudah jatuh dalam" + "pemicu sudah nyala atau
+    // belum". Kombinasi itu yang menang di pengujian dua sampel, jadi
+    // urutan dan warnanya mengikuti itu, bukan selera.
+    var JD_STATUS = {
+        siap:     { teks: 'SIAP', cls: 'jd-badge-siap',
+                    jelas: 'Sudah jatuh dalam DAN pemicu naik 10% dari dasar 20 hari baru nyala (<=5 hari)' },
+        lewat:    { teks: 'lewat', cls: 'jd-badge-lewat',
+                    jelas: 'Pemicu sudah nyala tapi lebih dari 5 hari lalu — momennya sudah lewat' },
+        menunggu: { teks: 'menunggu', cls: 'jd-badge-adem',
+                    jelas: 'Sudah jatuh dalam, tapi pemicunya belum nyala. Belum ada tanda berbalik' },
+        keluar:   { teks: 'keluar', cls: 'jd-badge-keluar',
+                    jelas: 'Sudah kena sinyal keluar (turun 10% dari puncak 20 hari) sesudah pemicunya — pembalikannya batal' }
+    };
+
+    function jdNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '&mdash;'; }
+        return Number(v).toLocaleString('id-ID', {
+            minimumFractionDigits: d === undefined ? 0 : d,
+            maximumFractionDigits: d === undefined ? 0 : d });
+    }
+    function jdSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="jd-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'jd-up' : (v < 0 ? 'jd-down' : 'jd-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + jdNum(v, d === undefined ? 1 : d) + '%</span>';
+    }
+    function jdEsc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+
+    function jdRenderBukti(d) {
+        var b = d.bukti || {};
+        var ulang = b.uji_ulang || {};
+        $('#jdUlangBody').html((ulang.baris || []).map(function (r) {
+            return '<tr><td class="jd-left">' + jdEsc(r.uji) + '</td>'
+                 + '<td class="jd-left ' + (r.baik ? 'jd-up' : 'jd-down') + '" style="font-family:var(--font-mono);">'
+                 + jdEsc(r.hasil) + '</td></tr>';
+        }).join(''));
+        $('#jdUlangNote').text(ulang.catatan || '');
+        $('#jdTolak').text(b.hipotesis_ditolak || '');
+        $('#jdBuktiBody').html((b.baris || []).map(function (r) {
+            return '<tr><td class="jd-left">' + jdEsc(r.setup) + '</td>'
+                 + '<td class="jd-up">+' + jdNum(r.luar_rally, 1) + 'pp</td>'
+                 + '<td class="jd-up">+' + jdNum(r.luar_return, 1) + 'pp <span class="jd-dim">(t=' + jdNum(r.luar_t, 1) + ')</span></td>'
+                 + '<td class="jd-up">+' + jdNum(r.kal_rally, 1) + 'pp</td>'
+                 + '<td class="jd-up">+' + jdNum(r.kal_return, 1) + 'pp <span class="jd-dim">(t=' + jdNum(r.kal_t, 1) + ')</span></td></tr>';
+        }).join(''));
+        $('#jdBuktiNote').html('Semua angka terhadap baseline pasar di sampel masing-masing. '
+            + 'Luar sampel: <strong>' + jdEsc(b.sampel_luar) + '</strong>. '
+            + 'Kalibrasi: <strong>' + jdEsc(b.sampel_kalibrasi) + '</strong>. '
+            + 'Konsisten ' + jdEsc(b.tahun_konsisten) + '. '
+            + 'Pembanding yang menunjukkan ini bukan sekadar efek rezim: &quot;sudah naik &gt;20% dalam 20 hari&quot; '
+            + 'return-nya +3,3pp di 2016&ndash;2025 tapi &minus;5,1pp di 2026 &mdash; berbalik tanda. '
+            + 'Yang jatuh dalam tidak berbalik. Catatan biasa: pengamatannya tumpang tindih, jadi nilai t '
+            + 'di sini lebih optimistis daripada seharusnya.');
+
+        $('#jdCiriBody').html((b.pemilihan_ciri || []).map(function (r) {
+            var cls = r.bertahan ? 'jd-up' : 'jd-down';
+            return '<tr' + (r.bertahan ? '' : ' style="opacity:0.75;"') + '>'
+                 + '<td class="jd-left">' + jdEsc(r.ukuran) + ' <span class="jd-dim">(' + jdEsc(r.desil) + ')</span></td>'
+                 + '<td>rally ' + jdNum(r.kal_rally, 1) + '%</td>'
+                 + '<td class="' + cls + '">' + (r.luar_rally > 0 ? '+' : '') + jdNum(r.luar_rally, 1) + 'pp</td>'
+                 + '<td class="' + cls + '">' + (r.luar_return > 0 ? '+' : '') + jdNum(r.luar_return, 2) + 'pp'
+                 +   ' <span class="jd-dim">(t=' + jdNum(r.luar_t, 1) + ')</span></td>'
+                 + '<td class="jd-left ' + cls + '">' + (r.bertahan ? 'bertahan' : 'GAGAL') + '</td></tr>';
+        }).join(''));
+        $('#jdCiriNote').text(b.pemilihan_catatan || '');
+        $('#jdVolat').text(b.volat_catatan || '');
+
+        $('#jdKombinasiBody').html((b.kombinasi || []).map(function (r) {
+            var gaya = r.sorot ? ' style="font-weight:700; background:rgba(22,224,174,0.06);"' : '';
+            var w = function (v) { return v > 0 ? '<span class="jd-up">+' + jdNum(v, 2) + 'pp</span>'
+                                                : '<span class="jd-dim">' + jdNum(v, 2) + 'pp</span>'; };
+            return '<tr' + gaya + '><td class="jd-left">' + jdEsc(r.aturan) + '</td>'
+                 + '<td>' + w(r.luar) + '</td><td>' + w(r.kal) + '</td><td>' + w(r.kal_likuid) + '</td>'
+                 + '<td>' + jdNum(r.win, 1) + '%</td></tr>';
+        }).join(''));
+        $('#jdKombinasiNote').text(b.kombinasi_catatan || '');
+
+        $('#jdSlipBody').html((b.slippage || []).map(function (r) {
+            var buruk = r.slip >= 3;
+            return '<tr><td class="jd-left">' + jdEsc(r.likuiditas) + '</td>'
+                 + '<td class="' + (buruk ? 'jd-down' : 'jd-up') + '">' + jdNum(r.slip, 2) + '%</td>'
+                 + '<td class="' + (r.net < 0 ? 'jd-down' : 'jd-up') + '">'
+                 +   (r.net > 0 ? '+' : '') + jdNum(r.net, 2) + '%</td></tr>';
+        }).join(''));
+        $('#jdSlipNote').text(b.slippage_catatan || '');
+
+        $('#jdSebaranBody').html((b.sebaran || []).map(function (r) {
+            var tebal = r.kelompok.indexOf('Jatuh >60') === 0;
+            return '<tr' + (tebal ? ' style="font-weight:600;"' : '') + '>'
+                 + '<td class="jd-left">' + jdEsc(r.sampel) + '</td>'
+                 + '<td class="jd-left">' + jdEsc(r.kelompok) + '</td>'
+                 + '<td>' + jdSigned(r.rata2, 2) + '</td>'
+                 + '<td>' + jdSigned(r.median, 2) + '</td>'
+                 + '<td>' + jdNum(r.rugi, 1) + '%</td></tr>';
+        }).join(''));
+        $('#jdSurvivor').text(b.survivorship || '');
+        $('#jdGejolakNote').text(b.gejolak_catatan || '');
+
+        $('#jdManisNote').text(b.titik_manis_catatan || '');
+        $('#jdManisBody').html((b.titik_manis || []).map(function (r) {
+            return '<tr><td class="jd-left">' + jdEsc(r.sampel) + '</td>'
+                 + '<td>' + jdNum(r.n) + '</td>'
+                 + '<td class="jd-up">+' + jdNum(r.return_h20, 2) + '%</td>'
+                 + '<td class="jd-up">+' + jdNum(r.vs_baseline, 2) + 'pp</td>'
+                 + '<td>' + jdNum(r.win, 1) + '%</td>'
+                 + '<td>' + jdNum(r.crash30, 1) + '%</td></tr>';
+        }).join(''));
+
+        $('#jdGejolakBody').html((b.gejolak || []).map(function (r) {
+            var kuat = r.rally > 20;
+            return '<tr><td class="jd-left">' + jdEsc(r.varian) + '</td>'
+                 + '<td class="' + (kuat ? 'jd-up' : 'jd-dim') + '">+' + jdNum(r.rally, 1) + 'pp</td>'
+                 + '<td class="' + (kuat ? 'jd-up' : 'jd-dim') + '">+' + jdNum(r['return'], 1) + 'pp</td></tr>';
+        }).join(''));
+
+        $('#jdGagal').html('<strong>Sisi jujurnya:</strong> ' + jdEsc(b.tingkat_gagal)
+            + ' Ini kecondongan populasi, bukan ramalan per emiten &mdash; daftar di atas adalah daftar '
+            + 'KANDIDAT PERIKSA, bukan daftar beli.');
+    }
+
+    function jdRenderStats(d) {
+        var items = [
+            ['Emiten dipindai', jdNum(d.n_diperiksa), 'var(--text-mid)'],
+            ['Sudah jatuh dalam', jdNum(d.n_kandidat), 'var(--text)'],
+            ['Titik manis 60-70%', jdNum(d.n_titik_manis), d.n_titik_manis ? 'var(--accum)' : 'var(--text-dim)'],
+            ['SIAP (pemicu baru)', jdNum(d.n_siap), d.n_siap ? 'var(--accum)' : 'var(--text-dim)'],
+            ['Siap &amp; likuid', jdNum(d.n_siap_likuid), d.n_siap_likuid ? 'var(--accum)' : 'var(--text-dim)'],
+            ['Likuid &ge;Rp2 M', jdNum(d.n_likuid), 'var(--text-mid)']
+        ];
+        items.push(['Dilewati (basi)', jdNum(d.n_basi), 'var(--distrib)']);
+        $('#jdStats').html(items.map(function (it) {
+            return '<div><div class="jd-stat-label">' + it[0] + '</div>'
+                 + '<div class="jd-stat-value" style="color:' + it[2] + ';">' + it[1] + '</div></div>';
+        }).join(''));
+        $('#jdMeta').text('— posisi ' + (d.as_of || '-') + (d.from_cache ? ' (cache)' : ''));
+        $('#jdBasi').html('<strong>' + jdNum(d.n_basi) + ' emiten dilewati</strong> karena bar terakhirnya '
+            + 'bukan hari bursa terakhir &mdash; disuspend atau berhenti diperdagangkan, harganya membeku. '
+            + 'Tanpa saringan ini mereka justru menduduki puncak daftar: harga beku sesudah jatuh dalam '
+            + 'terlihat seperti kandidat terbaik, padahal sahamnya tidak bisa dibeli sama sekali.');
+    }
+
+    function jdRows() {
+        if (!jdData) { return []; }
+        var tier = $('#jdTier').val();
+        var gejolak = $('#jdGejolak').val();
+        var status = $('#jdStatus').val();
+        var likuid = $('#jdLikuid').val();
+        var q = ($('#jdFilter').val() || '').trim().toUpperCase();
+        return (jdData.rows || []).filter(function (r) {
+            if (tier === 'dalam_sekali' && r.tier !== 'dalam_sekali') { return false; }
+            if (tier === 'titik_manis' && !r.titik_manis) { return false; }
+            if (status === 'siap' && r.status !== 'siap') { return false; }
+            if (status === 'siap_lewat' && r.status !== 'siap' && r.status !== 'lewat') { return false; }
+            if (status === 'menunggu' && r.status !== 'menunggu') { return false; }
+            if (likuid === 'likuid' && !r.likuid) { return false; }
+            if (gejolak === 'gejolak' && !r.bergejolak) { return false; }
+            if (gejolak === 'adem' && r.bergejolak) { return false; }
+            if (q && r.stock.indexOf(q) !== 0) { return false; }
+            return true;
+        });
+    }
+
+    function jdRenderTable() {
+        var rows = jdRows().slice();
+        var k = jdSort.key, dir = jdSort.dir === 'desc' ? -1 : 1;
+        rows.sort(function (a, b) {
+            var x = a[k], y = b[k];
+            if (x === null || x === undefined) { return 1; }
+            if (y === null || y === undefined) { return -1; }
+            if (typeof x === 'string') { return x.localeCompare(y) * dir; }
+            return (x - y) * dir;
+        });
+        $('#jdCount').text('— ' + rows.length + ' emiten');
+        if (!rows.length) {
+            $('#jdTableBody').html('<tr><td colspan="9" class="jd-empty">Tidak ada yang cocok dengan saringan ini.</td></tr>');
+            return;
+        }
+        $('#jdTableBody').html(rows.map(function (r) {
+            var st = JD_STATUS[r.status] || { teks: r.status, cls: 'jd-badge-adem' };
+            var slipCls = r.slippage_pct >= 3 ? 'jd-down' : (r.slippage_pct <= 1 ? 'jd-up' : '');
+            var focusDate = r.pemicu_date || r.zona_masuk_date || '';
+            return '<tr>'
+                 + '<td class="jd-left"><a class="jd-ticker" href="/saham/' + jdEsc(r.stock) + '">' + jdEsc(r.stock) + '</a>'
+                 +   '<span class="jd-chart-btn" data-ticker="' + jdEsc(r.stock) + '" data-focus="' + jdEsc(focusDate)
+                 +     '" title="Buka chart, tandai ' + (r.pemicu_date ? 'tanggal pemicu' : 'tanggal masuk zona') + '">&#128200;</span></td>'
+                 + '<td class="jd-left"><span class="jd-badge ' + st.cls + '" title="' + jdEsc(st.jelas) + '">'
+                 +   jdEsc(st.teks) + '</span></td>'
+                 + '<td>' + (r.pemicu_hari === null || r.pemicu_hari === undefined
+                        ? '<span class="jd-dim">&mdash;</span>' : jdNum(r.pemicu_hari) + 'h lalu') + '</td>'
+                 + '<td>' + jdNum(r.close, 0) + '</td>'
+                 + '<td class="jd-down">' + jdNum(r.dari_puncak, 1) + '%</td>'
+                 + '<td class="' + slipCls + '">' + jdNum(r.slippage_pct, 2) + '%</td>'
+                 + '<td>' + jdNum(r.value_b, 2) + ' M</td>'
+                 + '<td>' + jdNum(r.range20, 1) + '%</td>'
+                 + '<td>' + jdSigned(r.chg20) + '</td>'
+                 + '<td class="jd-left">'
+                 +   (r.titik_manis ? '<span class="jd-badge jd-badge-manis" title="Jatuh 60-70% dari puncak — zona terkuat di dua sampel terpisah">titik manis</span> '
+                        : (r.tier === 'dalam_sekali' ? '<span class="jd-badge jd-badge-dalam">&gt;60%</span> ' : ''))
+                 +   (r.likuid ? '' : '<span class="jd-badge jd-badge-keluar">tipis</span> ')
+                 +   (r.bergejolak ? '<span class="jd-badge jd-badge-gejolak">bergejolak</span>' : '')
+                 + '</td></tr>';
+        }).join(''));
+    }
+
+    // Sama pola dgn scanner_lab.html:openChart() -- dipisah supaya
+    // perilakunya konsisten lintas halaman yang sama-sama pakai chart ini.
+    function jdOpenChart(ticker, focusDate) {
+        var row = (jdData && jdData.rows || []).filter(function (r) { return r.stock === ticker; })[0];
+        $('#jdModalTicker').text(ticker);
+        $('#jdModalSub').text(focusDate
+            ? ((row && row.pemicu_date === focusDate ? 'pemicu ' : 'masuk zona ') + focusDate)
+            : 'belum ada tanggal pemicu');
+        $('#jdModalHub').attr('href', '/saham/' + encodeURIComponent(ticker));
+        $('#jdModalChart').html('<div class="jd-empty">Memuat chart...</div>');
+        $('#jdModal').addClass('open');
+
+        var url = '/stock-chart-data/' + encodeURIComponent(ticker)
+                + (focusDate ? '?focus=' + encodeURIComponent(focusDate) : '');
+        $.getJSON(url, function (data) {
+            if (!data || !data.found) {
+                $('#jdModalChart').html('<div class="jd-empty">Data chart untuk ' + jdEsc(ticker) + ' tidak ada.</div>');
+                return;
+            }
+            $('#jdModalChart').empty();
+            renderChart(data, 'jdModalChart');
+        }).fail(function () {
+            $('#jdModalChart').html('<div class="jd-empty">Gagal memuat chart.</div>');
+        });
+    }
+
+    function jdCloseChart() {
+        $('#jdModal').removeClass('open');
+        $('#jdModalChart').empty();
+    }
+
+    function jdLoad(force) {
+        $('#jdBody').hide();
+        $('#jdMessage').hide();
+        $('#jdLoading').show();
+        $.post('/jatuh-dalam-data', { force: force ? '1' : '0' }).done(function (d) {
+            if (!d || !d.available) {
+                $('#jdLoading').hide();
+                $('#jdMessage').show().text((d && d.message) || 'Data tidak tersedia.');
+                return;
+            }
+            jdData = d;
+            jdRenderBukti(d);
+            jdRenderStats(d);
+            jdRenderTable();
+            $('#jdLoading').hide();
+            $('#jdBody').show();
+        }).fail(function () {
+            $('#jdLoading').hide();
+            $('#jdMessage').show().text('Gagal memuat data.');
+        });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}), jadi POST yang
+    // dipanggil lebih awal berangkat TANPA token dan ditolak 400.
+    $(document).ready(function () {
+        $('#jdTier').on('change', jdRenderTable);
+        $('#jdStatus').on('change', jdRenderTable);
+        $('#jdLikuid').on('change', jdRenderTable);
+        $('#jdGejolak').on('change', jdRenderTable);
+        $('#jdFilter').on('input', jdRenderTable);
+        $('#jdRefresh').on('click', function () { jdLoad(true); });
+
+        $('#jdTableBody').on('click', '.jd-chart-btn', function (e) {
+            e.stopPropagation();
+            jdOpenChart($(this).data('ticker'), $(this).data('focus'));
+        });
+        $('#jdModalClose').on('click', jdCloseChart);
+        $('#jdModal').on('click', function (e) {
+            // Klik di area gelap luar kotak menutup modal; klik di dalam
+            // kotak tidak (kalau tidak, drag di chart ikut menutup).
+            if (e.target === this) { jdCloseChart(); }
+        });
+        $(document).on('keydown', function (e) {
+            if (e.key === 'Escape' && $('#jdModal').hasClass('open')) { jdCloseChart(); }
+        });
+
+        jdSort = window.makeSortable('#jdThead', function (key, dir) {
+            jdSort.key = key; jdSort.dir = dir;
+            jdRenderTable();
+        }, jdSort.key, jdSort.dir);
+
+        jdLoad(false);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,505 @@
+{% extends "base.html" %}
+{% block title %}StockLang{% endblock %}
+{% block page_title %}StockLang{% endblock %}
+{% block page_subtitle %}Tulis indikator, backtest, dan screener dalam beberapa baris &mdash; jalan di data Daily\Summary yang sama.{% endblock %}
+
+{% block page_actions %}
+<select class="form-select form-select-sm" id="slContoh" style="width:auto;" aria-label="Muat skrip">
+    <option value="">Muat skrip&hellip;</option>
+    <optgroup label="Tersimpan" id="slOptSimpan"></optgroup>
+    <optgroup label="Contoh">
+    {% for nama, isi in contoh %}<option value="c:{{ loop.index0 }}">{{ nama }}.stk</option>{% endfor %}
+    </optgroup>
+</select>
+<button type="button" class="btn btn-sm btn-success" id="slRun">&#9654; Run</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .sl-title { font-size: 9px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase;
+                color: var(--text-dim); margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+    .sl-title .sl-hint { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .sl-title kbd { font-family: var(--font-mono); font-size: 10px; background: var(--raised);
+                    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--text-mid); }
+
+    /* Editor: textarea transparan di atas <pre> berwarna, gutter nomor baris di kiri. */
+    .sl-editor { display: flex; background: #02050A; border: 1px solid var(--line); border-radius: 10px;
+                 overflow: hidden; height: 420px; }
+    .sl-editor:focus-within { border-color: var(--accum-dim); }
+    .sl-gutter { flex-shrink: 0; padding: 12px 8px 12px 12px; text-align: right; color: #3E4C60;
+                 user-select: none; overflow: hidden; border-right: 1px solid var(--line-soft); min-width: 44px; }
+    .sl-gutter div.sl-bad { color: var(--distrib); font-weight: 700; }
+    .sl-area { position: relative; flex: 1; min-width: 0; }
+    .sl-area textarea, .sl-area pre {
+        position: absolute; inset: 0; margin: 0; border: 0; padding: 12px 14px;
+        white-space: pre; overflow: auto; tab-size: 4; }
+    .sl-gutter, .sl-area textarea, .sl-area pre {
+        font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; }
+    .sl-area pre { color: var(--text); pointer-events: none; }
+    .sl-area pre::-webkit-scrollbar { display: none; }
+    .sl-area pre { scrollbar-width: none; }
+    .sl-area textarea { background: transparent; color: transparent; caret-color: var(--text);
+                        resize: none; outline: none; }
+    .sl-area textarea::selection { background: rgba(132,171,255,0.28); color: transparent; }
+    .sl-k { color: #C792EA; }
+    .sl-c { color: #5C6B80; font-style: italic; }
+    .sl-n { color: var(--warn); }
+    .sl-s { color: var(--accum); }
+    .sl-f { color: var(--info); }
+    .sl-badline { background: rgba(255,96,118,0.14); display: inline-block; min-width: 100%; }
+
+    .sl-status { font-size: 11.5px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+    .sl-status.ok { color: var(--accum); }
+    .sl-status.err { color: var(--distrib); }
+    .sl-out { background: #02050A; border: 1px solid var(--line); border-radius: 10px;
+              font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--text-mid);
+              padding: 12px 14px; margin: 0; max-height: 560px; overflow: auto; white-space: pre; }
+    .sl-out:empty::before { content: 'Tekan Run untuk menjalankan skrip.'; color: var(--text-dim);
+                            font-family: var(--font-ui); }
+    .sl-out .sl-up { color: var(--accum); }
+    .sl-out .sl-down { color: var(--distrib); }
+    .sl-out .sl-err { color: var(--distrib); display: block; margin-top: 6px; }
+    .sl-out .sl-head { color: var(--text); font-weight: 600; }
+    .sl-chart { margin-top: 14px; }
+    .sl-chart img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line-soft);
+                    background: #fff; }
+    .sl-chart .sl-cap { font-size: 10.5px; color: var(--text-dim); margin-top: 4px; font-family: var(--font-mono); }
+
+    .sl-ref { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 20px;
+              font-size: 12px; color: var(--text-mid); line-height: 1.65; }
+    .sl-ref h4 { font-size: 11px; font-weight: 700; color: var(--text); margin: 0 0 4px; }
+    .sl-ref code { font-family: var(--font-mono); font-size: 11px; color: var(--accum); }
+    .sl-save { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+    .sl-save input[type=text] { width: 220px; font-family: var(--font-mono); font-size: 12px; }
+    .sl-save label { font-size: 12px; color: var(--text-mid); display: flex; align-items: center; gap: 6px; margin: 0; }
+    .sl-save label input { accent-color: var(--accum); }
+    .sl-msg { font-size: 11.5px; color: var(--text-dim); white-space: pre-wrap; }
+    .sl-msg.ok { color: var(--accum); }
+    .sl-msg.err { color: var(--distrib); font-family: var(--font-mono); }
+
+    .sl-note { font-size: 12px; color: var(--text-mid); line-height: 1.65; margin-bottom: 12px; }
+    .sl-note strong { color: var(--text); }
+    .sl-jt { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sl-jt th { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+                color: var(--text-dim); padding: 0 10px 8px; border-bottom: 1px solid var(--line); text-align: right;
+                white-space: nowrap; }
+    .sl-jt th:first-child, .sl-jt td:first-child { text-align: left; }
+    .sl-jt td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: right; vertical-align: top;
+                font-family: var(--font-mono); white-space: nowrap; }
+    .sl-jt td:first-child { font-family: var(--font-ui); white-space: normal; }
+    .sl-jt .sl-sub { display: block; font-size: 10.5px; color: var(--text-dim); font-family: var(--font-ui); }
+    .sl-jt .sl-tipis { opacity: 0.55; }
+    .sl-jt .sl-kode { display: block; font-size: 10.5px; color: var(--text-dim); font-family: var(--font-mono);
+                      margin-top: 3px; white-space: normal; }
+    .sl-badge { display: inline-block; font-size: 9.5px; font-weight: 700; padding: 1px 8px; border-radius: 10px;
+                margin-left: 6px; background: var(--raised); color: var(--text-dim); font-family: var(--font-ui); }
+    .sl-badge.aktif { background: var(--accum-glow); color: var(--accum); }
+    .sl-up2 { color: var(--accum); }
+    .sl-down2 { color: var(--distrib); }
+    .sl-wrap { overflow-x: auto; }
+    .sl-spin { width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accum);
+               border-radius: 50%; animation: slSpin 0.8s linear infinite; }
+    @keyframes slSpin { to { transform: rotate(360deg); } }
+</style>
+
+<div class="content-card">
+    <div class="sl-title">Tulis dengan bahasa biasa <span class="sl-hint">Claude menulis skripnya, lalu langsung dicoba jalan &middot; berbayar per permintaan</span></div>
+    <div class="sl-save" style="margin-top:0;">
+        <input type="text" class="form-control form-control-sm" id="slMinta" maxlength="2000" style="flex:1; min-width:260px; width:auto;"
+               placeholder="cari saham yang diakumulasi broker besar 5 hari terakhir tapi dijual ritel"
+               aria-label="Permintaan dalam bahasa biasa">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="slTulis">Tulis skrip</button>
+    </div>
+    <div class="sl-msg" id="slTulisMsg" style="margin-top:8px;"></div>
+</div>
+
+<div class="content-card">
+    <div class="sl-title">Skrip <span class="sl-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> untuk Run &middot; <kbd>Tab</kbd> indent</span></div>
+    <div class="sl-editor">
+        <div class="sl-gutter" id="slGutter"></div>
+        <div class="sl-area">
+            <pre id="slHi" aria-hidden="true"></pre>
+            <textarea id="slSrc" spellcheck="false" autocomplete="off" autocapitalize="off"
+                      aria-label="Skrip StockLang">{{ contoh[0][1] if contoh else '' }}</textarea>
+        </div>
+    </div>
+    <div class="sl-save">
+        <input type="text" class="form-control form-control-sm" id="slNama" placeholder="nama_skrip" maxlength="40"
+               aria-label="Nama skrip">
+        <label title="Tiap hari bursa skrip ini dijalankan dan saham yang lolos screen() dicatat"><input type="checkbox" id="slJurnal"> Jurnal harian</label>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="slSimpan">Simpan</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="slHapus" style="display:none;">Hapus</button>
+        <span class="sl-msg" id="slMsg"></span>
+    </div>
+</div>
+
+<div class="content-card">
+    <div class="sl-title">Keluaran <span class="sl-status sl-hint" id="slStatus"></span></div>
+    <pre class="sl-out" id="slOut"></pre>
+    <div id="slCharts"></div>
+</div>
+
+<div class="content-card">
+    <div class="sl-title">Jurnal Maju <span class="sl-hint"><button type="button" class="btn btn-sm btn-outline-secondary" id="slCatat">Catat hari ini</button></span></div>
+    <p class="sl-note">Skrip yang disimpan dengan centang <strong>Jurnal harian</strong> dijalankan tiap hari bursa
+    (ikut pemeriksaan kesehatan sesudah Summary masuk) dan saham yang lolos <code>screen()</code>-nya dicatat.
+    Hanya hari ini yang dicatat &mdash; tidak ada isi mundur, jadi angka di sini benar-benar <strong>luar sampel</strong>.
+    Masuk di <strong>open</strong> hari bursa berikutnya, keluar di close H+1/H+5/H+20, dipotong fee 0,4%.
+    <em>vs semua</em> = selisih terhadap rata-rata semua saham di jendela yang sama. Sinyal yang tercatat setelah
+    pasar buka di hari masuknya tidak dihitung. Di bawah 30 sinyal matang angkanya dipudarkan: belum bisa disimpulkan.
+    Mengubah skrip membuat versi baru yang dinilai terpisah.</p>
+    <div class="sl-wrap" id="slJurnalTabel"><div class="sl-msg">Memuat&hellip;</div></div>
+</div>
+
+<div class="content-card">
+    <div class="sl-title">Ringkasan Bahasa</div>
+    <div class="sl-ref">
+        <div>
+            <h4>Pilih data</h4>
+            <code>stock BBCA</code> untuk satu saham, <code>universe all</code> atau
+            <code>universe [BBCA, BBRI]</code> untuk banyak saham sekaligus (plot() dilewati di mode universe).
+        </div>
+        <div>
+            <h4>Kolom</h4>
+            <code>open high low close volume avg_price net_top3 net_top5 foreign_top3 foreign_top5
+            net_value net_lot buyers sellers retail</code>
+        </div>
+        <div>
+            <h4>Angka &amp; operator</h4>
+            <code>10K 10M 1.5B 0.15%</code> &middot; <code>+ - * /</code> &middot;
+            <code>&lt; &gt; &lt;= &gt;= == !=</code> &middot; <code>and or not</code> &middot;
+            <code>close[1]</code> = close kemarin
+        </div>
+        <div>
+            <h4>Fungsi bawaan</h4>
+            <code>sma ema wma stdev bb_upper bb_lower rsi macd macd_signal macd_hist roc slope atr highest
+            lowest total cumsum cross_up cross_down rising falling where abs max min round last</code>
+        </div>
+        <div>
+            <h4>Perintah</h4>
+            <code>backtest(buy, sell, capital=10M, stop_loss=8%)</code> &middot;
+            <code>split="2026-07-01"</code> atau <code>split=70%</code> untuk uji luar sampel &middot;
+            di universe: <code>positions=10</code> (satu kantong modal bersama) &middot;
+            <code>screen(cond, name=value, sort="name")</code> &middot;
+            <code>plot(series, buy=, sell=, title=)</code> &middot; <code>print(...)</code> &middot;
+            <code>help()</code>
+        </div>
+        <div>
+            <h4>Fungsi sendiri</h4>
+            <code>fn spread(a, b) = a - b</code> atau blok
+            <code>fn s(n) { x = total(net_top5, n); return x }</code>; <code>if</code>/<code>else</code>
+            untuk satu nilai. Komentar: <code>#</code> atau <code>//</code>.
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var CONTOH = {{ contoh|map('last')|list|tojson }};
+    var KEYWORDS = ['stock', 'universe', 'param', 'fn', 'return', 'if', 'else', 'and', 'or', 'not', 'true', 'false', 'all'];
+    var src = document.getElementById('slSrc');
+    var hi = document.getElementById('slHi');
+    var gutter = document.getElementById('slGutter');
+    var outEl = document.getElementById('slOut');
+    var charts = document.getElementById('slCharts');
+    var status = document.getElementById('slStatus');
+    var runBtn = document.getElementById('slRun');
+    var badLine = null;
+    var running = false;
+
+    function esc(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Satu regex, satu lintasan: komentar, string, angka (dgn K/M/B/%), kata.
+    var TOKEN = /(#.*|\/\/.*)|("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?)|(\b\d[\d_]*(?:\.\d+)?(?:[KMB]\b|%)?)|([A-Za-z_]\w*)(\s*\()?/g;
+    function highlightLine(line) {
+        var html = '', last = 0, m;
+        TOKEN.lastIndex = 0;
+        while ((m = TOKEN.exec(line)) !== null) {
+            html += esc(line.slice(last, m.index));
+            if (m[1]) html += '<span class="sl-c">' + esc(m[1]) + '</span>';
+            else if (m[2]) html += '<span class="sl-s">' + esc(m[2]) + '</span>';
+            else if (m[3]) html += '<span class="sl-n">' + esc(m[3]) + '</span>';
+            else if (KEYWORDS.indexOf(m[4]) >= 0) html += '<span class="sl-k">' + m[4] + '</span>' + esc(m[5] || '');
+            else if (m[5]) html += '<span class="sl-f">' + m[4] + '</span>' + esc(m[5]);
+            else html += esc(m[0]);
+            last = m.index + m[0].length;
+        }
+        return html + esc(line.slice(last));
+    }
+
+    function render() {
+        var lines = src.value.split('\n');
+        hi.innerHTML = lines.map(function (l, i) {
+            var h = highlightLine(l) || ' ';
+            return i + 1 === badLine ? '<span class="sl-badline">' + h + '</span>' : h;
+        }).join('\n') + '\n';
+        var g = '';
+        for (var i = 1; i <= lines.length; i++) g += '<div' + (i === badLine ? ' class="sl-bad"' : '') + '>' + i + '</div>';
+        gutter.innerHTML = g;
+        syncScroll();
+    }
+
+    function syncScroll() {
+        hi.scrollTop = src.scrollTop;
+        hi.scrollLeft = src.scrollLeft;
+        gutter.scrollTop = src.scrollTop;
+    }
+
+    src.addEventListener('input', function () { badLine = null; render(); });
+    src.addEventListener('scroll', syncScroll);
+    src.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); return; }
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            var s = src.selectionStart, t = src.selectionEnd;
+            src.setRangeText('    ', s, t, 'end');
+            src.dispatchEvent(new Event('input'));
+        }
+    });
+
+    var nama = document.getElementById('slNama');
+    var cekJurnal = document.getElementById('slJurnal');
+    var hapusBtn = document.getElementById('slHapus');
+    var msg = document.getElementById('slMsg');
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+
+    function post(url, body) {
+        return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                            body: JSON.stringify(body || {}) }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        });
+    }
+
+    function setMsg(cls, text) { msg.className = 'sl-msg ' + (cls || ''); msg.textContent = text; }
+
+    function muatIsi(isi) {
+        src.value = isi;
+        badLine = null;
+        src.scrollTop = 0;
+        render();
+        src.focus();
+    }
+
+    function daftarSkrip(pilih) {
+        return fetch('/stocklang/skrip').then(function (r) { return r.json(); }).then(function (list) {
+            var g = document.getElementById('slOptSimpan');
+            g.innerHTML = list.map(function (s) {
+                return '<option value="s:' + esc(s.nama) + '">' + esc(s.nama) + (s.jurnal ? '  ★ jurnal' : '') + '</option>';
+            }).join('');
+            g.style.display = list.length ? '' : 'none';
+            hapusBtn.style.display = list.some(function (s) { return s.nama === nama.value.trim(); }) ? '' : 'none';
+        });
+    }
+
+    document.getElementById('slContoh').addEventListener('change', function () {
+        var v = this.value;
+        this.value = '';
+        if (!v) return;
+        setMsg('', '');
+        if (v.slice(0, 2) === 'c:') {
+            muatIsi(CONTOH[+v.slice(2)]);
+            nama.value = '';
+            cekJurnal.checked = false;
+            hapusBtn.style.display = 'none';
+            return;
+        }
+        fetch('/stocklang/skrip/' + encodeURIComponent(v.slice(2))).then(function (r) { return r.json(); })
+            .then(function (s) {
+                if (s.error) { setMsg('err', s.error); return; }
+                muatIsi(s.src);
+                nama.value = s.nama;
+                cekJurnal.checked = s.jurnal;
+                hapusBtn.style.display = '';
+            });
+    });
+
+    nama.addEventListener('input', function () { daftarSkrip(); });
+
+    document.getElementById('slSimpan').addEventListener('click', function () {
+        setMsg('', 'Menyimpan…');
+        post('/stocklang/skrip/simpan', { nama: nama.value.trim(), src: src.value, jurnal: cekJurnal.checked })
+            .then(function (res) {
+                setMsg(res.ok ? 'ok' : 'err', res.pesan);
+                if (res.ok) { daftarSkrip(); muatJurnal(); }
+            }).catch(function (e) { setMsg('err', 'Gagal: ' + e.message); });
+    });
+
+    hapusBtn.addEventListener('click', function () {
+        var n = nama.value.trim();
+        if (!n || !confirm('Hapus skrip "' + n + '"? Catatan jurnalnya tetap disimpan.')) return;
+        post('/stocklang/skrip/hapus', { nama: n }).then(function (res) {
+            setMsg(res.ok ? 'ok' : 'err', res.ok ? 'Skrip dihapus.' : 'Skrip tidak ditemukan.');
+            daftarSkrip(); muatJurnal();
+        });
+    });
+
+    // ---- jurnal maju ----
+    var jTabel = document.getElementById('slJurnalTabel');
+    var catatBtn = document.getElementById('slCatat');
+
+    function persen(v) {
+        if (v == null) return '–';
+        return '<span class="' + (v >= 0 ? 'sl-up2' : 'sl-down2') + '">' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%</span>';
+    }
+
+    function selH(h) {
+        if (!h || !h.matang) return '<span class="sl-sub">belum ada yang matang</span>';
+        return '<span class="' + (h.matang < 30 ? 'sl-tipis' : '') + '">' + persen(h.rata)
+             + '<span class="sl-sub">n=' + h.matang + ' &middot; median ' + persen(h.median)
+             + ' &middot; win ' + h.win.toFixed(0) + '%</span>'
+             + '<span class="sl-sub">vs semua ' + (h.lebih >= 0 ? '+' : '') + h.lebih.toFixed(2) + ' poin</span></span>';
+    }
+
+    function muatJurnal() {
+        return fetch('/stocklang/jurnal').then(function (r) { return r.json(); }).then(function (res) {
+            if (!res.skrip.length) {
+                jTabel.innerHTML = '<div class="sl-msg">Belum ada catatan. Simpan skrip yang memanggil screen() dengan centang '
+                                 + 'Jurnal harian, lalu tunggu pemeriksaan kesehatan harian (atau tekan Catat hari ini).</div>';
+                return;
+            }
+            var html = '<table class="sl-jt"><thead><tr><th>Skrip</th><th>Hari &middot; sinyal</th>'
+                     + '<th>H+1</th><th>H+5</th><th>H+20</th></tr></thead><tbody>';
+            res.skrip.forEach(function (s) {
+                html += '<tr><td><b>' + esc(s.skrip) + '</b><span class="sl-badge ' + (s.status === 'aktif' ? 'aktif' : '') + '">'
+                      + esc(s.status) + '</span><span class="sl-sub">versi ' + esc(s.versi) + ' &middot; sejak ' + esc(s.mulai) + '</span>'
+                      + '<span class="sl-kode">' + esc(s.terakhir) + ': ' + (s.kode_terakhir.length ? esc(s.kode_terakhir.join(' ')) : 'tidak ada yang lolos') + '</span></td>'
+                      + '<td>' + s.hari + ' &middot; ' + s.sinyal + (s.telat ? '<span class="sl-sub">' + s.telat + ' telat, tak dihitung</span>' : '') + '</td>'
+                      + '<td>' + selH(s.horizon['1']) + '</td><td>' + selH(s.horizon['5']) + '</td><td>' + selH(s.horizon['20']) + '</td></tr>';
+            });
+            jTabel.innerHTML = html + '</tbody></table>';
+        }).catch(function (e) { jTabel.innerHTML = '<div class="sl-msg err">Gagal memuat jurnal: ' + esc(e.message) + '</div>'; });
+    }
+
+    catatBtn.addEventListener('click', function () {
+        catatBtn.disabled = true;
+        catatBtn.textContent = 'Mencatat…';
+        post('/stocklang/jurnal/catat').then(function (res) {
+            setMsg('ok', res.length ? res.map(function (r) {
+                return r.skrip + ': ' + r.status + (r.jumlah != null ? ' (' + r.jumlah + ' saham, ' + r.tanggal + ')' : '');
+            }).join('\n') : 'Belum ada skrip yang dicentang Jurnal harian.');
+            return muatJurnal();
+        }).catch(function (e) { setMsg('err', 'Gagal mencatat: ' + e.message); })
+          .finally(function () { catatBtn.disabled = false; catatBtn.textContent = 'Catat hari ini'; });
+    });
+
+    daftarSkrip();
+    muatJurnal();
+
+    // Warnai keluaran: +x% hijau, -x% merah, judul tabel/backtest tebal.
+    function colorOut(line) {
+        var h = esc(line);
+        if (/^(Backtest|Portfolio:|Study |Sweep:|Each stock on its own|Last \d+ of|\d+ of \d+ stocks match|No stocks matched)/.test(line)) return '<span class="sl-head">' + h + '</span>';
+        return h.replace(/(^|[\s(])([+-]\d[\d,.]*%)/g, function (_, pre, num) {
+            return pre + '<span class="' + (num[0] === '+' ? 'sl-up' : 'sl-down') + '">' + num + '</span>';
+        });
+    }
+
+    function setStatus(cls, html) {
+        status.className = 'sl-status sl-hint ' + (cls || '');
+        status.innerHTML = html;
+    }
+
+    function run() {
+        if (running) return;
+        running = true;
+        runBtn.disabled = true;
+        badLine = null;
+        render();
+        setStatus('', '<span class="sl-spin"></span> Menjalankan&hellip;');
+        fetch('/stocklang/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json',
+                       'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+            body: JSON.stringify({ src: src.value })
+        }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        }).then(tampilkan).catch(function (e) {
+            setStatus('err', 'Gagal menghubungi server (' + esc(e.message) + ')');
+        }).finally(function () {
+            running = false;
+            runBtn.disabled = false;
+        });
+    }
+
+    function tampilkan(res) {
+        var html = (res.output || []).map(colorOut).join('\n');
+        if (res.error) {
+            html += (html ? '\n' : '') + '<span class="sl-err">' + esc(res.error.text) + '</span>';
+            if (res.error.line) {
+                badLine = res.error.line;
+                render();
+                goTo(res.error.line, res.error.col || 1);
+            }
+        }
+        outEl.innerHTML = html;
+        charts.innerHTML = '';
+        (res.images || []).forEach(function (img) {
+            var d = document.createElement('div');
+            d.className = 'sl-chart';
+            d.innerHTML = '<img alt="Grafik StockLang" src="data:image/png;base64,' + img.data + '">'
+                        + '<div class="sl-cap">' + esc(img.name) + '</div>';
+            charts.appendChild(d);
+        });
+        var t = res.elapsed != null ? res.elapsed.toFixed(2) + ' dtk' : '';
+        if (res.error) setStatus('err', res.error.line ? 'Error di baris ' + res.error.line + ', kolom ' + res.error.col + ' &middot; ' + t : 'Error &middot; ' + t);
+        else setStatus('ok', 'Selesai &middot; ' + t);
+    }
+
+    // ---- tulis dari bahasa biasa ----
+    var minta = document.getElementById('slMinta');
+    var tulisBtn = document.getElementById('slTulis');
+    var tulisMsg = document.getElementById('slTulisMsg');
+
+    function tulis() {
+        if (running || !minta.value.trim()) return;
+        running = true;
+        tulisBtn.disabled = runBtn.disabled = true;
+        tulisMsg.className = 'sl-msg';
+        tulisMsg.innerHTML = '<span class="sl-spin" style="display:inline-block;vertical-align:middle;"></span> Claude sedang menulis dan mencoba skripnya&hellip;';
+        post('/stocklang/tulis', { teks: minta.value }).then(function (res) {
+            if (res.galat) { tulisMsg.className = 'sl-msg err'; tulisMsg.textContent = res.galat; return; }
+            muatIsi(res.skrip);
+            nama.value = '';
+            cekJurnal.checked = false;
+            tampilkan(res);
+            var teks = res.penjelasan;
+            if (res.asumsi && res.asumsi.length) teks += '\nAsumsi: ' + res.asumsi.join('; ');
+            if (res.percobaan > 1) teks += '\n(' + res.percobaan + ' percobaan' + (res.error ? ', masih error' : '') + ')';
+            tulisMsg.className = 'sl-msg ' + (res.error ? 'err' : 'ok');
+            tulisMsg.textContent = teks;
+        }).catch(function (e) {
+            tulisMsg.className = 'sl-msg err';
+            tulisMsg.textContent = 'Gagal: ' + e.message;
+        }).finally(function () {
+            running = false;
+            tulisBtn.disabled = runBtn.disabled = false;
+        });
+    }
+
+    tulisBtn.addEventListener('click', tulis);
+    minta.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); tulis(); } });
+
+    function goTo(line, col) {
+        var lines = src.value.split('\n'), pos = 0;
+        for (var i = 0; i < line - 1 && i < lines.length; i++) pos += lines[i].length + 1;
+        pos += Math.max(0, col - 1);
+        src.focus();
+        src.setSelectionRange(pos, pos);
+        var lh = parseFloat(getComputedStyle(src).lineHeight) || 20;
+        src.scrollTop = Math.max(0, (line - 4) * lh);
+        syncScroll();
+    }
+
+    runBtn.addEventListener('click', run);
+    render();
+})();
+</script>
+{% endblock %}

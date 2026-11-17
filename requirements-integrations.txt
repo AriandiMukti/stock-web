@@ -1,0 +1,6 @@
+-r requirements.txt
+yfinance>=1.2,<2
+telethon>=1.36,<2
+twilio>=9,<10
+pdfplumber>=0.11,<1
+# The optional legacy WhatsApp GUI script also requires pywhatkit.

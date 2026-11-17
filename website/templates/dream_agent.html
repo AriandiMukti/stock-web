@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Dream Agent &middot; BDM{% endblock %}
+{% block page_title %}Dream Agent{% endblock %}
+{% block page_subtitle %}Riset, evaluasi, dan perbaikan prosedur dengan persetujuan Anda.{% endblock %}
+{% block content %}
+<style>
+.da {max-width:1200px;margin:auto;color:var(--text)}
+.da-grid {display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.da .content-card {padding:22px;margin-bottom:18px}
+.da h2 {font-size:18px;margin:0 0 12px}.da h3 {font-size:15px;margin:0 0 10px}
+.da p,.da small {color:var(--text-mid);line-height:1.6}
+.da label {display:block;margin:12px 0 6px;font-weight:600}
+.da textarea,.da input,.da select {width:100%;padding:10px;background:var(--void);color:var(--text);border:1px solid var(--line);border-radius:8px}
+.da textarea {font-family:var(--font-mono);font-size:12px}.da button {margin:12px 6px 0 0}
+.da pre {white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-mid);font-size:12px;background:var(--void);padding:12px;border-radius:8px}
+.da summary {cursor:pointer;padding:10px 0}.da .metric {font-size:27px;font-weight:700;color:var(--accum)}
+.da article {border-top:1px solid var(--line);padding:16px 0}.da .tag {font-size:11px;padding:4px 8px;border:1px solid var(--line);border-radius:20px}
+.da .notice {border-left:3px solid var(--accum);padding-left:14px}.da .actions {display:flex;flex-wrap:wrap;gap:8px}
+@media(max-width:700px){.da-grid{grid-template-columns:1fr}.da .content-card{padding:16px}}
+</style>
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+<div class="da">
+  <div class="content-card">
+    <h2>Riset saham dengan data nyata</h2>
+    <p>Agent mengambil harga dan laporan tahunan yang tersedia di Yahoo Finance, menyusun temuan, risiko, dan perubahan dari laporan sebelumnya. Sumber pihak ketiga; verifikasi dokumen BEI tetap diperlukan.</p>
+    <form method="post">{{ csrf() }}<input type="hidden" name="action" value="start_live">
+      <label>Kode saham BEI</label><input name="ticker" pattern="[A-Za-z]{4}" maxlength="4" value="{{ (worker.ticker or 'ADRO').replace('.JK','') }}" required>
+      <label>Interval pembaruan (detik, minimal 900)</label><input name="interval" type="number" min="900" max="31536000" value="3600" required>
+      <label>Interval dreaming (detik)</label><input name="dream_interval" type="number" min="60" max="31536000" value="86400" required>
+      <button class="btn btn-primary">Mulai riset data nyata</button>
+    </form>
+    <p>Mode aktif: <strong>{{ worker.mode or 'dataset' }}</strong>. Tombol ini mengganti tugas dataset contoh untuk akun Anda.</p>
+  </div>
+  <div class="content-card"><h2>Hasil riset data nyata</h2>
+    {% for report in reports %}<article>
+      <h3>#{{ report.id }} - {{ report.evidence.ticker }}</h3>
+      <p>Diambil {{ report.evidence.retrieved_at }} | tanggal harga {{ report.evidence.price_date }}</p>
+      <h3>Temuan</h3><ul>{% for item in report.findings %}<li>{{ item }}</li>{% endfor %}</ul>
+      <h3>Risiko dan keterbatasan</h3><ul>{% for item in report.risks %}<li>{{ item }}</li>{% endfor %}</ul>
+      <p>{{ report.conclusion }}</p>
+      <p>Perubahan sejak snapshot sebelumnya: {{ report.changed_fields|join(', ') or 'Belum ada pembanding atau perubahan terdeteksi' }}</p>
+      <ul>{% for source in report.evidence.sources %}<li><a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.title }}</a></li>{% endfor %}</ul>
+      <details><summary>Snapshot bukti</summary><pre>{{ report|tojson(indent=2) }}</pre></details>
+    </article>{% else %}<p>Belum ada laporan nyata. Mulai riset melalui formulir di atas; status pengambilan ditampilkan di bawah.</p>{% endfor %}
+  </div>
+  <div class="da-grid">
+    <div class="content-card"><small>PROSEDUR AKTIF</small><div class="metric">v{{ version }}</div></div>
+    <div class="content-card"><small>RISET TERSIMPAN</small><div class="metric">{{ total_runs }}</div></div>
+    <div class="content-card"><small>MENUNGGU KEPUTUSAN</small><div class="metric">{{ pending }}</div></div>
+  </div>
+  <div class="content-card">
+    <h2>Agent otomatis</h2>
+    <p>Status: <strong id="worker-status">{{ worker.status }}</strong></p>
+    <p id="worker-detail">{{ worker.last_result or 'Simpan tujuan dan tekan Mulai otomatis.' }}</p>
+    <form method="post">{{ csrf() }}
+      <button class="btn btn-outline-secondary" name="action" value="resume">Lanjutkan</button>
+      <button class="btn btn-outline-secondary" name="action" value="pause">Jeda</button>
+      <button class="btn btn-outline-secondary" name="action" value="stop">Hentikan</button>
+    </form>
+    <p>Worker berjalan selama server website aktif, termasuk saat browser ditutup. Jadwal aktif pulih setelah server dinyalakan ulang. Data yang sama diperiksa ulang saat tanggal atau prosedur berubah; di antaranya agent menunggu.</p>
+    <p class="notice">Jalankan riset &rarr; evaluasi hasil &rarr; buat proposal dreaming &rarr; tinjau dan setujui &rarr; jalankan ulang.
+      Planner saat ini berbasis aturan. Memory dan prosedur dapat berubah; bobot model tidak berubah.</p>
+    <p>Contoh ADRO di bawah memakai <strong>data sintetis</strong>, bukan laporan keuangan asli. Skor mengukur pemeriksaan kualitas data, bukan ketepatan prediksi saham.</p>
+    <form method="post">{{ csrf() }}<input type="hidden" name="action" value="start">
+      <label for="da-goal">Tujuan riset</label><input id="da-goal" name="goal" value="{{ worker.goal or 'Periksa kualitas data riset saham ADRO' }}" maxlength="8000" required>
+      <label for="da-dataset">Dataset riset (JSON)</label><textarea id="da-dataset" name="dataset" rows="15" maxlength="100000" required>{{ worker.dataset|tojson(indent=2) if worker.dataset else example }}</textarea>
+      <small>Untuk data nyata, isi sumber resmi, tanggal dan satuan konsisten; ubah synthetic menjadi false. Angka tidak diambil otomatis dari pasar.</small>
+      <label>Interval pemeriksaan data (detik)</label><input type="number" name="interval" min="30" max="31536000" value="{{ worker.interval or 3600 }}" required>
+      <label>Interval dreaming (detik)</label><input type="number" name="dream_interval" min="30" max="31536000" value="{{ worker.dream_interval or 86400 }}" required>
+      <small>Tanggal riset otomatis mengikuti hari berjalan WIB. Edit dataset lalu simpan untuk memasukkan data baru. Belum ada pengambilan laporan pasar otomatis.</small>
+      <div><button class="btn btn-primary" type="submit">Simpan & Mulai otomatis</button></div>
+    </form>
+  </div>
+  <div class="content-card">
+    <h2>Memory & prosedur</h2>
+    <p>Pemeriksaan aktif: {{ procedure.checks|join(', ') if procedure.checks else 'Baseline &mdash; belum ada pemeriksaan tambahan' }}</p>
+    {% for lesson in procedure.lessons %}<p>&bull; {{ lesson }}</p>{% endfor %}
+    <form method="post">{{ csrf() }}<input type="hidden" name="action" value="dream"><button class="btn btn-primary">Buat proposal dreaming</button></form>
+    <small>Dreaming mengolah pengalaman versi aktif dan menguji kandidat. Tidak ada approval otomatis. Worker menjadwalkan dreaming secara otomatis sesuai interval.</small>
+  </div>
+  <div class="content-card">
+    <h2>Proposal perbaikan</h2>
+    {% for p in proposals %}
+    <article><h3>#{{ p.id }} &middot; dari v{{ p.base }} <span class="tag">{{ p.status }}</span></h3>
+      <p>Tambahan: {{ p.added_checks|join(', ') }} &middot; Bukti run: {{ p.evidence_run_ids|join(', ') }}</p>
+      <p>Skor suite sintetis: {{ '%.1f'|format(p.evaluation.mean_before*100) }}% &rarr; {{ '%.1f'|format(p.evaluation.mean_after*100) }}%</p>
+      <details><summary>Lihat kandidat dan hasil evaluasi</summary><pre>{{ p|tojson(indent=2) }}</pre></details>
+      {% if p.status == 'pending' %}
+      {% if p.base == version %}
+      <form method="post">{{ csrf() }}<input type="hidden" name="id" value="{{ p.id }}">
+        <label for="reason-{{ p.id }}">Alasan keputusan</label><input id="reason-{{ p.id }}" name="reason" maxlength="1000" required placeholder="Hasil peninjauan Anda">
+        <div class="actions"><button class="btn btn-primary" name="action" value="approve">Setujui & aktifkan</button><button class="btn btn-outline-secondary" name="action" value="reject">Tolak proposal</button></div>
+      </form>
+      {% else %}<p>Proposal kedaluwarsa karena prosedur aktif berubah. Jalankan dreaming lagi.</p>{% endif %}
+      {% endif %}
+    </article>{% else %}<p>Belum ada proposal. Jalankan riset lalu buat proposal dreaming.</p>{% endfor %}
+  </div>
+  <div class="content-card"><h2>Riwayat riset</h2><small>Menampilkan maksimal 30 run terakhir, milik akun Anda.</small>
+    {% for r in runs %}<article>
+      <h3>#{{ r.id }} &middot; {{ r.case.ticker }} &middot; v{{ r.version }} <span class="tag">{{ '%.1f'|format(r.evaluation.score*100) }}%</span></h3>
+      <p>{{ r.goal }}<br>{{ r.time }} &middot; {{ 'Data sintetis' if r.case.synthetic else 'Data masukan pengguna' }}</p>
+      <p>Pemeriksaan gagal: {{ r.evaluation.failures|join(', ') or 'Tidak ada' }}</p>
+      <details><summary>Laporan, rencana, hasil tools, dan kesalahan</summary><pre>{{ r|tojson(indent=2) }}</pre></details>
+    </article>{% else %}<p>Belum ada riset.</p>{% endfor %}
+  </div>
+  <div class="content-card"><h2>Pulihkan prosedur</h2><p>Rollback membuat versi baru dari versi pilihan. Riwayat tetap disimpan.</p>
+    <form method="post">{{ csrf() }}<input type="hidden" name="action" value="rollback">
+      <label for="da-version">Versi yang dipulihkan</label><select id="da-version" name="id">{% for v in versions %}<option value="{{ v }}">Versi {{ v }}</option>{% endfor %}</select>
+      <label for="da-reason">Alasan rollback</label><input id="da-reason" name="reason" maxlength="1000" required>
+      <button class="btn btn-outline-secondary">Pulihkan versi</button>
+    </form>
+  </div>
+  <div class="content-card"><h2>Audit log</h2><p>Rantai hash: <strong>{{ 'Valid' if audit_valid else 'Gagal verifikasi' }}</strong>. Menampilkan 50 event terakhir. Waktu dalam UTC.</p>
+    <small>Rantai hash membantu mendeteksi perubahan event; bukan perlindungan dari pemilik database yang menulis ulang seluruh log.</small>
+    {% for a in audit %}<details><summary>#{{ a.id }} &middot; {{ a.event }} &middot; {{ a.time }}</summary><pre>{{ a.body }}</pre></details>{% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+setInterval(async function(){
+ try {
+  const r = await fetch({{ url_for('dream_agent_web.worker_status')|tojson }});
+  if(!r.ok) return;
+  const s = await r.json();
+  document.getElementById('worker-status').textContent = s.status;
+  const next = s.next_run ? new Date(s.next_run * 1000).toLocaleString('id-ID', {timeZone:'Asia/Jakarta'}) : '-';
+  document.getElementById('worker-detail').textContent = (s.last_error || s.last_result || 'Menunggu worker') + ' | Cek berikutnya: ' + next + ' WIB. Muat ulang halaman untuk melihat run/proposal baru.';
+ } catch(e) { document.getElementById('worker-detail').textContent='Koneksi worker terputus; periksa server website.'; }
+}, 5000);
+</script>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}EMA Golden Cross Weekly{% endblock %}
+{% block page_title %}EMA Golden Cross Weekly{% endblock %}
+{% block page_actions %}
+<button type="button" class="btn btn-sm btn-outline-secondary" id="emaRefresh">Perbarui dari Yahoo</button>
+{% endblock %}
+{% block content %}
+<style>
+.ew-controls { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin:18px 0; }
+.ew-controls select,.ew-controls input { background:var(--surface); color:var(--text); border:1px solid var(--line); padding:8px 10px; border-radius:6px; }
+.ew-table { width:100%; font-size:12px; border-collapse:collapse; white-space:nowrap; }
+.ew-table th,.ew-table td { padding:12px; border-bottom:1px solid var(--line); text-align:right; }
+.ew-table th:first-child,.ew-table td:first-child { text-align:left; }
+.ew-table td { font-family:var(--font-mono); }
+.ew-table th { color:var(--text-dim); font-weight:600; }
+.ew-note { color:var(--text-mid); font-size:12px; line-height:1.7; }
+#emaStatus { margin:12px 0; color:var(--text-mid); }
+#emaError { color:var(--warn); white-space:pre-line; }
+</style>
+<div class="content-card">
+    <p style="margin-bottom:8px;">Saham BEI dengan <strong style="color:var(--accum)">EMA 10 menembus ke atas EMA 20</strong> dalam maksimal <strong>2 minggu terakhir</strong>.</p>
+    <p class="ew-note">Syarat: EMA10 minggu sebelumnya ≤ EMA20, lalu EMA10 minggu sinyal &gt; EMA20.
+    Hanya candle mingguan yang sudah tutup; minggu berjalan tidak disertakan. Minggu Jumat dimasukkan setelah pukul 18.00 WIB.
+    EMA dihitung dari close mingguan yang disesuaikan aksi korporasi, dengan riwayat hingga 5 tahun dari
+    <a href="https://finance.yahoo.com/" target="_blank" rel="noopener noreferrer">Yahoo Finance</a>.</p>
+    <div class="ew-controls">
+        <label for="emaWeeks">Periode sinyal
+            <select id="emaWeeks"><option value="2">2 minggu terakhir</option><option value="1">Minggu terakhir saja</option></select>
+        </label>
+        <label for="emaSearch">Cari saham <input id="emaSearch" type="search" placeholder="Contoh: BBCA" maxlength="20"></label>
+    </div>
+    <div id="emaStatus" role="status" aria-live="polite">Menyiapkan pemindaian…</div>
+    <p id="emaError" role="alert" hidden></p>
+    <p id="emaMeta" class="ew-note"></p>
+    <div style="overflow-x:auto;">
+        <table class="ew-table">
+            <thead><tr><th>Saham</th><th>Minggu sinyal (Jumat)</th><th>Close terakhir</th><th>EMA10 saat cross</th><th>EMA20 saat cross</th><th>Posisi terakhir</th></tr></thead>
+            <tbody id="emaRows"></tbody>
+        </table>
+    </div>
+    <details id="emaSkipped" class="ew-note" style="margin-top:16px;" hidden><summary>Data yang tidak dianalisis</summary><p id="emaSkippedText"></p></details>
+    <p class="ew-note" style="margin-top:16px;">Pemindaian berjalan di latar belakang dan hasil disimpan selama 1 jam. Harga pada tabel adalah close minggu terakhir yang sudah tutup. Saham tanpa data terbaru atau riwayat minimal 21 minggu dicatat terpisah.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/ema_weekly.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,13 @@
+# Does heavy top-5 broker buying lead anywhere? Measured, not assumed.
+# Shows study(), rank() and an IHSG market filter.
+#
+#   python -m stocklang stocklang/examples/study.stk
+
+universe all
+
+# Net lots bought by the top 5 brokers over 5 days, relative to normal volume
+flow = total(net_top5, 5) / sma(volume / 100, 20)
+market_ok = ihsg > sma(ihsg, 20)
+
+# The 5% of stocks with the strongest flow each day, only while IHSG is healthy
+study(rank(flow) > 95 and market_ok, days = [1, 5, 20])

@@ -1,0 +1,10 @@
+{
+  "ticker": "DEMO-IDX",
+  "as_of": "2026-11-02",
+  "period": "2026-06-30",
+  "revenue": 150,
+  "previous_revenue": 100,
+  "source": "fixture://clean-synthetic",
+  "comparable": true,
+  "synthetic": true
+}

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Weekly Report{% endblock %}
+{% block page_title %}Weekly Report{% endblock %}
+
+{% block content %}
+
+<style>
+    .report-sub { color: var(--text-dim); font-size: 12.5px; margin-bottom: 18px; }
+    .report-section { margin-bottom: 26px; }
+    .report-section-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+    .report-table { width: 100%; }
+    .report-table th {
+        font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+        letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim);
+        text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    }
+    .report-table td {
+        font-family: var(--font-mono); font-size: 12.5px;
+        padding: 9px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text);
+    }
+    .report-empty { color: var(--text-dim); font-size: 13px; padding: 14px 4px; }
+    .report-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+    .report-badge.added { color: var(--accum); background: var(--accum-glow); }
+    .report-badge.removed { color: var(--distrib); background: var(--distrib-glow); }
+    .report-signal-value { color: var(--accum); }
+    .report-stock-link { color: var(--accum); text-decoration: none; font-weight: 600; }
+    .report-stock-link:hover { text-decoration: underline; }
+    .report-actions { margin-bottom: 18px; }
+    .report-cross-badge {
+        font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 5px;
+        letter-spacing: 0.03em;
+    }
+    .report-cross-badge.up { color: var(--void); background: var(--accum); }
+    .report-cross-badge.down { color: var(--void); background: var(--distrib); }
+    .report-confidence { letter-spacing: 2px; }
+    .report-confidence-3 { color: var(--accum); }
+    .report-confidence-2 { color: #FFC352; }
+    .report-confidence-1, .report-confidence-0 { color: var(--text-dim); }
+</style>
+
+<div class="report-sub">Aktivitas sejak {{ since.strftime('%d %b %Y') }} &middot; dibuat {{ now.strftime('%d %b %Y %H:%M') }}</div>
+
+<div class="report-actions">
+    <button type="button" class="btn btn-sm btn-outline-primary" id="reportWhatsappBtn">Send to WhatsApp</button>
+    <a href="/compare{% if signals %}?stock={{ signals|map(attribute='stock')|join(',') }}{% endif %}" class="btn btn-sm btn-outline-secondary">Buka semua sinyal di Compare</a>
+</div>
+
+<div class="content-card report-section">
+    <div class="report-section-title">Sinyal Akumulasi Saat Ini ({{ signals|length }})</div>
+    {% if signals %}
+    <table class="report-table">
+        <thead>
+            <tr>
+                <th>Stock</th>
+                <th>Signal</th>
+                <th>List</th>
+                <th>Change % (1D)</th>
+                <th>Net Top5 Cumulative (B)</th>
+                <th>Retail Cumulative (B)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in signals %}
+            <tr>
+                <td><a href="/compare?stock={{ s.stock }}" class="report-stock-link">{{ s.stock }}</a></td>
+                <td class="report-confidence report-confidence-{{ s.confidence }}">{{ '★' * s.confidence }}{{ '☆' * (3 - s.confidence) }}</td>
+                <td>{{ s.list }}</td>
+                <td>{{ s.change }}%</td>
+                <td class="report-signal-value">{{ s.netTop5ValueB }}</td>
+                <td class="report-signal-value">{{ s.retailValueB }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="report-empty">Belum ada saham di watchlist yang match kriteria akumulasi minggu ini.</div>
+    {% endif %}
+</div>
+
+<div class="content-card report-section">
+    <div class="report-section-title">Crossover Big Lot Flow Minggu Ini ({{ crossings|length }})</div>
+    {% if crossings %}
+    <table class="report-table">
+        <thead>
+            <tr>
+                <th>Stock</th>
+                <th>List</th>
+                <th>Arah</th>
+                <th>Kapan</th>
+                <th>Net Top5 Cumulative (B)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in crossings %}
+            <tr>
+                <td><a href="/compare?stock={{ c.stock }}" class="report-stock-link">{{ c.stock }}</a></td>
+                <td>{{ c.list }}</td>
+                <td><span class="report-cross-badge {{ c.crossing.dir }}">{{ '↑ akumulasi' if c.crossing.dir == 'up' else '↓ distribusi' }}</span></td>
+                <td>{{ 'hari ini' if c.crossing.daysAgo == 0 else c.crossing.daysAgo ~ ' hari lalu' }}</td>
+                <td class="report-signal-value">{{ c.netTop5ValueB }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="report-empty">Gak ada saham di watchlist yang crossover minggu ini.</div>
+    {% endif %}
+</div>
+
+<div class="content-card report-section">
+    <div class="report-section-title">Aktivitas Watchlist ({{ activity|length }})</div>
+    {% if activity %}
+    <table class="report-table">
+        <thead>
+            <tr>
+                <th>When</th>
+                <th>Stock</th>
+                <th>List</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in activity %}
+            <tr>
+                <td>{{ e.timestamp.strftime('%d %b %H:%M') if e.timestamp else '' }}</td>
+                <td><a href="/compare?stock={{ e.stock }}" class="report-stock-link">{{ e.stock }}</a></td>
+                <td>{{ e.listType }}</td>
+                <td><span class="report-badge {{ e.action }}">{{ e.action }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="report-empty">Gak ada stock ditambah/dihapus dari watchlist minggu ini.</div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('reportWhatsappBtn').addEventListener('click', function () {
+        var lines = ['*Weekly Report* — {{ since.strftime("%d %b") }} to now', ''];
+
+        lines.push('*Sinyal Akumulasi ({{ signals|length }})*');
+        {% for s in signals %}
+        lines.push('{{ s.stock }} ({{ s.list }}) — Change {{ s.change }}%, NetTop5 {{ s.netTop5ValueB }}B, Retail {{ s.retailValueB }}B');
+        {% endfor %}
+        {% if not signals %}
+        lines.push('(none)');
+        {% endif %}
+
+        lines.push('');
+        lines.push('*Crossover Minggu Ini ({{ crossings|length }})*');
+        {% for c in crossings %}
+        lines.push('{{ c.stock }} ({{ c.list }}) — {{ "naik" if c.crossing.dir == "up" else "turun" }}, {{ "hari ini" if c.crossing.daysAgo == 0 else c.crossing.daysAgo ~ " hari lalu" }}');
+        {% endfor %}
+        {% if not crossings %}
+        lines.push('(none)');
+        {% endif %}
+
+        lines.push('');
+        lines.push('*Aktivitas Watchlist ({{ activity|length }})*');
+        {% for e in activity %}
+        lines.push('{{ e.timestamp.strftime("%d %b") if e.timestamp else "" }} — {{ e.action }} {{ e.stock }} ({{ e.listType }})');
+        {% endfor %}
+        {% if not activity %}
+        lines.push('(none)');
+        {% endif %}
+
+        var text = lines.join('\n');
+        window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    });
+</script>
+{% endblock %}

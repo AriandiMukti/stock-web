@@ -1,0 +1,33 @@
+{% extends "base.html" %} {% block title %}Masuk &middot; BDM{% endblock %}
+
+{% block content %}
+{# Gaya .auth-* ada di base.html (dipakai bersama sign_up.html). #}
+<div class="auth-split">
+    {% include "_auth_side.html" %}
+
+    <div class="auth-main">
+        <a class="auth-brand auth-brand-m" href="/">
+            <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg></span>
+            BDM
+        </a>
+        <a class="auth-back" href="/"><i data-feather="arrow-left"></i>Beranda</a>
+        <h1 class="auth-title">Masuk</h1>
+        <p class="auth-sub">Lanjutkan ke dashboard, watchlist, dan sinyal hari ini.</p>
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="auth-field">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" placeholder="nama@contoh.com" autocomplete="email" required autofocus>
+            </div>
+            <div class="auth-field">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="auth-submit">Masuk</button>
+        </form>
+
+        <div class="auth-foot">Belum punya akun? <a href="/sign-up">Daftar</a></div>
+    </div>
+</div>
+{% endblock %}

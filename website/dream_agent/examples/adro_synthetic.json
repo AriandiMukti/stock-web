@@ -1,0 +1,11 @@
+{
+  "ticker": "ADRO",
+  "as_of": "2026-11-02",
+  "period": "2023-12-31",
+  "revenue": 120,
+  "previous_revenue": 100,
+  "source": "",
+  "comparable": false,
+  "synthetic": true,
+  "notes": "SEMUA ANGKA SINTETIS, bukan fakta ADRO. Satuan indeks pendapatan. Simulasi perubahan cakupan bisnis, data lama, dan provenance hilang."
+}

@@ -1,0 +1,1996 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="google" content="notranslate">
+    <meta name="robots" content="notranslate">
+    <title>{% block title %}BDM{% endblock %}</title>
+
+    <!-- "Add to Home Screen" support: browsers need a manifest + a
+         registered service worker before they'll offer to install this
+         as an app icon. -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#04060A">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="BDM">
+
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/loader.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/slide.css') }}" rel="stylesheet">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/jquery/latest/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+    <script>
+        $(function () {
+            var csrfToken = $('meta[name="csrf-token"]').attr('content');
+            $.ajaxSetup({
+                beforeSend: function (xhr, settings) {
+                    if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type)) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                }
+            });
+        });
+
+        // ---------- Pengurutan kolom, dipakai bersama ----------
+        // Halaman yang tabelnya dirender dari array JS cukup menandai <th>
+        // dengan data-sort-key, lalu memanggil makeSortable() sekali dan
+        // membungkus barisnya dengan sortRows() di fungsi render-nya.
+        // Ditaruh di sini supaya satu implementasi dipakai semua halaman,
+        // bukan disalin per template.
+        window.sortRows = function (rows, key, dir) {
+            if (!key) { return rows; }
+            var mul = dir === 'asc' ? 1 : -1;
+            return rows.slice().sort(function (a, b) {
+                var x = a[key], y = b[key];
+                var xKosong = (x === null || x === undefined || x === '');
+                var yKosong = (y === null || y === undefined || y === '');
+                // Nilai kosong selalu di bawah, apa pun arah urutannya --
+                // supaya baris tanpa data tidak menutupi baris teratas.
+                if (xKosong && yKosong) { return 0; }
+                if (xKosong) { return 1; }
+                if (yKosong) { return -1; }
+                if (typeof x === 'number' && typeof y === 'number') { return (x - y) * mul; }
+                return String(x).localeCompare(String(y)) * mul;
+            });
+        };
+
+        // Kerangka muat. skeleton('kartu', 4) / skeleton('tabel', 8) /
+        // skeleton('panel'). `pesan` opsional menggantikan teks status di
+        // atasnya -- katakan apa yang sedang dikerjakan, bukan "Memuat".
+        window.skeleton = function (bentuk, jumlah, pesan) {
+            var n = jumlah || 4;
+            var out = pesan ? '<div class="skel-note">' + pesan + '</div>' : '';
+            var i;
+            if (bentuk === 'tabel') {
+                out += '<div class="skel-rows">';
+                for (i = 0; i < n; i++) {
+                    out += '<div class="skel-line" style="height:14px; width:' + (100 - (i % 4) * 7) + '%;"></div>';
+                }
+                return out + '</div>';
+            }
+            if (bentuk === 'panel') {
+                out += '<div class="skel-card">'
+                     + '<div class="skel-line" style="width:38%; height:9px;"></div>'
+                     + '<div class="skel-line" style="width:62%; height:26px;"></div>'
+                     + '<div class="skel-rows">';
+                for (i = 0; i < n; i++) {
+                    out += '<div class="skel-line" style="width:' + (92 - i * 11) + '%;"></div>';
+                }
+                return out + '</div></div>';
+            }
+            // bawaan: kartu
+            out += '<div class="skel-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">';
+            for (i = 0; i < n; i++) {
+                out += '<div class="skel-card">'
+                     + '<div class="skel-line" style="width:44%; height:9px;"></div>'
+                     + '<div class="skel-line" style="width:66%; height:26px;"></div>'
+                     + '<div class="skel-line" style="width:100%; height:6px;"></div>'
+                     + '</div>';
+            }
+            return out + '</div>';
+        };
+
+        window.makeSortable = function (theadSelector, onSort, defaultKey, defaultDir) {
+            var state = { key: defaultKey || null, dir: defaultDir || 'desc' };
+
+            function paint() {
+                $(theadSelector).find('th[data-sort-key]').each(function () {
+                    var $th = $(this);
+                    $th.find('.sort-ind').remove();
+                    if (String($th.data('sort-key')) === String(state.key)) {
+                        $th.append('<span class="sort-ind">' + (state.dir === 'asc' ? '&#9650;' : '&#9660;') + '</span>');
+                    }
+                });
+            }
+
+            $(theadSelector).on('click', 'th[data-sort-key]', function () {
+                var k = String($(this).data('sort-key'));
+                if (state.key === k) {
+                    state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    state.key = k;
+                    state.dir = 'desc';
+                }
+                paint();
+                if (onSort) { onSort(state.key, state.dir); }
+            });
+
+            paint();
+            return state;
+        };
+    </script>
+    <style>
+        /* ---- Kerangka muat (skeleton), dipakai bersama ----
+           Tiap halaman di app ini merender kerangka lalu MENGISI-nya lewat
+           POST, jadi di antaranya selalu ada jeda. Sebelumnya jeda itu diisi
+           sebaris teks "Memuat..." di layar kosong, yang tidak memberi tahu
+           apa pun tentang apa yang akan datang -- dan layar kosong selalu
+           terasa lebih lama daripada bentuk yang sudah kelihatan.
+
+           Bentuknya sengaja mengikuti konten akhirnya (kartu, tabel, atau
+           panel) supaya tata letak tidak melompat saat data tiba. */
+        @keyframes skelShimmer { 100% { transform: translateX(100%); } }
+        .skel-line, .skel-block {
+            position: relative; overflow: hidden;
+            background: var(--line-soft); border-radius: 6px;
+        }
+        .skel-line::after, .skel-block::after {
+            content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.055), transparent);
+            animation: skelShimmer 1.4s infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .skel-line::after, .skel-block::after { animation: none; }
+        }
+        .skel-line { height: 11px; }
+        .skel-card {
+            background: linear-gradient(160deg, rgba(26,34,51,0.65), rgba(18,24,38,0.65));
+            border: 1px solid var(--line-soft); border-radius: var(--radius);
+            padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;
+        }
+        .skel-grid { display: grid; gap: 16px; }
+        .skel-rows { display: flex; flex-direction: column; gap: 10px; }
+        .skel-note {
+            font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+            display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+        }
+        .skel-note::before {
+            content: ''; width: 7px; height: 7px; border-radius: 50%;
+            background: var(--accum); box-shadow: 0 0 8px var(--accum);
+            animation: skelPulse 1.2s ease-in-out infinite;
+        }
+        @keyframes skelPulse { 50% { opacity: 0.25; } }
+        @media (prefers-reduced-motion: reduce) { .skel-note::before { animation: none; } }
+
+        /* ================= LAPIS KOMPONEN BERSAMA =================
+           Pola yang SAMA PERSIS diulang di banyak halaman. Tiap halaman
+           dulu menemukan ulang judul bagian, keadaan kosong, dan label
+           statistiknya sendiri dengan prefix masing-masing (.ap- .dj-
+           .hb- .ia- .kd- .ks- .rx- .sf- .sj- .sl- .wd-) -- 172 sufiks
+           berbeda, 24 di antaranya muncul di tiga halaman atau lebih.
+
+           Yang disatukan di sini HANYA yang definisinya identik
+           byte-per-byte, jadi tidak ada satu piksel pun yang berubah.
+           Yang berbeda sedikit dibiarkan di halamannya masing-masing --
+           menyeragamkannya akan mengubah tampilan, dan itu keputusan
+           desain yang terpisah dari membuang duplikasi.
+
+           Selektor dikelompokkan alih-alih markup-nya diganti: nama
+           kelas di HTML tidak perlu disentuh sama sekali, jadi tidak ada
+           halaman yang bisa rusak karena satu kelas terlewat. */
+        .ap-section-title,
+        .dj-section-title,
+        .hb-section-title,
+        .ia-section-title,
+        .kd-section-title,
+        .ks-section-title,
+        .pnl-section-title,
+        .rx-section-title,
+        .sf-section-title,
+        .sj-section-title,
+        .sl-section-title,
+        .wd-section-title {
+            font-size: 9px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px;
+        }
+        .ap-down,
+        .dj-down,
+        .hb-down,
+        .ia-down,
+        .ks-down,
+        .rx-down,
+        .sf-down,
+        .sj-down,
+        .sl-down,
+        .wd-down {
+            color: var(--distrib);
+        }
+        .ap-table,
+        .dj-table,
+        .ia-table,
+        .kd-table,
+        .ks-table,
+        .rx-table,
+        .sf-table,
+        .sj-table,
+        .sl-table,
+        .wd-table {
+            width: 100%; border-collapse: collapse; font-size: 12px;
+        }
+        .ap-up,
+        .dj-up,
+        .hb-up,
+        .ia-up,
+        .ks-up,
+        .rx-up,
+        .sf-up,
+        .sj-up,
+        .sl-up,
+        .wd-up {
+            color: var(--accum);
+        }
+        .ap-field,
+        .ia-field,
+        .kd-field,
+        .ks-field,
+        .sf-field,
+        .sj-field,
+        .sl-field,
+        .wd-field {
+            display: flex; flex-direction: column; gap: 3px;
+        }
+        .ap-finding,
+        .ia-finding,
+        .kd-finding,
+        .rx-finding,
+        .sf-finding,
+        .sj-finding,
+        .sl-finding,
+        .wd-finding {
+            background: var(--void); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px;
+        }
+        .ap-stat-label,
+        .ia-stat-label,
+        .kd-stat-label,
+        .ks-stat-label,
+        .rx-stat-label,
+        .sf-stat-label,
+        .sj-stat-label,
+        .wd-stat-label {
+            font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-dim);
+        }
+        .ap-controls,
+        .ia-controls,
+        .kd-controls,
+        .sf-controls,
+        .sj-controls,
+        .sl-controls,
+        .wd-controls {
+            display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px;
+        }
+        .dj-flat,
+        .hb-flat,
+        .ia-flat,
+        .ks-flat,
+        .sl-flat,
+        .wd-flat {
+            color: var(--text-dim);
+        }
+        .ap-badge,
+        .kd-badge,
+        .rx-badge,
+        .sf-badge,
+        .sj-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; font-family: var(--font-ui); white-space: nowrap;
+        }
+        .ap-dim,
+        .kd-dim,
+        .rx-dim,
+        .sf-dim,
+        .sj-dim {
+            color: var(--text-dim);
+        }
+        .ap-empty,
+        .kd-empty,
+        .rx-empty,
+        .sf-empty,
+        .sj-empty {
+            color: var(--text-dim); text-align: center; padding: 30px; font-size: 12px;
+        }
+        .dj-empty,
+        .ia-empty,
+        .ks-empty,
+        .sl-empty,
+        .wd-empty {
+            color: var(--text-dim); font-size: 13px; padding: 40px 0; text-align: center;
+        }
+        .ap-stat-grid,
+        .kd-stat-grid,
+        .rx-stat-grid,
+        .sf-stat-grid,
+        .sj-stat-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;
+        }
+        .ap-stat-value,
+        .ia-stat-value,
+        .kd-stat-value,
+        .sf-stat-value,
+        .wd-stat-value {
+            font-family: var(--font-mono); font-size: 22px; font-weight: 600; margin-top: 4px;
+        }
+        .ap-note,
+        .kd-note,
+        .rx-note,
+        .sj-note {
+            font-size: 11px; color: var(--text-dim); margin-top: 10px; line-height: 1.6;
+        }
+        .dj-note,
+        .ia-note,
+        .sl-note,
+        .wd-note {
+            color: var(--text-dim); font-size: 11px; line-height: 1.65; margin-top: 12px;
+        }
+        .ap-ticker,
+        .kd-ticker,
+        .rx-ticker,
+        .sf-ticker {
+            font-family: var(--font-ui); font-weight: 600; color: var(--accum); text-decoration: none;
+        }
+        .hb-badge-flow-hijau,
+        .sl-badge-flow-hijau,
+        .wd-badge-flow-hijau {
+            color: var(--accum); border: 1px solid rgba(22,224,174,0.35); background: rgba(22,224,174,0.08);
+        }
+        .hb-badge-flow-kuning,
+        .sl-badge-flow-kuning,
+        .wd-badge-flow-kuning {
+            color: var(--warn); border: 1px solid rgba(255,195,82,0.35); background: rgba(255,195,82,0.08);
+        }
+        .hb-badge-flow-merah,
+        .sl-badge-flow-merah,
+        .wd-badge-flow-merah {
+            color: var(--distrib); border: 1px solid rgba(255,96,118,0.35); background: rgba(255,96,118,0.08);
+        }
+        .hb-badge-pending,
+        .sl-badge-pending,
+        .wd-badge-pending {
+            color: #7DA6FF; border: 1px solid rgba(125,166,255,0.35); background: rgba(125,166,255,0.08);
+        }
+
+        th[data-sort-key] { cursor: pointer; user-select: none; }
+        th[data-sort-key]:hover { color: var(--text) !important; }
+        .sort-ind { margin-left: 4px; font-size: 8px; opacity: 0.85; }
+        /* ---- Bar filter bersama (static/js/stock_filter.js) ---- */
+    .sf-bar { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+              padding: 11px 14px; margin-bottom: 12px; display: grid; gap: 8px; }
+    .sf-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+    .sf-row-end { justify-content: flex-end; gap: 14px; }
+    .sf-label { font-size: 9px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase;
+                color: var(--text-dim); min-width: 42px; }
+    .sf-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+                color: var(--text-mid); cursor: pointer; margin: 0; user-select: none; }
+    .sf-check input { accent-color: var(--accum); cursor: pointer; margin: 0; }
+    .sf-dim { color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; }
+    .sf-count { font-size: 12px; color: var(--text-mid); }
+    .sf-count strong { color: var(--text); font-family: var(--font-mono); }
+    .sf-link { background: none; border: 0; padding: 0; font-size: 11.5px; color: var(--accum);
+               cursor: pointer; }
+    .sf-link:hover { text-decoration: underline; }
+    .sf-tersaring { border-top: 1px solid var(--line-soft); padding-top: 8px; display: grid; gap: 5px;
+                    max-height: 240px; overflow-y: auto; }
+    .sf-alasan { display: grid; grid-template-columns: 54px 1fr; gap: 10px; font-size: 11.5px;
+                 color: var(--text-dim); line-height: 1.5; }
+    .sf-kode { font-family: var(--font-mono); font-weight: 600; color: var(--text-mid); }
+    .sf-chip { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 9.5px;
+               font-weight: 600; letter-spacing: 0.3px; margin-left: 6px; vertical-align: middle; }
+    .sf-chip-a { background: rgba(22,224,174,0.12); color: var(--accum); }
+    .sf-chip-b { background: rgba(255,96,118,0.12); color: var(--distrib); }
+</style>
+
+    <style>
+        /* ============================================================
+           FLOW — the palette IS the product's thesis.
+           Aqua  = institutional accumulation (big lot buying)
+           Coral = retail distribution (retail selling into strength)
+           Every accent on this site carries that meaning; nothing is
+           colored decoratively.
+           ============================================================ */
+        /* PALET DIUKUR, BUKAN DIPILIH BERDASARKAN SELERA.
+           Palet lama punya dua masalah yang terukur:
+             1. --text-dim (#64748B) GAGAL WCAG AA di semua permukaan
+                (3,34-4,14:1, ambangnya 4,5) -- padahal itu warna yang
+                dipakai untuk hampir semua label dan catatan.
+             2. Bidang nyaris tak terpisah: void->deep 1,04, deep->surface
+                1,06. Kartu tidak terbaca sebagai bidang berbeda, dan itu
+                sumber kesan kusam -- bukan kurang hiasan.
+
+           Palet ini: SEMUA warna teks lolos AA di SEMUA permukaan
+           (terburuk 4,51:1), rentang bidang naik 1,24 -> 1,54, dan garis
+           dari 1,25 -> 1,63. Di tema gelap, luminans antar-bidang memang
+           mentok karena sama-sama gelap, jadi garis dan bayangan yang
+           dipakai mendefinisikan bidang -- itu sebabnya --line dinaikkan
+           tegas, bukan sekadar permukaannya diterangkan (menerangkan
+           permukaan malah menurunkan kontras teks di atasnya). */
+        :root {
+            --void: #04060A;
+            --deep: #0A0E15;
+            --surface: #1B2330;
+            --raised: #26313F;
+            --line: #38455A;
+            --line-soft: #232D3C;
+
+            --accum: #16E0AE;
+            --accum-dim: #0C8F6E;
+            --accum-glow: rgba(22, 224, 174, 0.13);
+            --distrib: #FF6076;
+            --distrib-dim: #A13A47;
+            --distrib-glow: rgba(255, 96, 118, 0.13);
+            --warn: #FFC352;
+            --info: #84ABFF;
+
+            --text: #F4F7FB;
+            --text-mid: #B3C0D1;
+            --text-dim: #93A2B6;
+
+            /* Bayangan berjenjang: kartu duduk di atas halaman, elemen
+               melayang (modal, palet perintah) duduk di atas kartu. */
+            --shadow-card: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.7);
+            --shadow-float: 0 4px 12px rgba(0,0,0,0.5), 0 24px 60px -20px rgba(0,0,0,0.85);
+
+            /* Legacy aliases so older child templates keep resolving. */
+            --ink: var(--void);
+            --ink-dim: var(--text-dim);
+            --surface-raised: var(--raised);
+            --ticker: var(--accum);
+            --ticker-dim: var(--accum-dim);
+            --up: var(--accum);
+            --down: var(--distrib);
+            --accent: var(--accum);
+            --accent-soft: var(--accum-glow);
+
+            /* Tampilan 2026-09: sudut sedikit lebih bulat dan huruf UI Plus
+               Jakarta Sans (lebih terbuka di ukuran kecil daripada Space
+               Grotesk). WARNA TIDAK DIUBAH -- palet di atas sudah diukur
+               kontrasnya; yang diganti cuma bentuk, huruf, dan efek. */
+            --radius: 14px;
+            --radius-sm: 10px;
+            --font-ui: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+
+        body {
+            font-family: var(--font-ui);
+            background: var(--void);
+            color: var(--text);
+            font-size: 14.5px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Latar: kisi halus yang memudar ke bawah plus dua sumber cahaya
+           lembut (toska kiri-atas, biru kanan-atas) -- sama dengan landing
+           page, supaya masuk ke app tidak terasa pindah aplikasi. Kisi
+           di-mask supaya tidak mengotori tabel di bagian bawah halaman. */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+            background-size: 56px 56px;
+            -webkit-mask-image: radial-gradient(ellipse 80% 55% at 50% 0%, #000 20%, transparent 75%);
+                    mask-image: radial-gradient(ellipse 80% 55% at 50% 0%, #000 20%, transparent 75%);
+        }
+        body::after {
+            content: '';
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background:
+                radial-gradient(1000px 560px at 14% -14%, rgba(22,224,174,0.075), transparent 62%),
+                radial-gradient(820px 480px at 100% -6%, rgba(132,171,255,0.055), transparent 60%);
+        }
+        .app-shell, .auth-wrap, .loader-overlay { position: relative; z-index: 1; }
+
+        h1, h2, h3, h4, h5 { font-family: var(--font-ui); letter-spacing: -0.02em; color: var(--text); }
+        h1 { font-weight: 700; letter-spacing: -0.03em; }
+        h2 { font-weight: 700; letter-spacing: -0.025em; }
+        h3, h4, h5 { font-weight: 600; }
+        p { color: var(--text-mid); }
+
+        /* Label bagian: dipakai berulang di hampir semua halaman sebagai
+           penanda kelompok. Disamakan di sini supaya tidak tiap template
+           mendefinisikan ukurannya sendiri-sendiri. */
+        .section-label {
+            font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--text-dim);
+        }
+        table, .mono, .stat-num, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+        a { text-decoration: none; }
+        ::selection { background: var(--accum); color: #04211D; }
+
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: var(--deep); }
+        ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid var(--deep); }
+        ::-webkit-scrollbar-thumb:hover { background: #46566E; }
+
+        /* ---------- Shell ---------- */
+        .app-shell { display: flex; min-height: 100vh; }
+
+        .app-sidebar {
+            width: 252px; flex-shrink: 0;
+            background: linear-gradient(180deg, rgba(12,17,25,0.97), rgba(7,10,15,0.97));
+            border-right: 1px solid var(--line-soft);
+            position: fixed; top: 0; bottom: 0; left: 0;
+            display: flex; flex-direction: column; z-index: 40;
+            transition: transform 0.24s cubic-bezier(0.4,0,0.2,1), width 0.22s cubic-bezier(0.4,0,0.2,1);
+        }
+        .app-brand {
+            display: flex; align-items: center; gap: 11px;
+            padding: 0 14px 0 18px; height: 64px; flex-shrink: 0;
+            border-bottom: 1px solid var(--line-soft); color: var(--text);
+        }
+        .brand-text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+        .brand-text b { font-weight: 800; font-size: 16.5px; letter-spacing: -0.03em; }
+        .brand-text small { font-size: 11px; font-weight: 500; color: var(--text-dim); white-space: nowrap; }
+        .sidebar-collapse-btn {
+            margin-left: auto; background: none; border: 1px solid transparent; color: var(--text-dim);
+            cursor: pointer; padding: 5px; border-radius: 8px; line-height: 0;
+            transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+        }
+        .sidebar-collapse-btn:hover { background: var(--raised); border-color: var(--line-soft); color: var(--text); }
+        .app-sidebar.collapsed { width: 72px; }
+        .app-sidebar.collapsed ~ .app-main, .app-sidebar.collapsed + .app-main { margin-left: 72px; }
+        .app-sidebar.collapsed .brand-text, .app-sidebar.collapsed .heading, .app-sidebar.collapsed .nav-text { display: none; }
+        .app-sidebar.collapsed .app-brand { justify-content: center; padding: 0; }
+        .app-sidebar.collapsed #sidebarCollapseBtn { display: none; }
+        .app-sidebar.collapsed #sidebarExpandBtn { display: block !important; }
+        .app-sidebar.collapsed .nav-link { justify-content: center; padding: 10px; }
+        .brand-mark {
+            width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--accum), #06B6D4);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 6px 20px -6px rgba(22,224,174,0.6);
+        }
+        .brand-mark svg { width: 15px; height: 15px; color: #04211D; }
+
+        .app-nav { flex: 1; overflow-y: auto; padding: 8px 12px 18px; scrollbar-width: thin; }
+        .app-nav .heading {
+            font-family: var(--font-ui); font-size: 10.5px; font-weight: 700;
+            letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase;
+            padding: 20px 12px 8px;
+        }
+
+        /* ---- Grup navigasi yang bisa dilipat ----
+           31 tautan di satu daftar datar terlalu banyak untuk dipindai
+           mata. Dikelompokkan menurut PERTANYAAN yang dijawab, bukan
+           urutan pembuatan -- heading "Watchlists" yang lama sempat
+           menampung Sidik Jari Broker dan Kepercayaan Data karena tiap
+           halaman baru ditempel di bawah heading terakhir. */
+        .app-nav .nav-group {
+            display: flex; align-items: center; gap: 7px; width: 100%;
+            background: none; border: none; cursor: pointer; text-align: left;
+            font-family: var(--font-ui); font-size: 10.5px; font-weight: 700;
+            letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase;
+            padding: 16px 12px 7px; border-radius: 8px; transition: color 0.16s ease;
+        }
+        .app-nav .nav-group:hover { color: var(--text-mid); }
+        .app-nav .nav-caret { flex-shrink: 0; transition: transform 0.18s cubic-bezier(0.4,0,0.2,1); }
+        .app-nav .nav-group.collapsed .nav-caret { transform: rotate(-90deg); }
+        .app-nav .nav-group-text { flex: 1; }
+        /* Jumlah item hanya berguna saat isinya tidak terlihat. */
+        .app-nav .nav-group-count {
+            font-family: var(--font-mono); font-size: 10px; letter-spacing: 0; color: var(--text-dim);
+            background: var(--raised); border-radius: 999px; padding: 0 7px; line-height: 17px;
+            opacity: 0; transition: opacity 0.16s ease;
+        }
+        .app-nav .nav-group.collapsed .nav-group-count { opacity: 1; }
+        .app-nav .nav-items { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.2s cubic-bezier(0.4,0,0.2,1); }
+        .app-nav .nav-items > * { min-height: 0; }
+        .app-nav .nav-items.collapsed { grid-template-rows: 0fr; }
+        .app-nav .nav-items.collapsed .nav-link { visibility: hidden; }
+        .app-nav .nav-items-inner { overflow: hidden; display: flex; flex-direction: column; }
+        /* Sidebar menyempit: heading grup tidak muat, dan melipat isinya
+           akan menyembunyikan ikon -- satu-satunya penanda yang tersisa. */
+        .app-sidebar.collapsed .nav-group { display: none; }
+        .app-sidebar.collapsed .nav-items,
+        .app-sidebar.collapsed .nav-items.collapsed { grid-template-rows: 1fr; }
+        .app-sidebar.collapsed .nav-items.collapsed .nav-link { visibility: visible; }
+        .app-nav .nav-link {
+            display: flex; align-items: center; gap: 11px;
+            padding: 8px 11px; border-radius: 10px; border: 1px solid transparent;
+            color: var(--text-mid); font-weight: 500; font-size: 13.5px;
+            white-space: nowrap; margin-bottom: 1px;
+            position: relative; transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+        }
+        .app-nav .nav-link svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.72; transition: opacity 0.16s ease, color 0.16s ease, transform 0.16s cubic-bezier(0.4,0,0.2,1); }
+        .app-nav .nav-link:hover { background: rgba(255,255,255,0.045); color: var(--text); }
+        .app-nav .nav-link:hover svg { opacity: 1; transform: scale(1.06); }
+        .app-nav .nav-link.active {
+            background: linear-gradient(90deg, rgba(22,224,174,0.15), rgba(22,224,174,0.04));
+            border-color: rgba(22,224,174,0.2);
+            color: var(--text); font-weight: 600;
+        }
+        .app-nav .nav-link.active svg { opacity: 1; color: var(--accum); }
+        .app-nav .nav-link.active::before {
+            content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%) scaleY(0);
+            width: 3px; height: 16px; border-radius: 0 3px 3px 0;
+            background: var(--accum); box-shadow: 0 0 12px var(--accum);
+            animation: navIndicatorIn 0.22s cubic-bezier(0.4,0,0.2,1) forwards;
+        }
+        @keyframes navIndicatorIn { to { transform: translateY(-50%) scaleY(1); } }
+        .nav-dot {
+            width: 7px; height: 7px; border-radius: 50%; background: var(--distrib);
+            box-shadow: 0 0 6px var(--distrib); flex-shrink: 0;
+        }
+
+        /* Kartu pengguna di dasar sidebar. Keluar pindah ke sini dari
+           topbar: jarang dipakai, jadi tidak perlu makan tempat di baris
+           yang dilihat di setiap halaman. */
+        .app-user {
+            display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+            margin: 0 12px 12px; padding: 9px 9px 9px 10px; border-radius: 12px;
+            border: 1px solid var(--line-soft); background: rgba(255,255,255,0.025);
+        }
+        .app-user-avatar {
+            width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
+            display: grid; place-items: center; font-weight: 800; font-size: 13.5px; color: #04211D;
+            background: linear-gradient(135deg, var(--info), var(--accum));
+        }
+        .app-user-meta { flex: 1; min-width: 0; line-height: 1.25; }
+        .app-user-meta b { display: block; font-size: 13px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .app-user-meta small { font-size: 11px; color: var(--text-dim); }
+        .app-user form { margin: 0; }
+        .app-user-out {
+            background: none; border: 1px solid transparent; border-radius: 8px; color: var(--text-dim);
+            padding: 6px; line-height: 0; cursor: pointer;
+            transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+        }
+        .app-user-out:hover { color: var(--distrib); background: var(--distrib-glow); border-color: rgba(255,96,118,0.25); }
+        .app-user-out svg { width: 16px; height: 16px; }
+        .app-sidebar.collapsed .app-user { flex-direction: column; margin: 0 10px 12px; padding: 8px 0; background: none; border-color: transparent; }
+        .app-sidebar.collapsed .app-user-meta { display: none; }
+
+        /* ---------- Main ---------- */
+        /* min-width: 0 WAJIB: .app-main itu flex item, dan min-width bawaannya
+           (auto) = lebar isi terlebar. Tabel white-space:nowrap di mana pun lalu
+           mendorong seluruh halaman selebar tabel -- di ponsel halaman Skor
+           Kecondongan sempat jadi 834px, bukan 375px, padahal tabelnya sudah
+           dibungkus overflow-x:auto yang mestinya menggulir sendiri. */
+        .app-main { flex: 1; min-width: 0; margin-left: 252px; display: flex; flex-direction: column; min-height: 100vh; transition: margin-left 0.22s cubic-bezier(0.4,0,0.2,1); }
+
+        /* Topbar tetap tembus pandang + blur karena dia melayang di atas
+           konten yang bergulir -- di sini efeknya berguna, beda dengan
+           kartu yang justru jadi kabur tepinya. Alpha dinaikkan supaya
+           teks di baliknya tidak menembus saat menggulir. */
+        .app-topbar {
+            height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 28px;
+            background: rgba(4,6,10,0.8); backdrop-filter: saturate(140%) blur(18px);
+            border-bottom: 1px solid var(--line-soft);
+            position: sticky; top: 0; z-index: 30;
+        }
+        .brand-mobile { color: var(--text); font-weight: 800; letter-spacing: -0.03em; display: none; }
+
+        /* Kotak cari di topbar sudah diganti tombol Sync; palet perintahnya
+           tetap ada lewat Ctrl K atau langsung mengetik di halaman mana pun. */
+        .command-palette kbd, kbd.kbd {
+            font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; color: var(--text-mid);
+            background: var(--raised); border: 1px solid var(--line); border-bottom-width: 2px;
+            border-radius: 6px; padding: 0 6px; line-height: 18px; box-shadow: none; white-space: nowrap;
+        }
+
+        .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+        /* ---------- Sync ke HP (BDM Saku) -- lihat kirim_hp.py ---------- */
+        .sync-trigger {
+            display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px 0 12px;
+            border-radius: 11px; cursor: pointer; position: relative;
+            background: rgba(255,255,255,0.04); border: 1px solid var(--line-soft);
+            color: var(--text-mid); font-family: var(--font-ui); font-size: 13px; font-weight: 600;
+            transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+        }
+        .sync-trigger:hover { background: var(--accum-glow); border-color: var(--accum-dim); color: var(--accum); }
+        .sync-trigger:focus-visible { outline: none; border-color: var(--accum-dim); box-shadow: 0 0 0 3px var(--accum-glow); }
+        .sync-trigger > svg { width: 15px; height: 15px; }
+        /* Titik hijau berdenyut = server kirim sedang siaga, meski popup ditutup. */
+        .sync-trigger .sync-dot {
+            display: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accum);
+            box-shadow: 0 0 0 0 var(--accum-glow); animation: syncPulse 1.6s ease-out infinite;
+        }
+        .sync-trigger.aktif .sync-dot { display: inline-block; }
+        .sync-trigger.aktif > svg { animation: none; }
+        .sync-trigger.ekspor > svg { animation: syncSpin 1s linear infinite; }
+        @keyframes syncPulse { 0% { box-shadow: 0 0 0 0 rgba(22,224,174,0.55); } 100% { box-shadow: 0 0 0 9px rgba(22,224,174,0); } }
+        @keyframes syncSpin { to { transform: rotate(360deg); } }
+
+        .sync-overlay {
+            visibility: hidden; opacity: 0; position: fixed; inset: 0; z-index: 210;
+            background: rgba(4,6,10,0.62); backdrop-filter: blur(6px);
+            display: flex; align-items: flex-start; justify-content: center; padding: 10vh 16px 16px;
+            transition: opacity 0.18s ease, visibility 0s linear 0.18s;
+        }
+        .sync-overlay.open { visibility: visible; opacity: 1; transition: opacity 0.18s ease; }
+        .sync-card {
+            width: min(460px, 100%); max-height: 80vh; overflow: auto;
+            background: linear-gradient(180deg, rgba(31,40,54,0.98), rgba(21,28,39,0.98));
+            border: 1px solid var(--line); border-radius: 18px;
+            box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255,255,255,0.05);
+            transform: translateY(-10px) scale(0.98); transition: transform 0.2s cubic-bezier(0.4,0,0.2,1);
+        }
+        .sync-overlay.open .sync-card { transform: none; }
+        .sync-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 6px; }
+        .sync-head .ikon {
+            width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+            background: var(--accum-glow); color: var(--accum);
+        }
+        .sync-head .ikon svg { width: 19px; height: 19px; }
+        .sync-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); }
+        .sync-head small { color: var(--text-dim); font-size: 12px; }
+        .sync-head .tutup { margin-left: auto; background: none; border: 0; color: var(--text-dim); font-size: 22px; line-height: 1; cursor: pointer; padding: 4px; }
+        .sync-head .tutup:hover { color: var(--text); }
+
+        .sync-langkah { display: flex; gap: 6px; padding: 12px 20px 4px; }
+        .sync-langkah span {
+            flex: 1; font-size: 11px; font-weight: 600; color: var(--text-dim); padding-top: 8px;
+            border-top: 3px solid var(--line-soft); transition: border-color 0.3s ease, color 0.3s ease;
+        }
+        .sync-langkah span.jalan { border-color: var(--warn); color: var(--text-mid); }
+        .sync-langkah span.beres { border-color: var(--accum); color: var(--accum); }
+        .sync-langkah span.gagal { border-color: var(--distrib); color: var(--distrib); }
+
+        .sync-body { padding: 14px 20px 6px; color: var(--text-mid); font-size: 13px; }
+        .sync-progres { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; margin: 10px 0 8px; }
+        .sync-progres span { display: block; height: 100%; background: var(--accum); border-radius: 3px; transition: width 0.4s ease; }
+        .sync-log {
+            font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); background: rgba(4,6,10,0.45);
+            border-radius: 10px; padding: 8px 10px; max-height: 120px; overflow: auto; white-space: pre-wrap; margin-top: 8px;
+        }
+        .sync-kode { display: flex; gap: 6px; justify-content: center; margin: 6px 0 4px; }
+        .sync-kode b {
+            width: 44px; height: 54px; display: grid; place-items: center; border-radius: 10px;
+            font-family: var(--font-mono); font-size: 26px; font-weight: 700; color: var(--text);
+            background: var(--raised); border: 1px solid var(--line); border-bottom-width: 3px;
+        }
+        .sync-sub { text-align: center; font-size: 12px; color: var(--text-dim); }
+        .sync-info { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 12px 0 4px; }
+        .sync-info span {
+            font-family: var(--font-mono); font-size: 11.5px; padding: 4px 10px; border-radius: 20px;
+            background: rgba(255,255,255,0.04); border: 1px solid var(--line-soft); color: var(--text-mid);
+        }
+        .sync-kirim { margin-top: 12px; }
+        .sync-kirim div {
+            display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; margin-top: 5px;
+            background: var(--accum-glow); color: var(--accum); font-size: 12.5px; animation: syncMasuk 0.35s ease;
+        }
+        .sync-kirim div .redup { color: var(--text-dim); margin-left: auto; font-family: var(--font-mono); font-size: 11px; }
+        @keyframes syncMasuk { from { opacity: 0; transform: translateY(4px); } }
+        .sync-tunggu { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 12px; color: var(--text-dim); font-size: 12.5px; }
+        .sync-tunggu i { width: 7px; height: 7px; border-radius: 50%; background: var(--accum); animation: syncPulse 1.6s ease-out infinite; }
+        details.sync-apk { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+        details.sync-apk summary { cursor: pointer; font-size: 12.5px; color: var(--info); list-style: none; }
+        details.sync-apk summary::-webkit-details-marker { display: none; }
+        .sync-apk-isi { display: flex; gap: 14px; align-items: center; margin-top: 10px; }
+        .sync-qr { background: #F4F7FB; padding: 8px; border-radius: 10px; flex-shrink: 0; line-height: 0; }
+        .sync-qr:empty { display: none; }
+        .sync-apk-isi .catatan { font-size: 12px; color: var(--text-dim); line-height: 1.5; word-break: break-all; }
+        .sync-apk-isi code { color: var(--text); font-size: 11.5px; }
+        .sync-galat { color: var(--distrib); background: var(--distrib-glow); border-radius: 10px; padding: 10px 12px; }
+        .sync-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px 18px; }
+        .sync-foot button {
+            height: 36px; padding: 0 14px; border-radius: 10px; font-family: var(--font-ui); font-size: 13px; font-weight: 600; cursor: pointer;
+            background: rgba(255,255,255,0.04); border: 1px solid var(--line); color: var(--text-mid);
+        }
+        .sync-foot button:hover { color: var(--text); border-color: var(--text-dim); }
+        .sync-foot button.utama { background: var(--accum); border-color: var(--accum); color: var(--void); }
+        .sync-foot button.utama:hover { filter: brightness(1.08); color: var(--void); }
+        .sync-foot button[hidden] { display: none; }
+
+        /* Tanggal data terakhir, di setiap halaman: pertanyaan pertama saat
+           membaca angka apa pun adalah "ini data kapan". Kuning kalau
+           lebih dari 4 hari kalender (lewat akhir pekan + satu libur). */
+        .data-chip {
+            display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px;
+            border-radius: 999px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03);
+            font-size: 12px; color: var(--text-dim); white-space: nowrap;
+        }
+        .data-chip b { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; color: var(--text-mid); }
+        .data-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--accum); box-shadow: 0 0 0 3px var(--accum-glow); }
+        .data-chip.basi { border-color: rgba(255,195,82,0.3); }
+        .data-chip.basi i { background: var(--warn); box-shadow: 0 0 0 3px rgba(255,195,82,0.15); }
+
+        .quick-add {
+            display: flex; align-items: center; height: 34px; overflow: hidden;
+            border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,0.035);
+            transition: border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+        .quick-add:focus-within { border-color: var(--accum-dim); box-shadow: 0 0 0 3px var(--accum-glow); }
+        .quick-add input {
+            width: 112px; height: 100%; border: 0; background: transparent; color: var(--text);
+            padding: 0 10px; font-family: var(--font-mono); font-size: 12.5px;
+        }
+        .quick-add input::placeholder { font-family: var(--font-ui); color: var(--text-dim); }
+        .quick-add input:focus { outline: none; }
+        .quick-add button {
+            height: 100%; border: 0; border-left: 1px solid var(--line); background: rgba(255,255,255,0.04);
+            color: var(--text-mid); font-family: var(--font-ui); font-weight: 600; font-size: 12.5px;
+            padding: 0 11px; white-space: nowrap; transition: background-color 0.16s ease, color 0.16s ease;
+        }
+        .quick-add button:hover { background: var(--accum-glow); color: var(--accum); }
+        .topbar-right .btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 2px; }
+
+        .app-content { padding: 24px 32px 56px; flex: 1; }
+
+        /* ---------- Palet perintah (Ctrl K, atau ketik langsung) ---------- */
+        .command-palette-overlay {
+            visibility: hidden; opacity: 0; position: fixed; inset: 0; z-index: 200;
+            background: rgba(4,6,10,0.62); backdrop-filter: blur(6px);
+            padding-top: 12vh; transition: opacity 0.16s ease, visibility 0s linear 0.16s;
+        }
+        .command-palette-overlay.open { visibility: visible; opacity: 1; transition: opacity 0.16s ease; }
+        .command-palette {
+            width: min(600px, calc(100vw - 32px)); margin: 0 auto;
+            background: linear-gradient(180deg, rgba(31,40,54,0.98), rgba(21,28,39,0.98));
+            border: 1px solid var(--line); border-radius: 16px;
+            box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255,255,255,0.05);
+            overflow: hidden; transform: translateY(-8px) scale(0.98);
+            transition: transform 0.18s cubic-bezier(0.4,0,0.2,1);
+        }
+        .command-palette-overlay.open .command-palette { transform: translateY(0) scale(1); }
+        .cmd-input-wrap { display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--line-soft); }
+        .cmd-input-wrap > svg { width: 17px; height: 17px; color: var(--text-dim); flex-shrink: 0; }
+        .command-palette input {
+            flex: 1; min-width: 0; background: transparent; border: none; color: var(--text);
+            padding: 16px 0; font-family: var(--font-ui); font-size: 15.5px;
+        }
+        .command-palette input:focus { outline: none; }
+        .command-palette input::placeholder { color: var(--text-dim); }
+        .command-palette-results { max-height: min(56vh, 460px); overflow-y: auto; padding: 4px 8px 8px; }
+        .cmd-group { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); padding: 12px 10px 6px; }
+        .cmd-item {
+            display: flex; align-items: center; gap: 11px;
+            padding: 8px 10px; border-radius: 10px; cursor: pointer;
+            font-size: 13.5px; color: var(--text);
+        }
+        .cmd-ic {
+            width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center;
+            background: rgba(255,255,255,0.04); border: 1px solid var(--line-soft); color: var(--text-mid);
+        }
+        .cmd-ic svg { width: 14px; height: 14px; }
+        .cmd-ic.saham { color: var(--accum); background: var(--accum-glow); border-color: rgba(22,224,174,0.22); }
+        .cmd-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cmd-item.saham .cmd-label { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.02em; }
+        .cmd-item .cmd-hint { font-size: 11.5px; color: var(--text-dim); white-space: nowrap; }
+        .cmd-item:hover, .cmd-item.active { background: rgba(255,255,255,0.06); color: var(--text); }
+        .cmd-item.active { box-shadow: inset 0 0 0 1px var(--line); }
+        .cmd-item.active .cmd-ic { color: var(--accum); border-color: rgba(22,224,174,0.3); }
+        .cmd-item-empty { padding: 22px 12px; color: var(--text-dim); font-size: 13px; text-align: center; }
+        .cmd-foot {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
+            padding: 9px 14px; border-top: 1px solid var(--line-soft); background: rgba(0,0,0,0.14);
+            font-size: 11.5px; color: var(--text-dim);
+        }
+        .cmd-foot span { display: inline-flex; align-items: center; gap: 5px; }
+        .cmd-foot .push { margin-left: auto; }
+        @media (max-width: 560px) { .cmd-foot { display: none; } }
+
+        .page-header {
+            display: flex; align-items: flex-end; justify-content: space-between;
+            flex-wrap: wrap; gap: 14px; margin-bottom: 20px;
+        }
+        .page-title-wrap { min-width: 0; }
+        /* Remah: nama grup menu tempat halaman ini tinggal, diisi dari
+           tautan aktif di sidebar -- jadi tidak ada daftar kedua yang bisa
+           lupa diperbarui. Kosong = disembunyikan. */
+        .page-crumb {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--accum); margin-bottom: 6px;
+        }
+        .page-crumb:empty { display: none; }
+        .page-header h1 { font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -0.035em; line-height: 1.15; }
+        .page-sub { margin: 6px 0 0; font-size: 13.5px; color: var(--text-dim); }
+        .topbar-right .toolbar { display: flex; align-items: center; gap: 8px; }
+
+        /* ---------- Buttons & controls ---------- */
+        .btn {
+            font-family: var(--font-ui); font-weight: 600; font-size: 13px;
+            border-radius: 10px; padding: 8px 15px; border: 1px solid var(--line);
+            background: var(--raised); color: var(--text);
+            transition: transform 0.16s cubic-bezier(0.4,0,0.2,1), box-shadow 0.16s cubic-bezier(0.4,0,0.2,1),
+                border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+        }
+        .btn:hover { border-color: var(--line); background: var(--raised); color: var(--text); transform: translateY(-1px); }
+        .btn:active { transform: translateY(0) scale(0.97); transition-duration: 0.08s; }
+        .btn:focus-visible { box-shadow: 0 0 0 3px var(--accum-glow); border-color: var(--accum-dim); }
+        .btn-primary, .btn-accent {
+            background: linear-gradient(135deg, var(--accum), #06B6D4);
+            border: none; color: #04211D; font-weight: 700;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 6px 18px -8px rgba(22,224,174,0.7);
+        }
+        .btn-primary:hover, .btn-accent:hover {
+            background: linear-gradient(135deg, #14F5D8, #22C9E4);
+            color: #04211D; box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 8px 24px -8px rgba(22,224,174,0.8);
+            transform: translateY(-1px);
+        }
+        .btn-outline-primary { background: transparent; border-color: var(--accum-dim); color: var(--accum); }
+        .btn-outline-primary:hover { background: var(--accum-glow); border-color: var(--accum); color: var(--accum); }
+        .btn-outline-danger { background: transparent; border-color: var(--distrib-dim); color: var(--distrib); }
+        .btn-outline-danger:hover { background: var(--distrib-glow); border-color: var(--distrib); color: var(--distrib); }
+        .btn-outline-secondary { background: rgba(255,255,255,0.02); border-color: var(--line); color: var(--text-mid); }
+        .btn-outline-secondary:hover { background: var(--raised); color: var(--text); }
+        .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 9px; }
+        .btn-link { border: none; background: none; }
+
+        .form-control, .form-select {
+            background: rgba(255,255,255,0.035); border: 1px solid var(--line);
+            border-radius: 10px; color: var(--text); font-size: 13px;
+            transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .form-control:focus, .form-select:focus {
+            background: rgba(255,255,255,0.06); border-color: var(--accum-dim);
+            color: var(--text); box-shadow: 0 0 0 3px var(--accum-glow);
+        }
+        .form-control::placeholder { color: var(--text-dim); opacity: 1; }
+        select { color-scheme: dark; }
+        select option, select optgroup { background-color: var(--surface); color: var(--text); }
+        select option:checked { background-color: var(--raised); color: var(--text); }
+
+        /* ---------- Cards ----------
+           Sorot tipis di tepi atas (inset) memberi kesan bidang yang
+           terangkat tanpa menerangkan permukaannya -- menerangkan
+           permukaan menurunkan kontras teks yang sudah diukur di atas. */
+        .content-card {
+            background: linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0) 140px), var(--surface);
+            border: 1px solid var(--line-soft);
+            border-radius: var(--radius);
+            padding: 22px;
+            box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255,255,255,0.04);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .content-card:hover { border-color: var(--line); }
+
+        /* The flow meter — the site's signature element. A single bar
+           showing accumulation pressure vs distribution pressure, so the
+           core question this app answers is legible at a glance. */
+        .flow-meter {
+            height: 4px; border-radius: 3px; overflow: hidden;
+            background: var(--distrib); display: flex;
+        }
+        .flow-meter .accum-fill {
+            background: linear-gradient(90deg, var(--accum), #06B6D4);
+            box-shadow: 0 0 10px var(--accum-glow);
+            transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+        }
+        .flow-legend {
+            display: flex; justify-content: space-between;
+            font-family: var(--font-mono); font-size: 10px;
+            color: var(--text-dim); margin-top: 6px; letter-spacing: 0.06em;
+        }
+
+        /* ---------- Bootstrap overrides ---------- */
+        .table { color: var(--text); margin-bottom: 0; }
+        .table > :not(caption) > * > * {
+            border-color: var(--line-soft); background: transparent;
+            color: var(--text); padding: 11px 14px;
+        }
+        .table thead th {
+            font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+            letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-mid);
+            border-bottom: 1px solid var(--line) !important;
+            background: rgba(255,255,255,0.022);
+        }
+        .table-striped > tbody > tr:nth-of-type(odd) > * { background-color: rgba(255,255,255,0.025); }
+        .table-hover > tbody > tr > * { transition: background-color 0.15s ease; }
+        .table-hover > tbody > tr:hover > * { background-color: var(--accum-glow); color: var(--text); }
+        table tbody tr td { transition: background-color 0.15s ease; }
+        .alert { border-radius: 12px; border: 1px solid var(--line);
+                 background: rgba(27,35,48,0.92); color: var(--text); box-shadow: var(--shadow-card);
+                 backdrop-filter: blur(8px); }
+        .alert-success { border-left: 3px solid var(--accum); }
+        .alert-danger { border-left: 3px solid var(--distrib); }
+        .alert-warning { border-left: 3px solid #F59E0B; }
+        .modal-content {
+            background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 120px), var(--surface);
+            color: var(--text); border: 1px solid var(--line); border-radius: 16px;
+            box-shadow: var(--shadow-float);
+        }
+        .modal-header, .modal-footer { border-color: var(--line-soft); }
+        .btn-close { filter: invert(1) grayscale(1) brightness(1.6); }
+        .text-muted { color: var(--text-dim) !important; }
+        .card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius); }
+
+        /* ---------- Loader ----------
+           Dipanggil showLoader() sebelum Analyze (proses lama di server).
+           Menggantikan tulisan L-O-A-D-I-N-G berukuran 130px yang
+           berputar -- kesannya macet, bukan sedang bekerja. */
+        .loader-overlay {
+            display: none; position: fixed; inset: 0; z-index: 2000;
+            background: rgba(4,6,10,0.86); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+            text-align: center; padding: 20px;
+        }
+        .ld-ring { width: 64px; height: 64px; position: relative; display: grid; place-items: center; margin-bottom: 6px; }
+        .ld-ring::before {
+            content: ''; position: absolute; inset: 0; border-radius: 50%;
+            border: 2px solid var(--line-soft); border-top-color: var(--accum);
+            animation: ldSpin 0.9s linear infinite;
+        }
+        @keyframes ldSpin { to { transform: rotate(360deg); } }
+        .ld-title { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; color: var(--text); }
+        .ld-sub { font-size: 12.5px; color: var(--text-dim); max-width: 34ch; }
+        .loader-bar {
+            width: 190px; height: 2px; background: var(--line);
+            border-radius: 2px; overflow: hidden; margin-top: 6px;
+        }
+        .loader-bar span {
+            display: block; height: 100%; width: 40%; border-radius: 2px;
+            background: linear-gradient(90deg, transparent, var(--accum), transparent);
+            animation: loader-sweep 1.3s ease-in-out infinite;
+        }
+        @keyframes loader-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+
+        /* ---------- Skeleton shimmer (opt-in: add class="skeleton") ----------
+           A living placeholder for anything loading asynchronously (a
+           chart, a broker table) instead of static "Loading..." text. */
+        .skeleton {
+            position: relative; overflow: hidden; background: var(--raised);
+            border-radius: 6px; color: transparent !important; pointer-events: none;
+        }
+        .skeleton::after {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+            animation: skeleton-sweep 1.4s ease-in-out infinite;
+        }
+        @keyframes skeleton-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+        /* ---------- Auth (login & daftar) ----------
+           Dipakai bersama login.html dan sign_up.html -- dulu masing-
+           masing menyalin gaya kartunya sendiri. Kiri: apa ini (hilang di
+           ponsel), kanan: formnya. */
+        .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+        .auth-split {
+            width: 100%; max-width: 960px; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+            border-radius: 22px; overflow: hidden; border: 1px solid var(--line);
+            background: rgba(10,14,21,0.8); backdrop-filter: blur(14px);
+            box-shadow: var(--shadow-float);
+        }
+        .auth-side {
+            display: flex; flex-direction: column; gap: 26px; padding: 36px 38px;
+            border-right: 1px solid var(--line-soft);
+            background:
+                radial-gradient(80% 60% at 0% 0%, rgba(22,224,174,0.16), transparent 70%),
+                radial-gradient(70% 60% at 100% 100%, rgba(132,171,255,0.12), transparent 70%),
+                linear-gradient(180deg, #0E141E, #0A0E15);
+        }
+        .auth-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.03em; color: var(--text); }
+        .auth-brand:hover { color: var(--text); }
+        .auth-brand-m { display: none; margin-bottom: 22px; }
+        .auth-pitch h2 { font-size: 30px; line-height: 1.1; letter-spacing: -0.04em; font-weight: 800; margin: 0 0 12px; }
+        .auth-grad {
+            background: linear-gradient(100deg, var(--accum), #06B6D4 55%, var(--info));
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        .auth-pitch p { font-size: 14px; margin: 0; line-height: 1.6; }
+        .auth-points { list-style: none; padding: 0; margin: 0; display: grid; gap: 11px; }
+        .auth-points li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--text-mid); line-height: 1.5; }
+        .auth-points svg { width: 16px; height: 16px; color: var(--accum); flex-shrink: 0; margin-top: 1px; }
+        .auth-meta { margin-top: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
+        .auth-meta i { width: 7px; height: 7px; border-radius: 50%; background: var(--accum); box-shadow: 0 0 0 3px var(--accum-glow); }
+        .auth-meta b { font-family: var(--font-mono); color: var(--text-mid); font-weight: 600; }
+        .auth-main { padding: 36px 38px; display: flex; flex-direction: column; justify-content: center; }
+        .auth-back { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); margin-bottom: 26px; align-self: flex-start; }
+        .auth-back:hover { color: var(--accum); }
+        .auth-back svg { width: 14px; height: 14px; }
+        .auth-title { font-size: 26px; font-weight: 800; letter-spacing: -0.035em; margin: 0 0 6px; }
+        .auth-sub { color: var(--text-dim); font-size: 13.5px; margin: 0 0 24px; }
+        .auth-field { margin-bottom: 14px; }
+        .auth-field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-mid); margin-bottom: 6px; }
+        .auth-field input {
+            width: 100%; height: 44px; background: rgba(255,255,255,0.04);
+            border: 1px solid var(--line); border-radius: 11px;
+            padding: 0 14px; color: var(--text); font-size: 14px; font-family: var(--font-ui);
+            transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .auth-field input::placeholder { color: var(--text-dim); }
+        .auth-field input:focus { outline: none; background: rgba(255,255,255,0.06); border-color: var(--accum-dim); box-shadow: 0 0 0 3px var(--accum-glow); }
+        .auth-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .auth-submit {
+            width: 100%; height: 46px; margin-top: 8px; border: none; border-radius: 11px; cursor: pointer;
+            font-family: var(--font-ui); font-weight: 700; font-size: 14.5px; color: #04211D;
+            background: linear-gradient(135deg, var(--accum), #06B6D4);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 26px -10px rgba(22,224,174,0.75);
+            transition: transform 0.16s ease, box-shadow 0.16s ease;
+        }
+        .auth-submit:hover { background: linear-gradient(135deg, #2BF0C0, #22C9E4); transform: translateY(-1px); }
+        .auth-submit:focus-visible { outline: 2px solid var(--accum); outline-offset: 3px; }
+        .auth-foot { margin-top: 20px; font-size: 13px; color: var(--text-dim); }
+        .auth-foot a { color: var(--accum); font-weight: 600; }
+        @media (max-width: 820px) {
+            .auth-split { grid-template-columns: 1fr; max-width: 440px; }
+            .auth-side { display: none; }
+            .auth-main { padding: 28px 24px; }
+            .auth-brand-m { display: inline-flex; }
+            .auth-back { margin-bottom: 18px; }
+        }
+        @media (max-width: 480px) { .auth-row2 { grid-template-columns: 1fr; } }
+
+        /* ---------- Entrance ---------- */
+        @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .app-content > * { animation: rise 0.4s cubic-bezier(0.4,0,0.2,1) backwards; }
+        .app-content > *:nth-child(2) { animation-delay: 0.05s; }
+        .app-content > *:nth-child(3) { animation-delay: 0.1s; }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        }
+
+        /* ---------- Mobile ---------- */
+        .sidebar-toggle-btn { display: none; }
+        .sidebar-scrim { display: none; }
+        @media (max-width: 880px) {
+            .app-sidebar { transform: translateX(-100%); box-shadow: 0 0 40px rgba(0,0,0,0.6); }
+            .app-sidebar.open { transform: translateX(0); }
+            .app-main,
+            .app-sidebar.collapsed ~ .app-main { margin-left: 0; }
+            .app-content { padding: 18px 16px 40px; }
+            .sidebar-toggle-btn {
+                display: inline-flex; align-items: center; justify-content: center;
+                width: 36px; height: 36px; border: 1px solid var(--line);
+                border-radius: 10px; background: var(--raised); color: var(--text);
+            }
+            .brand-mobile { display: inline-block; }
+            /* Sidebar terbuka di ponsel: ketuk di luar untuk menutup. */
+            .app-sidebar.open ~ .sidebar-scrim {
+                display: block; position: fixed; inset: 0; z-index: 35;
+                background: rgba(4,6,10,0.55); backdrop-filter: blur(2px);
+            }
+
+            /* The topbar holds search + quick-add + Analyze -- too many
+               controls for one row on a phone, so let it wrap instead of
+               squeezing everything. */
+            .app-topbar { height: auto; flex-wrap: wrap; padding: 10px 16px; row-gap: 10px; }
+            .topbar-right { flex-wrap: wrap; row-gap: 8px; justify-content: flex-end; }
+            .data-chip .lbl { display: none; }
+            .page-header h1 { font-size: 23px; }
+        }
+        @media (max-width: 480px) {
+            /* Satu baris: tombol menu + tambah saham + Analyze; kotak cari di
+               baris kedua. Nama BDM & tanggal data mengalah ke sidebar. */
+            .data-chip, .brand-mobile { display: none; }
+            .sync-trigger { padding: 0 11px; }
+            .quick-add input { width: 92px; }
+        }
+
+        /* ---------- daterangepicker dark theme override ----------
+           The plugin ships a light theme (white popup, dark text) with
+           no built-in dark mode, so every one of its pieces needs an
+           explicit override to match the app's ink/navy palette. */
+        .daterangepicker {
+            background: var(--surface); border: 1px solid var(--line-soft);
+            color: var(--text); box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .daterangepicker:before { border-bottom-color: var(--line-soft); }
+        .daterangepicker:after { border-bottom-color: var(--surface); }
+        .daterangepicker .calendar-table { background: var(--surface); border-color: var(--line-soft); }
+        .daterangepicker td.off, .daterangepicker td.off.in-range,
+        .daterangepicker td.off.start-date, .daterangepicker td.off.end-date { color: var(--text-dim); opacity: 0.35; background: transparent; }
+        .daterangepicker td.available:hover, .daterangepicker th.available:hover { background: var(--raised); color: var(--text); }
+        .daterangepicker td.in-range { background: var(--accum-glow); color: var(--text); }
+        .daterangepicker td.active, .daterangepicker td.active:hover {
+            background: var(--accum); color: var(--void); font-weight: 700;
+        }
+        .daterangepicker th.month { color: var(--text); }
+        .daterangepicker th, .daterangepicker td { color: var(--text); }
+        .daterangepicker .prev span, .daterangepicker .next span { border-color: var(--text-dim); }
+        .daterangepicker .prev:hover span, .daterangepicker .next:hover span { border-color: var(--accum); }
+        .daterangepicker .drp-buttons { border-top: 1px solid var(--line-soft); background: var(--surface); }
+        .daterangepicker .drp-selected { color: var(--text-dim); }
+        .daterangepicker .cancelBtn { background: var(--raised); border-color: var(--line-soft); color: var(--text); }
+        .daterangepicker .applyBtn { background: var(--accum); border-color: var(--accum); color: var(--void); font-weight: 700; }
+        .daterangepicker select.monthselect, .daterangepicker select.yearselect,
+        .daterangepicker select.hourselect, .daterangepicker select.minuteselect {
+            background: var(--raised); border: 1px solid var(--line-soft); color: var(--text);
+        }
+        .daterangepicker .calendar-table .next span, .daterangepicker .calendar-table .prev span { filter: invert(0.6); }
+    </style>
+</head>
+
+<body>
+
+<div class="loader-overlay" id="loaderOverlay" role="status" aria-live="polite">
+    <div class="ld-ring">
+        <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
+        </span>
+    </div>
+    <div class="ld-title">Memproses data&hellip;</div>
+    <div class="ld-sub">Halaman terbuka sendiri begitu selesai. Jangan ditutup dulu.</div>
+    <div class="loader-bar"><span></span></div>
+</div>
+
+{% if user.is_authenticated %}
+<div class="command-palette-overlay" id="cmdPaletteOverlay">
+    <div class="command-palette" id="cmdPalette" role="dialog" aria-modal="true" aria-label="Cari halaman atau kode saham">
+        <div class="cmd-input-wrap">
+            <i data-feather="search"></i>
+            <input type="text" id="cmdPaletteInput" placeholder="Cari halaman atau kode saham&hellip;" autocomplete="off" spellcheck="false">
+            <kbd>esc</kbd>
+        </div>
+        <div class="command-palette-results" id="cmdPaletteResults" role="listbox"></div>
+        <div class="cmd-foot">
+            <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> pilih</span>
+            <span><kbd>&crarr;</kbd> buka</span>
+            <span><kbd>esc</kbd> tutup</span>
+            <span class="push"><kbd><span class="kbd-mod">Ctrl</span> K</kbd> dari halaman mana pun</span>
+        </div>
+    </div>
+</div>
+
+<div class="sync-overlay" id="syncOverlay">
+    <div class="sync-card" role="dialog" aria-modal="true" aria-labelledby="syncJudul">
+        <div class="sync-head">
+            <span class="ikon"><i data-feather="smartphone"></i></span>
+            <div><h3 id="syncJudul">Kirim ke HP</h3><small>BDM Saku &middot; lewat WiFi, tanpa internet</small></div>
+            <button type="button" class="tutup" id="syncTutup" aria-label="Tutup">&times;</button>
+        </div>
+        <div class="sync-langkah">
+            <span id="syncL1">1 &middot; Ekspor data</span>
+            <span id="syncL2">2 &middot; Siaga WiFi</span>
+            <span id="syncL3">3 &middot; Terkirim</span>
+        </div>
+        <div class="ap-note" style="padding:12px 20px">Termasuk Kalender Pasar, Agenda Emiten, dan berita global: The Fed, NFP, inflasi AS, MSCI, dan risiko global. Laptop memerlukan internet untuk memperbarui berita; HP membaca snapshot terakhir setelah Sync. Pembaruan aplikasi mencakup perbaikan keamanan tampilan Rotasi Sektor. Setelah Sinkron di HP, ketuk Pasang untuk memperbarui aplikasi.</div>
+        <div class="sync-body" id="syncBody"></div>
+        <div class="sync-foot">
+            <button type="button" id="syncMatikan" hidden>Matikan</button>
+            <button type="button" id="syncUlang" hidden>Ekspor ulang</button>
+            <button type="button" class="utama" id="syncSelesai">Tutup</button>
+        </div>
+    </div>
+</div>
+
+<div class="app-shell">
+    <aside class="app-sidebar" id="appSidebar">
+        <div class="app-brand">
+            <span class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
+            </span>
+            <span class="brand-text"><b>BDM</b><small>Riset bandarmologi BEI</small></span>
+            <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="Collapse menu">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+        </div>
+        <button type="button" id="sidebarExpandBtn" class="sidebar-collapse-btn" style="display:none; margin:8px auto 0;" aria-label="Expand menu">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
+        <nav class="app-nav">
+            <button type="button" class="nav-group" data-group="pantau" aria-expanded="true">
+                <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nav-group-text">Pantau</span>
+                <span class="nav-group-count">6</span>
+            </button>
+            <div class="nav-items" data-group-items="pantau">
+                <div class="nav-items-inner">
+                    <a class="nav-link" href="/"><i data-feather="home"></i><span class="nav-text">Dashboard</span></a>
+                    <a class="nav-link" href="/musiman-saham"><i data-feather="calendar"></i><span class="nav-text">Musiman Saham</span></a>
+                    <a class="nav-link" href="/perubahan-kepemilikan"><i data-feather="users"></i><span class="nav-text">Perubahan Kepemilikan</span></a>
+                    <a class="nav-link" href="/rotasi-sektor"><i data-feather="bar-chart-2"></i><span class="nav-text">Rotasi Sektor</span></a>
+                    <a class="nav-link" href="/kalender-pasar"><i data-feather="calendar"></i><span class="nav-text">Kalender Pasar</span></a>
+                    <a class="nav-link" href="/agenda-emiten"><i data-feather="briefcase"></i><span class="nav-text">Agenda Emiten</span></a>
+                    <a class="nav-link" href="/kabar-semalam"><i data-feather="moon"></i><span class="nav-text">Kabar Semalam</span></a>
+                    <a class="nav-link" href="/ramai-dibahas"><i data-feather="message-circle"></i><span class="nav-text">Ramai Dibahas</span></a>
+                    <a class="nav-link" href="/watchlist-digest"><i data-feather="list"></i><span class="nav-text">Ringkasan Watchlist</span></a>
+                    <a class="nav-link" href="/watchlist-history"><i data-feather="clock"></i><span class="nav-text">History</span><span class="nav-dot" id="historyNavDot" style="display:none;"></span></a>
+                    <a class="nav-link" href="/jurnal-keputusan"><i data-feather="book-open"></i><span class="nav-text">Jurnal Keputusan</span></a>
+                </div>
+            </div>
+            <button type="button" class="nav-group" data-group="watchlist" aria-expanded="true">
+                <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nav-group-text">Watchlist</span>
+                <span class="nav-group-count">5</span>
+            </button>
+            <div class="nav-items" data-group-items="watchlist">
+                <div class="nav-items-inner">
+                    <a class="nav-link" href="/display-stock-list?type=PortfolioStocks"><i data-feather="briefcase"></i><span class="nav-text">Portfolio</span></a>
+                    <a class="nav-link" href="/display-stock-list?type=BestStocks"><i data-feather="star"></i><span class="nav-text">Best</span></a>
+                    <a class="nav-link" href="/display-stock-list?type=BestLowStocks"><i data-feather="trending-down"></i><span class="nav-text">Best Low</span></a>
+                    <a class="nav-link" href="/display-stock-list?type=PatternUpStocks"><i data-feather="activity"></i><span class="nav-text">Pattern Up</span></a>
+                    <a class="nav-link" href="/compare"><i data-feather="layers"></i><span class="nav-text">Compare</span></a>
+                </div>
+            </div>
+            <button type="button" class="nav-group" data-group="telaah" aria-expanded="true">
+                <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nav-group-text">Telaah Saham</span>
+                <span class="nav-group-count">6</span>
+            </button>
+            <div class="nav-items" data-group-items="telaah">
+                <div class="nav-items-inner">
+                    <a class="nav-link" href="/saham/BBRI"><i data-feather="search"></i><span class="nav-text">Halaman Saham</span></a>
+                    <a class="nav-link" href="/kepemilikan-saham"><i data-feather="pie-chart"></i><span class="nav-text">Kepemilikan Saham</span></a>
+                    <a class="nav-link" href="/perbarui-kepemilikan"><i data-feather="refresh-cw"></i><span class="nav-text">Perbarui Kepemilikan</span></a>
+                    <a class="nav-link" href="/sidik-jari-broker"><i data-feather="users"></i><span class="nav-text">Sidik Jari Broker</span></a>
+                    <a class="nav-link" href="/konsistensi-broker"><i data-feather="repeat"></i><span class="nav-text">Konsistensi Broker</span></a>
+                    <a class="nav-link" href="/insider-activity"><i data-feather="user-check"></i><span class="nav-text">Aktivitas Insider</span></a>
+                </div>
+            </div>
+            <button type="button" class="nav-group collapsed" data-group="pindai" aria-expanded="false">
+                <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nav-group-text">Pindai Pasar</span>
+                <span class="nav-group-count">18</span>
+            </button>
+            <div class="nav-items collapsed" data-group-items="pindai">
+                <div class="nav-items-inner">
+                    <a class="nav-link" href="/apa-berubah"><i data-feather="git-compare"></i><span class="nav-text">Apa Berubah Hari Ini</span></a>
+                    <a class="nav-link" href="/takaran-risiko"><i data-feather="activity"></i><span class="nav-text">Takaran Risiko</span></a>
+                    <a class="nav-link" href="/scanner-lab"><i data-feather="radio"></i><span class="nav-text">Scanner Lab</span></a>
+                    <a class="nav-link" href="/kering-screener"><i data-feather="droplet"></i><span class="nav-text">Kering Screener</span></a>
+                    <a class="nav-link" href="/serapan-float"><i data-feather="download-cloud"></i><span class="nav-text">Serapan Float</span></a>
+                    <a class="nav-link" href="/akumulasi-palsu"><i data-feather="alert-triangle"></i><span class="nav-text">Akumulasi Palsu</span></a>
+                    <a class="nav-link" href="/jatuh-dalam"><i data-feather="trending-down"></i><span class="nav-text">Jatuh Dalam</span></a>
+                    <a class="nav-link" href="/tembus-basis"><i data-feather="trending-up"></i><span class="nav-text">Tembus Basis</span></a>
+                    <a class="nav-link" href="/ema-weekly"><i data-feather="trending-up"></i><span class="nav-text">EMA Golden Cross Weekly</span></a>
+                    <a class="nav-link" href="/skor-kecondongan"><i data-feather="sliders"></i><span class="nav-text">Skor Kecondongan</span></a>
+                    <a class="nav-link" href="/radar-insider"><i data-feather="crosshair"></i><span class="nav-text">Radar Insider</span></a>
+                    <a class="nav-link" href="/dicicil-insider"><i data-feather="shopping-bag"></i><span class="nav-text">Dicicil Insider</span></a>
+                    <a class="nav-link" href="/rapat-agen"><i data-feather="users"></i><span class="nav-text">Rapat Agen</span></a>
+                    <a class="nav-link" href="/penemu-pola"><i data-feather="git-branch"></i><span class="nav-text">Penemu Pola</span></a>
+                    <a class="nav-link" href="/display-analyze?type=RetailSellStocks"><i data-feather="filter"></i><span class="nav-text">Retail Sell</span></a>
+                    <a class="nav-link" href="/display-analyze?type=ConsolStocks"><i data-feather="filter"></i><span class="nav-text">Consol</span></a>
+                    <a class="nav-link" href="/display-analyze?type=RetailSellLowValueStocks"><i data-feather="filter"></i><span class="nav-text">Retail Sell Low</span></a>
+                    <a class="nav-link" href="/display-analyze?type=ConsolLowValueStocks"><i data-feather="filter"></i><span class="nav-text">Consol Low</span></a>
+                    <a class="nav-link" href="/display-stocks?path=LQ45"><i data-feather="bar-chart-2"></i><span class="nav-text">All Charts</span></a>
+                </div>
+            </div>
+            <button type="button" class="nav-group collapsed" data-group="periksa" aria-expanded="false">
+                <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nav-group-text">Periksa Diri</span>
+                <span class="nav-group-count">5</span>
+            </button>
+            <div class="nav-items collapsed" data-group-items="periksa">
+                <div class="nav-items-inner">
+                    <a class="nav-link" href="/status-bukti"><i data-feather="award"></i><span class="nav-text">Status Bukti</span></a>
+                    <a class="nav-link" href="/audit-screener"><i data-feather="crosshair"></i><span class="nav-text">Audit Screener</span></a>
+                    <a class="nav-link" href="/rontgen-portofolio"><i data-feather="shield"></i><span class="nav-text">Rontgen Portofolio</span></a>
+                    <a class="nav-link" href="/emiten-hilang"><i data-feather="user-x"></i><span class="nav-text">Emiten Hilang</span></a>
+                    <a class="nav-link" href="/kepercayaan-data"><i data-feather="check-circle"></i><span class="nav-text">Kepercayaan Data</span></a>
+                </div>
+            </div>
+            <button type="button" class="nav-group collapsed" data-group="laporan" aria-expanded="false">
+                <svg class="nav-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nav-group-text">Laporan</span>
+                <span class="nav-group-count">9</span>
+            </button>
+            <div class="nav-items collapsed" data-group-items="laporan">
+                <div class="nav-items-inner">
+                    <a class="nav-link" href="/weekly-report"><i data-feather="file-text"></i><span class="nav-text">Weekly Report</span></a>
+                    <a class="nav-link" href="/pnl"><i data-feather="dollar-sign"></i><span class="nav-text">Portfolio P&amp;L</span></a>
+                    <a class="nav-link" href="/akuisisi"><i data-feather="zap"></i><span class="nav-text">Akuisisi</span></a>
+                    <a class="nav-link" href="/count"><i data-feather="hash"></i><span class="nav-text">Count</span></a>
+                    <a class="nav-link" href="/dream-agent/"><i data-feather="moon"></i><span class="nav-text">Dream Agent</span></a>
+                    <a class="nav-link" href="/research"><i data-feather="cpu"></i><span class="nav-text">Research</span></a>
+                    <a class="nav-link" href="/digital-twin"><i data-feather="git-branch"></i><span class="nav-text">Digital Twin</span></a>
+                    <a class="nav-link" href="/sebaran-kabar"><i data-feather="share-2"></i><span class="nav-text">Sebaran Kabar</span></a>
+                    <a class="nav-link" href="/stocklang"><i data-feather="terminal"></i><span class="nav-text">StockLang</span></a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="app-user">
+            <span class="app-user-avatar" aria-hidden="true">{{ ((user.firstName or 'B')[:1])|upper }}</span>
+            <div class="app-user-meta">
+                <b>{{ user.firstName or 'Pengguna' }}</b>
+                <small>Sesi aktif</small>
+            </div>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="app-user-out" title="Keluar" aria-label="Keluar"><i data-feather="log-out"></i></button>
+            </form>
+        </div>
+    </aside>
+    <div class="sidebar-scrim" id="sidebarScrim"></div>
+
+    <div class="app-main">
+        <header class="app-topbar">
+            <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Toggle menu">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <span class="brand-mobile">BDM</span>
+
+            <button type="button" class="sync-trigger" id="syncTrigger" title="Kirim data ke BDM Saku di HP lewat WiFi">
+                <i data-feather="refresh-cw"></i>
+                <span>Sync</span>
+                <span class="sync-dot"></span>
+            </button>
+
+            <div class="topbar-right">
+                {% if data_sampai_id %}
+                <span class="data-chip{{ ' basi' if data_basi }}" title="Tanggal terakhir di berkas Summary{{ ' (lebih dari 4 hari lalu)' if data_basi }}">
+                    <i></i><span class="lbl">data s/d</span><b>{{ data_sampai_id }}</b>
+                </span>
+                {% endif %}
+                <div class="toolbar">
+                    <div class="quick-add">
+                        <input type="text" class="inputText" placeholder="Kode saham" aria-label="Kode saham untuk ditambahkan ke Portfolio" autocomplete="off" spellcheck="false">
+                        <button type="button" onclick="addStock('/admin?param=add&amp;type=PortfolioStocks&amp;stock=')">+ Portfolio</button>
+                    </div>
+                    <form method="POST" action="/admin?param=analyze" onsubmit="showLoader();" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-primary"><i data-feather="zap"></i>Analyze</button>
+                    </form>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-content">
+            <div class="page-header">
+                <div class="page-title-wrap">
+                    <div class="page-crumb" id="appCrumb"></div>
+                    <h1 id="appPageTitle">{% block page_title %}{{ dbTypeName if dbTypeName else 'Dashboard' }}{% endblock %}</h1>
+                    {% if self.page_subtitle()|trim %}<p class="page-sub">{% block page_subtitle %}{% endblock %}</p>{% endif %}
+                </div>
+                <div class="topbar-right">{% block page_actions %}{% endblock %}</div>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="mb-3">
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ 'success' if category == 'success' else ('danger' if category == 'error' else 'warning') }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endwith %}
+
+    {% else %}
+<div class="auth-wrap">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div style="position:absolute; top:16px; right:16px; max-width:320px;">
+            {% for category, message in messages %}
+            <div class="alert alert-{{ 'success' if category == 'success' else ('danger' if category == 'error' else 'warning') }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+    {% endif %}
+
+    {% if demo_mode %}
+    <div class="alert alert-warning" role="status" data-demo-banner>
+        <strong>DEMO SINTETIS</strong> — Harga, transaksi, saldo, dan P&amp;L hanya ilustrasi; bukan data pasar nyata.
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+
+    {% if user.is_authenticated %}
+        </main>
+    </div>
+</div>
+{% else %}
+</div>
+{% endif %}
+
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script src="{{ url_for('static', filename='js/index.js') }}"></script>
+
+<script>
+    feather.replace();
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(function () {});
+    }
+
+    function showLoader() { document.getElementById('loaderOverlay').style.display = 'flex'; }
+
+    function addStock(url) {
+        var input = document.querySelector('.inputText');
+        var code = input ? input.value : '';
+        if (!code) { return; }
+        $.post(url + encodeURIComponent(code))
+            .done(function (data) {
+                if (data.rsp === 'success') { window.location.reload(); }
+                else { alert(data.message || ('Could not add ' + code.toUpperCase())); }
+            })
+            .fail(function () { alert('Request failed'); });
+    }
+
+    document.querySelectorAll('.app-nav .nav-link').forEach(function (a) {
+        var href = a.getAttribute('href');
+        if (href && (window.location.pathname + window.location.search) === href) {
+            a.classList.add('active');
+        }
+    });
+
+    // Remah di atas judul halaman = nama grup menu dari tautan aktif.
+    // Dashboard dilewati: judulnya sapaan, bukan nama menu.
+    (function () {
+        var remah = document.getElementById('appCrumb');
+        var aktif = document.querySelector('.app-nav .nav-link.active');
+        if (!remah || !aktif || window.location.pathname === '/') { return; }
+        var wadah = aktif.closest('.nav-items');
+        var teks = wadah && document.querySelector('.nav-group[data-group="' + wadah.getAttribute('data-group-items') + '"] .nav-group-text');
+        if (teks) { remah.textContent = teks.textContent.trim(); }
+    })();
+
+    // Enter di kotak kode saham topbar = klik "+ Portfolio".
+    $('.quick-add input').on('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addStock('/admin?param=add&type=PortfolioStocks&stock=');
+        }
+    });
+
+    // ---- Grup navigasi yang bisa dilipat ----
+    // Keadaan lipatan diingat per grup. Satu aturan mengalahkan ingatan
+    // itu: grup yang memuat halaman yang sedang dibuka SELALU terbuka --
+    // kalau tidak, kamu mendarat di halaman yang penandanya tidak
+    // kelihatan di mana pun, dan sidebar terasa seperti kehilangan
+    // tempatmu.
+    (function () {
+        var KUNCI = 'navGroupsCollapsed';
+        var tersimpan = {};
+        try { tersimpan = JSON.parse(localStorage.getItem(KUNCI)) || {}; } catch (e) {}
+
+        function setGrup(nama, terlipat, simpan) {
+            var tombol = document.querySelector('.nav-group[data-group="' + nama + '"]');
+            var isi = document.querySelector('.nav-items[data-group-items="' + nama + '"]');
+            if (!tombol || !isi) { return; }
+            tombol.classList.toggle('collapsed', terlipat);
+            isi.classList.toggle('collapsed', terlipat);
+            tombol.setAttribute('aria-expanded', terlipat ? 'false' : 'true');
+            if (simpan) {
+                tersimpan[nama] = terlipat;
+                try { localStorage.setItem(KUNCI, JSON.stringify(tersimpan)); } catch (e) {}
+            }
+        }
+
+        document.querySelectorAll('.app-nav .nav-group').forEach(function (tombol) {
+            var nama = tombol.getAttribute('data-group');
+            if (Object.prototype.hasOwnProperty.call(tersimpan, nama)) {
+                setGrup(nama, !!tersimpan[nama], false);
+            }
+            tombol.addEventListener('click', function () {
+                setGrup(nama, !tombol.classList.contains('collapsed'), true);
+            });
+        });
+
+        var aktif = document.querySelector('.app-nav .nav-link.active');
+        if (aktif) {
+            var wadah = aktif.closest('.nav-items');
+            if (wadah) { setGrup(wadah.getAttribute('data-group-items'), false, false); }
+        }
+    })();
+
+    var sidebarEl = document.getElementById('appSidebar');
+    function setSidebarCollapsed(collapsed) {
+        sidebarEl.classList.toggle('collapsed', collapsed);
+        localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+        // Plotly sizes its SVG once at render time and only redraws on a
+        // window 'resize' event (responsive:true doesn't watch the
+        // container itself) — without this, a chart stays sized to
+        // whatever the sidebar width was when it first rendered, even
+        // after the sidebar toggles back and more room opens up. The
+        // delay matches the sidebar/main-content width transition (220ms)
+        // so Plotly measures the *settled* width, not a mid-animation one.
+        setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 230);
+    }
+    // Halaman login/daftar tidak punya sidebar maupun palet -- tanpa
+    // penjaga ini seluruh script berhenti di baris pertama yang
+    // mencarinya.
+    if (sidebarEl) {
+        document.getElementById('sidebarCollapseBtn').addEventListener('click', function () { setSidebarCollapsed(true); });
+        document.getElementById('sidebarExpandBtn').addEventListener('click', function () { setSidebarCollapsed(false); });
+        if (localStorage.getItem('sidebarCollapsed') === '1') { setSidebarCollapsed(true); }
+    }
+
+    // Down-arrow key also toggles the sidebar collapse -- same guards as
+    // the command palette's own key handling: skipped while typing in a
+    // field or while the palette (which uses ArrowDown for moving through
+    // its own results) is open.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowDown' || !sidebarEl) { return; }
+        var tag = (e.target.tagName || '').toLowerCase();
+        var typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+        var $palette = $('#cmdPaletteOverlay');
+        if (typing || ($palette.length && $palette.hasClass('open'))) { return; }
+        e.preventDefault();
+        setSidebarCollapsed(!sidebarEl.classList.contains('collapsed'));
+    });
+
+    var toggleBtn = document.getElementById('sidebarToggleBtn');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            document.getElementById('appSidebar').classList.toggle('open');
+        });
+    }
+    var scrim = document.getElementById('sidebarScrim');
+    if (scrim) {
+        scrim.addEventListener('click', function () { sidebarEl.classList.remove('open'); });
+    }
+
+    // ---------- Unread watchlist-history dot ----------
+    // Shows a dot on the "History" nav link when new add/remove activity
+    // happened since the last time that page was actually opened here
+    // (tracked in localStorage, so it's per-browser, not per-account).
+    var HISTORY_SEEN_KEY = 'historyLastSeen';
+    if ($('#historyNavDot').length) {
+    $.getJSON('/watchlist-history/latest', function (data) {
+        if (!data.latest) { return; }
+        if (window.location.pathname === '/watchlist-history') {
+            localStorage.setItem(HISTORY_SEEN_KEY, data.latest);
+            return;
+        }
+        var lastSeen = localStorage.getItem(HISTORY_SEEN_KEY);
+        if (!lastSeen || new Date(data.latest) > new Date(lastSeen)) {
+            $('#historyNavDot').show();
+        }
+    });
+    }
+
+    // ---------- Palet perintah (Ctrl K, atau langsung ketik) ----------
+    var ALL_STOCKS = {{ (all_stocks if all_stocks else [])|tojson }};
+    var CMD_PAGES = [
+        { label: 'Dashboard', hint: 'page', url: '/' },
+        { label: 'Musiman Saham', hint: 'page', url: '/musiman-saham' },
+        { label: 'Perubahan Kepemilikan', hint: 'page', url: '/perubahan-kepemilikan' },
+        { label: 'Rotasi Sektor', hint: 'page', url: '/rotasi-sektor' },
+        { label: 'EMA Golden Cross Weekly', hint: 'page', url: '/ema-weekly' },
+        { label: 'Kabar Semalam', hint: 'page', url: '/kabar-semalam' },
+        { label: 'Ramai Dibahas', hint: 'page', url: '/ramai-dibahas' },
+        { label: 'Portfolio', hint: 'watchlist', url: '/display-stock-list?type=PortfolioStocks' },
+        { label: 'Best', hint: 'watchlist', url: '/display-stock-list?type=BestStocks' },
+        { label: 'Best Low', hint: 'watchlist', url: '/display-stock-list?type=BestLowStocks' },
+        { label: 'Pattern Up', hint: 'watchlist', url: '/display-stock-list?type=PatternUpStocks' },
+        { label: 'Watchlist History', hint: 'page', url: '/watchlist-history' },
+        { label: 'Compare', hint: 'page', url: '/compare' },
+        { label: 'Weekly Report', hint: 'page', url: '/weekly-report' },
+        { label: 'Portfolio P&L', hint: 'page', url: '/pnl' },
+        { label: 'Akuisisi', hint: 'page', url: '/akuisisi' },
+        { label: 'Kepemilikan Saham', hint: 'page', url: '/kepemilikan-saham' },
+        { label: 'Perbarui Kepemilikan', hint: 'page', url: '/perbarui-kepemilikan' },
+        { label: 'Scanner Lab', hint: 'page', url: '/scanner-lab' },
+        { label: 'Serapan Float', hint: 'page', url: '/serapan-float' },
+        { label: 'Akumulasi Palsu', hint: 'page', url: '/akumulasi-palsu' },
+        { label: 'Jatuh Dalam', hint: 'page', url: '/jatuh-dalam' },
+        { label: 'Tembus Basis', hint: 'page', url: '/tembus-basis' },
+        { label: 'Skor Kecondongan', hint: 'page', url: '/skor-kecondongan' },
+        { label: 'Apa Berubah Hari Ini', hint: 'page', url: '/apa-berubah' },
+        { label: 'Takaran Risiko', hint: 'page', url: '/takaran-risiko' },
+        { label: 'Emiten Hilang', hint: 'page', url: '/emiten-hilang' },
+        { label: 'Status Bukti', hint: 'page', url: '/status-bukti' },
+        { label: 'Audit Screener', hint: 'page', url: '/audit-screener' },
+        { label: 'Penemu Pola', hint: 'page', url: '/penemu-pola' },
+        { label: 'Sidik Jari Broker', hint: 'page', url: '/sidik-jari-broker' },
+        { label: 'Konsistensi Broker', hint: 'page', url: '/konsistensi-broker' },
+        { label: 'Rontgen Portofolio', hint: 'page', url: '/rontgen-portofolio' },
+        { label: 'Kepercayaan Data', hint: 'page', url: '/kepercayaan-data' },
+        { label: 'Halaman Saham', hint: 'page', url: '/saham/BBRI' },
+        { label: 'Kering Screener', hint: 'page', url: '/kering-screener' },
+        { label: 'Aktivitas Insider', hint: 'page', url: '/insider-activity' },
+        { label: 'Radar Insider', hint: 'page', url: '/radar-insider' },
+        { label: 'Dicicil Insider', hint: 'page', url: '/dicicil-insider' },
+        { label: 'Rapat Agen', hint: 'page', url: '/rapat-agen' },
+        { label: 'Ringkasan Watchlist', hint: 'page', url: '/watchlist-digest' },
+        { label: 'Jurnal Keputusan', hint: 'page', url: '/jurnal-keputusan' },
+        { label: 'Retail Sell', hint: 'screen', url: '/display-analyze?type=RetailSellStocks' },
+        { label: 'Consol', hint: 'screen', url: '/display-analyze?type=ConsolStocks' },
+        { label: 'Retail Sell Low', hint: 'screen', url: '/display-analyze?type=RetailSellLowValueStocks' },
+        { label: 'Consol Low', hint: 'screen', url: '/display-analyze?type=ConsolLowValueStocks' },
+        { label: 'All Charts', hint: 'screen', url: '/display-stocks/' },
+        { label: 'Count', hint: 'page', url: '/count' },
+        { label: 'Research', hint: 'page', url: '/research' },
+        { label: 'Dream Agent', hint: 'page', url: '/dream-agent/' },
+        { label: 'Market Digital Twin', hint: 'page', url: '/digital-twin' },
+        { label: 'Sebaran Kabar', hint: 'page', url: '/sebaran-kabar' },
+        { label: 'StockLang', hint: 'page', url: '/stocklang' }
+    ];
+
+    // Nama grup & ikon tiap halaman diambil dari sidebar, supaya hasil palet
+    // memakai kosakata yang sama dengan menu -- bukan label generik 'page'.
+    // Harus setelah feather.replace() (ikon sudah jadi <svg>).
+    var NAV_INFO = {};
+    document.querySelectorAll('.app-nav .nav-items').forEach(function (wadah) {
+        var teks = document.querySelector('.nav-group[data-group="' + wadah.getAttribute('data-group-items') + '"] .nav-group-text');
+        var grup = teks ? teks.textContent.trim() : '';
+        wadah.querySelectorAll('.nav-link').forEach(function (a) {
+            var svg = a.querySelector('svg');
+            NAV_INFO[a.getAttribute('href')] = { grup: grup, ikon: svg ? svg.outerHTML : '' };
+        });
+    });
+    var HINT_LABEL = { page: 'Halaman', watchlist: 'Watchlist', screen: 'Screen' };
+    function ikonFeather(nama) {
+        return (window.feather && feather.icons[nama]) ? feather.icons[nama].toSvg() : '';
+    }
+    if (/Mac|iPhone|iPad/.test(navigator.platform || '')) { $('.kbd-mod').text('\u2318'); }
+
+    var $cmdOverlay = $('#cmdPaletteOverlay');
+    var $cmdInput = $('#cmdPaletteInput');
+    var $cmdResults = $('#cmdPaletteResults');
+    var cmdActiveIndex = -1;
+    var cmdItems = [];
+
+    function goToStock(ticker) {
+        var $f = $('<form method="POST" action="/search"></form>');
+        $f.append($('<input type="hidden" name="csrf_token">').val($('meta[name="csrf-token"]').attr('content')));
+        $f.append($('<input type="hidden" name="searched">').val(ticker));
+        $('body').append($f);
+        $f.submit();
+    }
+
+    function renderCmdResults(query) {
+        var q = query.trim().toUpperCase();
+        var pageMatches = CMD_PAGES.filter(function (p) {
+            return !q || p.label.toUpperCase().indexOf(q) !== -1;
+        }).map(function (p) {
+            var info = NAV_INFO[p.url] || {};
+            return { type: 'page', label: p.label, hint: info.grup || HINT_LABEL[p.hint] || p.hint,
+                     ikon: info.ikon || ikonFeather('file-text'), url: p.url };
+        });
+
+        var stockMatches = [];
+        if (q) {
+            // Kode yang persis sama di atas, lalu yang berawalan sama:
+            // mengetik "BRI" harus menaruh BRIS sebelum BBRI.
+            var skor = function (t) { return t === q ? 0 : (t.indexOf(q) === 0 ? 1 : 2); };
+            stockMatches = ALL_STOCKS.filter(function (t) { return t.indexOf(q) !== -1; })
+                .sort(function (a, b) { return skor(a) - skor(b); })
+                .slice(0, 8)
+                .map(function (t) { return { type: 'stock', label: t, hint: 'Halaman saham', ticker: t }; });
+        }
+
+        cmdItems = pageMatches.slice(0, 8).concat(stockMatches);
+        cmdActiveIndex = cmdItems.length ? 0 : -1;
+
+        $cmdResults.empty();
+        if (cmdItems.length === 0) {
+            $cmdResults.append('<div class="cmd-item-empty">Tidak ada halaman atau kode saham yang cocok.</div>');
+            return;
+        }
+        var grupSebelumnya = null;
+        var ikonSaham = ikonFeather('bar-chart-2');
+        cmdItems.forEach(function (item, i) {
+            var grup = item.type === 'stock' ? 'Saham' : 'Halaman';
+            if (grup !== grupSebelumnya) {
+                $cmdResults.append($('<div class="cmd-group"></div>').text(grup));
+                grupSebelumnya = grup;
+            }
+            var $el = $('<div class="cmd-item" role="option"></div>')
+                .toggleClass('active', i === cmdActiveIndex)
+                .toggleClass('saham', item.type === 'stock');
+            $el.append($('<span class="cmd-ic"></span>').toggleClass('saham', item.type === 'stock')
+                .html(item.type === 'stock' ? ikonSaham : item.ikon));
+            $el.append($('<span class="cmd-label"></span>').text(item.label));
+            $el.append($('<span class="cmd-hint"></span>').text(item.hint));
+            $el.on('click', function () { selectCmdItem(item); });
+            $el.on('mouseenter', function () { setCmdActive(i); });
+            $cmdResults.append($el);
+        });
+    }
+
+    function setCmdActive(i) {
+        cmdActiveIndex = i;
+        var $aktif = $cmdResults.find('.cmd-item').removeClass('active').eq(i).addClass('active');
+        if ($aktif.length) { $aktif[0].scrollIntoView({ block: 'nearest' }); }
+    }
+
+    function selectCmdItem(item) {
+        if (item.type === 'stock') { goToStock(item.ticker); }
+        else { window.location.href = item.url; }
+    }
+
+    // `seed`: the character that triggered the palette to open (when
+    // opened by typing straight into a search, e.g. "b" of "bbca")
+    // pre-fills the input with it instead of losing that keystroke.
+    function openCmdPalette(seed) {
+        $cmdOverlay.addClass('open');
+        $cmdInput.val(seed || '');
+        renderCmdResults(seed || '');
+        setTimeout(function () {
+            $cmdInput.trigger('focus');
+            var len = $cmdInput.val().length;
+            $cmdInput[0].setSelectionRange(len, len);
+        }, 0);
+    }
+    function closeCmdPalette() { $cmdOverlay.removeClass('open'); }
+
+    $(document).on('keydown', function (e) {
+        if (!$cmdOverlay.length) { return; }
+        // Popup Sync terbuka: ketikan jangan sampai membuka palet di belakangnya.
+        if ($('#syncOverlay').hasClass('open')) {
+            if (e.key === 'Escape') { $('#syncOverlay').removeClass('open'); }
+            return;
+        }
+        // Ctrl/Cmd+K: buka/tutup palet dari mana saja, termasuk dari dalam
+        // kotak isian -- satu-satunya pintasan yang boleh menyela ketikan.
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+            if ($cmdOverlay.hasClass('open')) { closeCmdPalette(); } else { openCmdPalette(); }
+            return;
+        }
+        var tag = (e.target.tagName || '').toLowerCase();
+        // Typing in a field should never be hijacked into opening the
+        // palette. A focused button/link is only excluded from the Enter
+        // branch below (Enter there activates the button natively) --
+        // excluding it from every keystroke meant quick-search silently
+        // stopped working after clicking literally any button on the
+        // page, since focus stays on it afterward.
+        var typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+        var focusedControl = tag === 'button' || tag === 'a';
+        if (typing || $cmdOverlay.hasClass('open')) {
+            if (e.key === 'Escape' && $cmdOverlay.hasClass('open')) { closeCmdPalette(); }
+            return;
+        }
+        if (e.key === 'Enter') {
+            if (focusedControl) { return; }
+            e.preventDefault();
+            openCmdPalette();
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            // Any plain printable keystroke (e.g. typing "bbca" straight
+            // away) opens the palette with that first character already
+            // typed, instead of requiring Enter first.
+            e.preventDefault();
+            openCmdPalette(e.key);
+        }
+    });
+    $cmdOverlay.on('click', function (e) { if (e.target === this) { closeCmdPalette(); } });
+    $cmdInput.on('input', function () { renderCmdResults($(this).val()); });
+    $cmdInput.on('keydown', function (e) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (cmdItems.length) { setCmdActive((cmdActiveIndex + 1) % cmdItems.length); }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (cmdItems.length) { setCmdActive((cmdActiveIndex - 1 + cmdItems.length) % cmdItems.length); }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (cmdActiveIndex >= 0) { selectCmdItem(cmdItems[cmdActiveIndex]); }
+        }
+    });
+
+    // ---------- Sync ke HP (BDM Saku) ----------
+    // Ekspor + server WiFi jalan di proses Flask (kirim_hp.py); halaman ini
+    // cuma menampilkan statusnya. Menutup popup TIDAK mematikan server --
+    // titik hijau di tombol menandai server masih siaga (mati sendiri 15 menit
+    // tanpa unduhan, atau lewat tombol Matikan). Ditunda sampai DOM siap supaya
+    // $.ajaxSetup (header CSRF, dipasang di <head> saat DOM siap) sudah berlaku.
+    $(function () {
+        var $ov = $('#syncOverlay'), $btn = $('#syncTrigger');
+        if (!$ov.length) { return; }
+        var timer = null, terakhir = null, qrSiap = null;
+        var LANGKAH_EKSPOR = 10;   // 8 menu + baris "detail N emiten" + "Selesai"
+
+        function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+
+        function waktu(detik) {
+            var m = Math.floor(detik / 60), d = detik % 60;
+            return m + ':' + (d < 10 ? '0' : '') + d;
+        }
+
+        function muatQr(selesai) {
+            if (window.QRCode) { return selesai(); }
+            if (qrSiap) { return qrSiap.push(selesai); }
+            qrSiap = [selesai];
+            var s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+            s.onload = function () { qrSiap.forEach(function (f) { f(); }); };
+            document.head.appendChild(s);
+        }
+
+        function langkah(s) {
+            var k = { ekspor: ['jalan', '', ''], galat: ['gagal', '', ''],
+                      siap: ['beres', s.terkirim.length ? 'beres' : 'jalan', s.terkirim.length ? 'beres' : ''] }[s.tahap] || ['', '', ''];
+            ['#syncL1', '#syncL2', '#syncL3'].forEach(function (id, i) {
+                $(id).removeClass('jalan beres gagal').addClass(k[i]);
+            });
+        }
+
+        function render(s) {
+            terakhir = s;
+            $btn.toggleClass('aktif', s.tahap === 'siap').toggleClass('ekspor', s.tahap === 'ekspor');
+            langkah(s);
+            var apkTerbuka = $('#syncApk').prop('open');
+            var h = '';
+
+            if (s.tahap === 'ekspor') {
+                var n = (s.log || []).length;
+                h = '<div>' + esc(s.pesan) + ' <span style="color:var(--text-dim)">~1 menit</span></div>' +
+                    '<div class="sync-progres"><span style="width:' + Math.min(96, 5 + n / LANGKAH_EKSPOR * 90) + '%"></span></div>' +
+                    '<div class="sync-log">' + esc((s.log || []).join('\n') || 'Menyiapkan…') + '</div>';
+            } else if (s.tahap === 'siap') {
+                var kode = String(s.kode || '').split('').map(function (c) { return '<b>' + esc(c) + '</b>'; }).join('');
+                var ip = (s.alamat || [])[0];
+                var data = s.data || {};
+                h = '<div class="sync-sub">Kode pasangan</div><div class="sync-kode">' + kode + '</div>' +
+                    '<div class="sync-info">' +
+                    (ip ? '<span>' + esc(ip) + '</span>' : '') +
+                    '<span>data ' + esc(data.diubah) + ' &middot; ' + (data.ukuran / 1e6).toFixed(1) + ' MB</span>' +
+                    (s.sisa_detik != null ? '<span title="Server mati sendiri kalau tidak ada unduhan">mati dlm ' + waktu(s.sisa_detik) + '</span>' : '') +
+                    '</div>';
+                if ((s.terkirim || []).length) {
+                    h += '<div class="sync-kirim">' + s.terkirim.slice().reverse().map(function (t) {
+                        return '<div>&#10003; ' + esc(t.jenis) + ' terkirim<span class="redup">' + esc(t.jam) + ' &middot; ' + esc(t.ip) + '</span></div>';
+                    }).join('') + '</div>';
+                } else {
+                    h += '<div class="sync-tunggu"><i></i>Menunggu HP &mdash; buka BDM Saku, ketuk <b>Sinkron</b></div>';
+                }
+                if (s.apk_ada && ip) {
+                    var url = 'http://' + ip + ':' + s.port + '/' + s.nama_apk;
+                    h += '<details class="sync-apk" id="syncApk"' + (apkTerbuka ? ' open' : '') + '><summary>Pasang / perbarui aplikasi di HP &rsaquo;</summary>' +
+                        '<div class="sync-apk-isi"><div class="sync-qr" id="syncQr"></div><div class="catatan">' +
+                        'Pindai QR atau buka di browser HP:<br><code>' + esc(url) + '</code><br>' +
+                        'Yang sudah terpasang versi baru cukup Sinkron &mdash; pembaruan ikut terunduh dan ditawarkan di Ringkasan.</div></div></details>';
+                    setTimeout(function () {
+                        var el = document.getElementById('syncQr');
+                        if (!el) { return; }
+                        muatQr(function () {
+                            if (!document.getElementById('syncQr') || !window.QRCode) { return; }
+                            el = document.getElementById('syncQr');
+                            el.innerHTML = '';
+                            new QRCode(el, { text: url, width: 112, height: 112, colorDark: '#04060A', colorLight: '#F4F7FB' });
+                        });
+                    }, 0);
+                }
+            } else if (s.tahap === 'galat') {
+                h = '<div class="sync-galat">' + esc(s.pesan) + '</div>' +
+                    ((s.log || []).length ? '<div class="sync-log">' + esc(s.log.join('\n')) + '</div>' : '');
+            } else {
+                h = '<div style="text-align:center;padding:10px 0">' + esc(s.pesan || 'Server kirim tidak menyala.') + '</div>';
+            }
+
+            $('#syncBody').html(h);
+            var $log = $('#syncBody .sync-log');
+            if ($log.length) { $log.scrollTop($log[0].scrollHeight); }
+            $('#syncMatikan').prop('hidden', s.tahap !== 'siap');
+            $('#syncUlang').prop('hidden', s.tahap === 'ekspor').text(s.tahap === 'siap' ? 'Ekspor ulang' : 'Sync lagi');
+        }
+
+        function jadwal() {
+            clearTimeout(timer);
+            var buka = $ov.hasClass('open'), t = terakhir && terakhir.tahap;
+            if (buka || t === 'ekspor' || t === 'siap') {
+                timer = setTimeout(tarik, buka ? 1500 : 10000);
+            }
+        }
+        function tarik() { $.post('/kirim-hp/status').done(render).always(jadwal); }
+        function mulai() { $.post('/kirim-hp/mulai').done(render).always(jadwal); }
+
+        $btn.on('click', function () {
+            $ov.addClass('open');
+            if (terakhir) { render(terakhir); }
+            $.post('/kirim-hp/status').done(function (s) {
+                // Sudah siaga atau sedang ekspor: cukup tampilkan. Selain itu langsung mulai.
+                if (s.tahap === 'siap' || s.tahap === 'ekspor') { render(s); jadwal(); } else { mulai(); }
+            });
+        });
+        $('#syncUlang').on('click', mulai);
+        $('#syncMatikan').on('click', function () { $.post('/kirim-hp/berhenti').done(render).always(jadwal); });
+        $('#syncTutup, #syncSelesai').on('click', function () { $ov.removeClass('open'); jadwal(); });
+        $ov.on('click', function (e) { if (e.target === this) { $ov.removeClass('open'); jadwal(); } });
+
+        // Server bisa masih siaga dari halaman sebelumnya: nyalakan titik hijaunya.
+        $.post('/kirim-hp/status').done(function (s) { render(s); jadwal(); });
+    });
+</script>
+
+<script src="{{ url_for('static', filename='js/stock_filter.js') }}"></script>
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

@@ -1,0 +1,721 @@
+{% extends "base.html" %}
+{% block title %}Compare{% endblock %}
+{% block page_title %}Compare<span class="page-title-badge" id="compareSignalBadge" style="display:none;"></span>{% endblock %}
+
+{% block content %}
+
+<style>
+    .compare-top-row { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 18px; }
+    .compare-controls { flex: 1 1 320px; min-width: 260px; }
+    .compare-summary-panel { flex: 2 1 520px; min-width: 320px; padding: 12px 0; }
+    .compare-window-row { display: flex; align-items: center; gap: 6px; padding: 0 12px 10px; flex-wrap: wrap; }
+    .compare-window-btn.active { background: var(--accum); border-color: var(--accum); color: var(--void); font-weight: 700; }
+    .compare-crossing-toggle {
+        margin-left: auto; display: flex; align-items: center; gap: 6px;
+        font-size: 12px; color: var(--text-dim); cursor: pointer; user-select: none;
+    }
+    .compare-crossing-toggle input { cursor: pointer; }
+    .compare-summary-panel .compare-summary-table { margin: 0; }
+    @media (max-width: 900px) {
+        .compare-top-row { flex-direction: column; }
+    }
+
+    .compare-input-row { display: flex; gap: 8px; margin-bottom: 10px; max-width: 420px; }
+    .compare-preset-row { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+    .compare-preset-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 2px; }
+    .compare-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .compare-chip {
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        min-width: 150px;
+        background: var(--surface); border: 1px solid var(--line-soft);
+        border-radius: 20px; padding: 6px 8px 6px 12px;
+        font-family: var(--font-mono); font-size: 12.5px; font-weight: 600;
+        animation: chipIn 0.22s cubic-bezier(0.4,0,0.2,1);
+        transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+    .compare-chip:hover { border-color: var(--accum-dim); transform: translateY(-1px); }
+    @keyframes chipIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+    .compare-chip .chip-name { display: flex; align-items: center; gap: 6px; }
+    .compare-chip .chip-trail { display: flex; align-items: center; gap: 6px; }
+    .compare-chip .swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .compare-chip .chip-pct { color: var(--text-dim); font-weight: 400; }
+    .compare-chip .chip-remove {
+        background: none; border: none; color: var(--text-dim); cursor: pointer;
+        font-size: 15px; line-height: 1; padding: 0 2px;
+    }
+    .compare-chip .chip-remove:hover { color: var(--distrib); }
+    .compare-empty { color: var(--text-dim); font-size: 13px; margin-bottom: 18px; }
+    .compare-chart-card { position: relative; }
+
+    .compare-summary-table { width: 100%; }
+    .compare-summary-table th {
+        font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+        letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim);
+        text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    }
+    .compare-summary-table td {
+        font-family: var(--font-mono); font-size: 12.5px;
+        padding: 9px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text);
+    }
+    .compare-summary-table td.pct-up, .compare-summary-table td.lot-up { color: var(--accum); }
+    .compare-summary-table td.pct-down, .compare-summary-table td.lot-down { color: var(--distrib); }
+    .compare-summary-table .swatch { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 7px; }
+    .compare-summary-table th.sortable { cursor: pointer; user-select: none; }
+    .compare-summary-table th.sortable:hover { color: var(--text); }
+    .compare-summary-table th.sortable .sort-arrow { margin-left: 3px; opacity: 0.6; }
+    .compare-summary-table tr.row-accum td { background: var(--accum-glow); }
+
+    .compare-custom-row { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+    .compare-custom-preset {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--surface); border: 1px solid var(--line-soft);
+        border-radius: 20px; padding: 4px 6px 4px 12px;
+        font-size: 12.5px; font-weight: 600; cursor: pointer;
+    }
+    .compare-custom-preset:hover { border-color: var(--accum-dim); }
+    .compare-custom-preset .preset-remove {
+        background: none; border: none; color: var(--text-dim); cursor: pointer;
+        font-size: 14px; line-height: 1; padding: 2px;
+    }
+    .compare-custom-preset .preset-remove:hover { color: var(--distrib); }
+
+    .compare-summary-table td.trend-cell { padding: 4px 12px; }
+    .compare-summary-table canvas.trend-spark { width: 70px; height: 24px; display: block; cursor: pointer; }
+    .compare-summary-table tr.row-hover-active td { background: rgba(255,255,255,0.055); }
+    .compare-summary-table tr.row-pinned td { box-shadow: inset 3px 0 0 var(--accum); }
+
+    .cross-badge {
+        font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 5px;
+        margin-left: 7px; letter-spacing: 0.03em; vertical-align: middle;
+    }
+    .cross-badge.cross-up { color: var(--void); background: var(--accum); }
+    .cross-badge.cross-down { color: var(--void); background: var(--distrib); }
+    .cross-filter-empty { text-align: center; color: var(--text-dim); padding: 18px 12px !important; }
+    .confidence-cell { letter-spacing: 2px; }
+    .confidence-cell.confidence-3 { color: var(--accum); }
+    .confidence-cell.confidence-2 { color: #FFC352; }
+    .confidence-cell.confidence-1, .confidence-cell.confidence-0 { color: var(--text-dim); }
+
+    .page-title-badge {
+        font-size: 12px; font-weight: 700; margin-left: 10px; padding: 3px 10px;
+        border-radius: 20px; background: var(--accum-glow); color: var(--accum);
+        vertical-align: middle;
+    }
+</style>
+
+<div class="compare-top-row">
+    <div class="compare-controls">
+        <div class="compare-input-row">
+            <input type="text" id="compareInput" class="form-control form-control-sm" placeholder="Kode saham (mis. BBCA)" maxlength="6" autocomplete="off">
+            <button type="button" class="btn btn-sm btn-primary" id="compareAddBtn">Add</button>
+        </div>
+
+        <div class="compare-preset-row">
+            <span class="compare-preset-label">Preset:</span>
+            {% for w in watchlists %}
+            <button type="button" class="btn btn-sm btn-outline-secondary compare-preset-btn" data-type="{{ w.type }}">{{ w.label }}</button>
+            {% endfor %}
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="compareClearBtn">Clear</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="compareSaveBtn">+ Save current</button>
+        </div>
+
+        <div class="compare-custom-row" id="compareCustomRow"></div>
+    </div>
+
+    <div class="content-card compare-summary-panel" id="compareSummaryPanel" style="display:none;">
+        <div class="compare-window-row">
+            <span class="compare-preset-label">Window:</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary compare-window-btn active" data-window="5">5D</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary compare-window-btn" data-window="7">7D</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary compare-window-btn" data-window="14">14D</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary compare-window-btn" data-window="30">30D</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary compare-window-btn" data-window="full">Full</button>
+            <label class="compare-crossing-toggle">
+                <input type="checkbox" id="compareCrossingOnly"> Hanya yang crossover
+            </label>
+        </div>
+        <div class="table-responsive">
+        <table class="compare-summary-table">
+            <thead>
+                <tr>
+                    <th>Stock</th>
+                    <th class="sortable" data-sort="confidence">Signal <span class="sort-arrow"></span></th>
+                    <th class="sortable" data-sort="pct">Change % (1D) <span class="sort-arrow"></span></th>
+                    <th class="sortable" data-sort="netTop5"><span id="netTop5CumulativeHeader">Net Top5 Cumulative (5D, B)</span> <span class="sort-arrow"></span></th>
+                    <th class="sortable" data-sort="retailLast"><span id="retailCumulativeHeader">Retail Cumulative (5D, B)</span> <span class="sort-arrow"></span></th>
+                    <th class="sortable" data-sort="netTop5Slope"><span id="netTop5SlopeHeader">Net Top5 Slope (5D, B)</span> <span class="sort-arrow"></span></th>
+                    <th class="sortable" data-sort="retailSlope"><span id="retailSlopeHeader">Retail Slope (5D, B)</span> <span class="sort-arrow"></span></th>
+                    <th><span id="netTop5TrendHeader">Net Top5 Trend (5D)</span></th>
+                    <th><span id="retailTrendHeader">Retail Trend (5D)</span></th>
+                </tr>
+            </thead>
+            <tbody id="compareSummaryBody"></tbody>
+        </table>
+        </div>
+    </div>
+</div>
+
+<div class="compare-chips" id="compareChips"></div>
+<div class="compare-empty" id="compareEmpty">Tambahkan 2-6 kode saham untuk dibandingkan.</div>
+
+<div class="content-card compare-chart-card" id="compareCard" style="display:none;">
+    <div id="compareChart" style="height:520px;"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script>
+    var MAX_COMPARE = 10;
+    var COLORS = ['#16E0AE', '#FF6076', '#FFC352', '#5B8DEF', '#C77DFF', '#F4A261', '#4ADE80', '#F472B6', '#60A5FA', '#FBBF24'];
+    var THEME = { grid: '#38455A', text: '#93A2B6', textStrong: '#F4F7FB' };
+
+    var comparedStocks = [];  // [{ ticker, color, pct, dates, values }]
+    var sortKey = null, sortDir = 1;  // 1 = desc (default), -1 = asc
+    var CUSTOM_PRESETS_KEY = 'comparePresets';
+    var SORT_STATE_KEY = 'compareSortState';
+    var compareWindow = '5';  // '5' | '7' | '14' | '30' | 'full' -- drives Cumulative, Slope, and the sparkline
+    var crossingOnlyFilter = false;
+
+    function cumsumSlice(arr, n) {
+        var slice = n === 'full' ? arr : arr.slice(-n);
+        var sum = 0;
+        return slice.map(function (v) { sum += v; return round2(sum); });
+    }
+
+    // Column headers spell out the active window (e.g. "Net Top5
+    // Cumulative (30D, B)") since Cumulative/Slope/Trend all move with
+    // the 5D/7D/14D/30D/Full buttons now, instead of always being 5 days.
+    function updateWindowHeaders() {
+        var label = compareWindow === 'full' ? 'Full' : compareWindow + 'D';
+        $('#netTop5CumulativeHeader').text('Net Top5 Cumulative (' + label + ', B)');
+        $('#retailCumulativeHeader').text('Retail Cumulative (' + label + ', B)');
+        $('#netTop5SlopeHeader').text('Net Top5 Slope (' + label + ', B)');
+        $('#retailSlopeHeader').text('Retail Slope (' + label + ', B)');
+        $('#netTop5TrendHeader').text('Net Top5 Trend (' + label + ')');
+        $('#retailTrendHeader').text('Retail Trend (' + label + ')');
+    }
+
+    // Net Top5/Retail Cumulative, Slope, and the sparkline all follow the
+    // selected window (5D/7D/14D/30D/Full) -- Cumulative and Slope happen
+    // to be the exact same calculation (sum of the window's per-day
+    // Rupiah values), kept as separate fields since they're separate
+    // table columns. The sparkline draws every point of the window (not
+    // just a fixed tail) -- drawTrendSparkline auto-scales to whatever's
+    // passed in, so a fixed-length tail would look identical regardless
+    // of window (the day-to-day deltas in a fixed tail don't depend on
+    // where the sum started, and auto-scaling erases any difference in
+    // absolute level too).
+    function applyCompareWindow(entry) {
+        var n = compareWindow === 'full' ? 'full' : parseInt(compareWindow, 10);
+        entry.netTop5Series = cumsumSlice(entry.netTop5ValueDaily, n);
+        entry.retailSeries = cumsumSlice(entry.retailValueDaily, n);
+        entry.netTop5 = entry.netTop5Series.length ? entry.netTop5Series[entry.netTop5Series.length - 1] : 0;
+        entry.retailLast = entry.retailSeries.length ? entry.retailSeries[entry.retailSeries.length - 1] : 0;
+        entry.netTop5Slope = entry.netTop5;
+        entry.retailSlope = entry.retailLast;
+
+        // Confidence score always reads a fixed 5-day figure regardless
+        // of which window is selected above for display -- otherwise
+        // switching to "30D" would silently change what counts as a
+        // 3-star signal.
+        var netFixed5 = cumsumSlice(entry.netTop5ValueDaily, 5);
+        var retailFixed5 = cumsumSlice(entry.retailValueDaily, 5);
+        var confidenceNetTop5 = netFixed5.length ? netFixed5[netFixed5.length - 1] : 0;
+        var confidenceRetail = retailFixed5.length ? retailFixed5[retailFixed5.length - 1] : 0;
+
+        // Price change over the last 10 trading days (11 bars) — flat
+        // price while flow moves this way is the "still quietly under
+        // accumulation" pattern; already moved >5% either way and it's
+        // no longer quiet.
+        var closeRaw = entry.closeRaw || [];
+        entry.priceChange10D = null;
+        if (closeRaw.length >= 11) {
+            var closeNow = closeRaw[closeRaw.length - 1];
+            var close10dAgo = closeRaw[closeRaw.length - 11];
+            if (close10dAgo) { entry.priceChange10D = round2((closeNow - close10dAgo) / close10dAgo * 100); }
+        }
+
+        // Confidence score: last-5-day Net Top5 net-bought, last-5-day
+        // Retail net-sold, and price still flat (<5% move) over the last
+        // 10 days — always reads off these 5D/10D figures regardless of
+        // whatever cumulative *display* window is selected above.
+        entry.confidence = [
+            confidenceNetTop5 > 0,
+            confidenceRetail < 0,
+            entry.priceChange10D !== null && Math.abs(entry.priceChange10D) < 5
+        ].filter(Boolean).length;
+    }
+
+    function nextColor() {
+        var used = comparedStocks.map(function (s) { return s.color; });
+        for (var i = 0; i < COLORS.length; i++) {
+            if (used.indexOf(COLORS[i]) === -1) { return COLORS[i]; }
+        }
+        return COLORS[comparedStocks.length % COLORS.length];
+    }
+
+    function renderChips() {
+        var $chips = $('#compareChips').empty();
+        $('#compareEmpty').toggle(comparedStocks.length === 0);
+        comparedStocks.forEach(function (s) {
+            var pctText = (typeof s.pct === 'number') ? (s.pct >= 0 ? '+' : '') + s.pct.toFixed(1) + '%' : '...';
+            var $chip = $(
+                '<div class="compare-chip">' +
+                '<span class="chip-name">' +
+                '<span class="swatch" style="background:' + s.color + '"></span>' +
+                '<span>' + s.ticker + '</span>' +
+                '</span>' +
+                '<span class="chip-trail">' +
+                '<span class="chip-pct">' + pctText + '</span>' +
+                '<button type="button" class="chip-remove">&times;</button>' +
+                '</span>' +
+                '</div>'
+            );
+            $chip.find('.chip-remove').on('click', function () { removeTicker(s.ticker); });
+            $chips.append($chip);
+        });
+    }
+
+    // Lets a strong signal (confidence 3) stand out on the chart itself —
+    // thicker solid line — while a weak/no signal fades to a thin dashed
+    // line, so the strength reads at a glance without checking the table.
+    function lineStyleForConfidence(confidence) {
+        switch (confidence) {
+            case 3: return { width: 3, dash: 'solid' };
+            case 2: return { width: 2, dash: 'solid' };
+            case 1: return { width: 1.5, dash: 'dot' };
+            default: return { width: 1, dash: 'dot' };
+        }
+    }
+
+    function renderChart() {
+        var ready = comparedStocks.filter(function (s) { return s.dates; });
+        if (ready.length === 0) {
+            $('#compareCard').hide();
+            $('#compareSummaryPanel').hide();
+            $('#compareSignalBadge').hide();
+            pinnedTicker = null;
+            return;
+        }
+        $('#compareCard').show();
+        $('#compareSummaryPanel').show();
+
+        var traces = ready.map(function (s) {
+            var style = lineStyleForConfidence(s.confidence);
+            return {
+                type: 'scatter', mode: 'lines', name: s.ticker,
+                x: s.dates, y: s.values,
+                line: { color: s.color, width: style.width, dash: style.dash, shape: 'spline', smoothing: 0.5 },
+                hovertemplate: s.ticker + ': %{y:.2f}%<extra></extra>'
+            };
+        });
+
+        var layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+            font: { color: THEME.text, family: 'JetBrains Mono' },
+            title: { text: '% Change from first bar', font: { color: THEME.textStrong, size: 13, family: "'Plus Jakarta Sans', sans-serif" }, x: 0.01, xanchor: 'left' },
+            showlegend: true, legend: { orientation: 'h', y: -0.12 },
+            hovermode: 'x unified',
+            hoverlabel: { bgcolor: '#26313F', bordercolor: '#38455A', font: { family: 'JetBrains Mono', size: 11, color: '#F4F7FB' } },
+            margin: { t: 40, l: 46, r: 20, b: 40 },
+            xaxis: { gridcolor: 'rgba(255,255,255,0.045)', color: THEME.text, tickfont: { size: 10, family: 'JetBrains Mono' } },
+            yaxis: { gridcolor: 'rgba(255,255,255,0.045)', color: THEME.text, tickfont: { size: 10, family: 'JetBrains Mono' }, ticksuffix: '%', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' }
+        };
+
+        chartTickerOrder = ready.map(function (s) { return s.ticker; });
+        Plotly.newPlot('compareChart', traces, layout, { responsive: true, displaylogo: false }).then(attachLegendHover);
+        renderSummaryTable(ready);
+    }
+
+    var lastReady = [];
+    var chartTickerOrder = [];
+    var pinnedTicker = null;  // "locked" highlight, set by clicking a row or legend entry
+
+    // ---------- Table <-> chart hover highlighting ----------
+    function setChartHighlight(ticker) {
+        if (!chartTickerOrder.length) { return; }
+        var opacities = chartTickerOrder.map(function (t) { return t === ticker ? 1 : 0.15; });
+        Plotly.restyle('compareChart', { opacity: opacities });
+    }
+    function clearChartHighlight() {
+        if (!chartTickerOrder.length) { return; }
+        Plotly.restyle('compareChart', { opacity: chartTickerOrder.map(function () { return 1; }) });
+    }
+    function highlightTableRow(ticker) {
+        $('#compareSummaryBody tr').removeClass('row-hover-active')
+            .filter('[data-ticker="' + ticker + '"]').addClass('row-hover-active');
+    }
+    function clearTableRowHighlight() {
+        $('#compareSummaryBody tr').removeClass('row-hover-active');
+    }
+
+    function applyHighlight(ticker) {
+        setChartHighlight(ticker);
+        highlightTableRow(ticker);
+    }
+    // Hover previews a highlight; when the mouse leaves, this restores
+    // whatever was pinned (or clears entirely if nothing is pinned) —
+    // so a pin survives a stray hover over a different row/legend entry.
+    function revertHighlight() {
+        if (pinnedTicker) { applyHighlight(pinnedTicker); }
+        else { clearChartHighlight(); clearTableRowHighlight(); }
+    }
+    function renderPinState() {
+        $('#compareSummaryBody tr').removeClass('row-pinned')
+            .filter('[data-ticker="' + pinnedTicker + '"]').addClass('row-pinned');
+    }
+    function togglePin(ticker) {
+        pinnedTicker = (pinnedTicker === ticker) ? null : ticker;
+        renderPinState();
+        revertHighlight();
+    }
+
+    // Plotly's legend doesn't expose hover/click events by default, so
+    // this attaches plain DOM listeners to the rendered legend entries
+    // after each (re)draw — same trace order as chartTickerOrder.
+    function attachLegendHover(gd) {
+        var items = gd.querySelectorAll('.legend .traces');
+        items.forEach(function (el, i) {
+            var ticker = chartTickerOrder[i];
+            if (!ticker) { return; }
+            el.style.cursor = 'pointer';
+            el.addEventListener('mouseenter', function () { applyHighlight(ticker); });
+            el.addEventListener('mouseleave', revertHighlight);
+            el.addEventListener('click', function () { togglePin(ticker); });
+        });
+    }
+
+    function updateSignalBadge(rows) {
+        var count = rows.filter(function (s) { return s.netTop5 > 0 && s.retailLast < 0; }).length;
+        var $badge = $('#compareSignalBadge');
+        if (count > 0) {
+            $badge.text(count + ' signal' + (count > 1 ? 's' : '')).show();
+        } else {
+            $badge.hide();
+        }
+    }
+
+    function renderSummaryTable(ready) {
+        lastReady = ready;
+        var rows = ready.slice();
+        if (crossingOnlyFilter) {
+            rows = rows.filter(function (s) { return !!s.crossing; });
+        }
+        if (sortKey) {
+            rows.sort(function (a, b) { return (a[sortKey] - b[sortKey]) * sortDir; });
+        }
+
+        $('.compare-summary-table th.sortable .sort-arrow').text('');
+        if (sortKey) {
+            $('.compare-summary-table th.sortable[data-sort="' + sortKey + '"] .sort-arrow')
+                .text(sortDir === 1 ? '↓' : '↑');
+        }
+
+        var $body = $('#compareSummaryBody').empty();
+        if (rows.length === 0 && crossingOnlyFilter) {
+            $body.append('<tr><td colspan="9" class="cross-filter-empty">Gak ada saham yang crossover 3 hari terakhir.</td></tr>');
+        }
+        rows.forEach(function (s) {
+            var pctCls = s.pct >= 0 ? 'pct-up' : 'pct-down';
+            var lotCls = s.netTop5 >= 0 ? 'lot-up' : 'lot-down';
+            // Big money accumulating while retail is selling into it — the
+            // combination this app exists to flag — gets a highlight so it
+            // doesn't require reading every row's two columns separately.
+            var isAccum = s.netTop5 > 0 && s.retailLast < 0;
+            var slopeNetCls = s.netTop5Slope >= 0 ? 'lot-up' : 'lot-down';
+            var slopeRetailCls = s.retailSlope >= 0 ? 'lot-up' : 'lot-down';
+            var $row = $('<tr></tr>').attr('data-ticker', s.ticker).toggleClass('row-accum', isAccum);
+            var crossBadge = '';
+            if (s.crossing) {
+                var crossCls = s.crossing.dir === 'up' ? 'cross-up' : 'cross-down';
+                var crossArrow = s.crossing.dir === 'up' ? '&#8593;' : '&#8595;';
+                var crossLabel = s.crossing.daysAgo === 0 ? 'today' : s.crossing.daysAgo + 'd ago';
+                crossBadge = '<span class="cross-badge ' + crossCls + '" title="Big Lot Flow crossed ' + s.crossing.dir + ' ' + crossLabel + '">' + crossArrow + ' ' + crossLabel + '</span>';
+            }
+            $row.append($('<td></td>').html('<span class="swatch" style="background:' + s.color + '"></span>' + s.ticker + crossBadge));
+            var stars = '★'.repeat(s.confidence) + '☆'.repeat(3 - s.confidence);
+            $row.append($('<td></td>').addClass('confidence-cell confidence-' + s.confidence).text(stars));
+            $row.append($('<td></td>').addClass(pctCls).text((s.pct >= 0 ? '+' : '') + s.pct.toFixed(2) + '%'));
+            $row.append($('<td></td>').addClass(lotCls).text(s.netTop5));
+            $row.append($('<td></td>').text(s.retailLast));
+            $row.append($('<td></td>').addClass(slopeNetCls).text((s.netTop5Slope >= 0 ? '+' : '') + s.netTop5Slope));
+            $row.append($('<td></td>').addClass(slopeRetailCls).text((s.retailSlope >= 0 ? '+' : '') + s.retailSlope));
+            $row.append($('<td class="trend-cell"></td>').html('<canvas class="trend-spark" data-ticker="' + s.ticker + '" data-series="netTop5" title="Buka chart ' + s.ticker + '"></canvas>'));
+            $row.append($('<td class="trend-cell"></td>').html('<canvas class="trend-spark" data-ticker="' + s.ticker + '" data-series="retail" title="Buka chart ' + s.ticker + '"></canvas>'));
+            $row.on('mouseenter', function () { applyHighlight(s.ticker); });
+            $row.on('mouseleave', revertHighlight);
+            $row.on('click', function (e) {
+                if ($(e.target).closest('.trend-spark').length) { return; }
+                togglePin(s.ticker);
+            });
+            $body.append($row);
+        });
+
+        $('.trend-spark').on('click', function (e) {
+            e.stopPropagation();
+            goToStock($(this).data('ticker'));
+        });
+        renderPinState();
+        updateSignalBadge(rows);
+
+        // Canvas needs to be in the DOM (with real pixel size) before it
+        // can be drawn on, so this runs after the rows above are appended.
+        rows.forEach(function (s) {
+            drawTrendSparkline('canvas.trend-spark[data-ticker="' + s.ticker + '"][data-series="netTop5"]', s.netTop5Series);
+            drawTrendSparkline('canvas.trend-spark[data-ticker="' + s.ticker + '"][data-series="retail"]', s.retailSeries);
+        });
+    }
+
+    function drawTrendSparkline(selector, series) {
+        var canvas = document.querySelector(selector);
+        if (!canvas || !series || series.length < 2) { return; }
+        var w = 70, h = 24;
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = w * dpr; canvas.height = h * dpr;
+        canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+        var ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        var min = Math.min.apply(null, series), max = Math.max.apply(null, series);
+        var range = (max - min) || 1;
+        var up = series[series.length - 1] >= series[0];
+
+        ctx.beginPath();
+        series.forEach(function (v, i) {
+            var x = (i / (series.length - 1)) * w;
+            var y = h - ((v - min) / range) * (h - 4) - 2;
+            if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
+        });
+        ctx.strokeStyle = up ? '#16E0AE' : '#FF6076';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+    }
+
+    function addTicker(raw) {
+        var t = (raw || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
+        if (!t) { return; }
+        if (comparedStocks.some(function (s) { return s.ticker === t; })) { return; }
+        if (comparedStocks.length >= MAX_COMPARE) {
+            alert('Maksimal ' + MAX_COMPARE + ' saham sekaligus.');
+            return;
+        }
+
+        var entry = { ticker: t, color: nextColor() };
+        comparedStocks.push(entry);
+        renderChips();
+
+        $.getJSON('/stock-chart-data/' + encodeURIComponent(t), function (data) {
+            if (!data.found || !data.close || data.close.length === 0) {
+                comparedStocks = comparedStocks.filter(function (s) { return s.ticker !== t; });
+                renderChips();
+                renderChart();
+                return;
+            }
+            var base = data.close[0] || 1;
+            entry.dates = data.dates;
+            entry.closeRaw = data.close;
+            entry.values = data.close.map(function (c) { return round2((c / base - 1) * 100); });
+            // Chip/table badge shows the latest single-day change (same
+            // number the single-stock chart title shows), not the
+            // cumulative % the overlay line ends at over the whole window.
+            entry.pct = data.change;
+            // Raw per-day values and the backend's full-window cumulative
+            // (daily['Cumulative']/['RetailCumulative']) are both kept so
+            // the window selector can recompute without refetching.
+            entry.netTop5Raw = data.netTop5Lot || [];
+            entry.retailRaw = data.retail || [];
+            entry.cumulativeFull = data.cumulative || [];
+            entry.retailCumulativeFull = data.retailCumulative || [];
+            entry.combinedCrossingDays = data.combinedCrossingDays || [];
+            // 1 lot = 100 shares -- converted to Rupiah billions per day
+            // using *that day's own* avg price, not a single latest-price
+            // multiplier applied to the whole lot sum at the end (that
+            // would misrepresent what a lot traded for on days when the
+            // price was materially different from today's).
+            var avgPriceSeries = data.avgPriceSeries || [];
+            entry.netTop5ValueDaily = entry.netTop5Raw.map(function (v, i) { return v * 100 * (avgPriceSeries[i] || 0) / 1e9; });
+            entry.retailValueDaily = entry.retailRaw.map(function (v, i) { return v * 100 * (avgPriceSeries[i] || 0) / 1e9; });
+            entry.crossing = findRecentCrossing(entry.cumulativeFull, entry.combinedCrossingDays, 3);
+            if (entry.crossing && entry.crossing.daysAgo === 0) { playCrossingChime(); }
+            applyCompareWindow(entry);
+            renderChips();
+            renderChart();
+        }).fail(function () {
+            comparedStocks = comparedStocks.filter(function (s) { return s.ticker !== t; });
+            renderChips();
+            renderChart();
+        });
+    }
+
+    function round2(n) { return Math.round(n * 100) / 100; }
+
+    // 'up' = the backend's combined signal (Net Top5 rolling sum flips up
+    // the same day Retail's rolling sum flips down) — same marker the
+    // chart page flags, validated by backtesting as the strongest version
+    // of this signal. 'down' is still the plain Big Lot Flow down-cross.
+    function findRecentCrossing(cumulative, combinedCrossingDays, withinDays) {
+        var n = cumulative.length;
+        for (var i = n - 1; i >= Math.max(1, n - withinDays); i--) {
+            if (combinedCrossingDays.indexOf(i) !== -1) { return { dir: 'up', daysAgo: n - 1 - i }; }
+            if (cumulative[i - 1] > 0 && cumulative[i] <= 0) { return { dir: 'down', daysAgo: n - 1 - i }; }
+        }
+        return null;
+    }
+
+    // Short two-note chime when a just-added ticker turns out to have
+    // crossed *today* — synthesized with Web Audio so no audio file is
+    // needed. Silently no-ops if the browser blocks autoplay-ish audio
+    // before any user gesture, which is fine, it's a nice-to-have.
+    function playCrossingChime() {
+        try {
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            var ctx = new Ctx();
+            [880, 1318.5].forEach(function (freq, i) {
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                var start = ctx.currentTime + i * 0.12;
+                gain.gain.setValueAtTime(0.001, start);
+                gain.gain.exponentialRampToValueAtTime(0.12, start + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(start);
+                osc.stop(start + 0.35);
+            });
+        } catch (e) {}
+    }
+
+
+    function removeTicker(t) {
+        comparedStocks = comparedStocks.filter(function (s) { return s.ticker !== t; });
+        renderChips();
+        renderChart();
+    }
+
+    function clearAll() {
+        comparedStocks = [];
+        renderChips();
+        renderChart();
+    }
+
+    function loadPreset(type) {
+        clearAll();
+        $.getJSON('/watchlist-tickers?type=' + encodeURIComponent(type), function (data) {
+            var tickers = data.tickers || [];
+            if (tickers.length > MAX_COMPARE) {
+                alert(tickers.length + ' saham di watchlist ini, cuma ' + MAX_COMPARE + ' pertama yang ditampilkan.');
+            }
+            tickers.slice(0, MAX_COMPARE).forEach(function (t) { addTicker(t); });
+        });
+    }
+
+    // ---------- Custom presets (saved combos, per-browser via localStorage) ----------
+    function loadCustomPresets() {
+        try { return JSON.parse(localStorage.getItem(CUSTOM_PRESETS_KEY)) || {}; }
+        catch (e) { return {}; }
+    }
+    function saveCustomPresets(presets) {
+        try { localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets)); } catch (e) {}
+    }
+
+    function renderCustomPresets() {
+        var presets = loadCustomPresets();
+        var names = Object.keys(presets);
+        var $row = $('#compareCustomRow').empty();
+        if (names.length === 0) { return; }
+
+        $row.append('<span class="compare-preset-label">Custom:</span>');
+        names.forEach(function (name) {
+            var $p = $('<div class="compare-custom-preset"></div>');
+            var $label = $('<span></span>').text(name);
+            var $remove = $('<button type="button" class="preset-remove">&times;</button>');
+            $label.on('click', function () {
+                clearAll();
+                presets[name].forEach(function (t) { addTicker(t); });
+            });
+            $remove.on('click', function (e) {
+                e.stopPropagation();
+                if (!confirm('Hapus preset "' + name + '"?')) { return; }
+                var current = loadCustomPresets();
+                delete current[name];
+                saveCustomPresets(current);
+                renderCustomPresets();
+            });
+            $p.append($label).append($remove);
+            $row.append($p);
+        });
+    }
+
+    function saveCurrentAsPreset() {
+        if (comparedStocks.length === 0) {
+            alert('Tambahkan saham dulu sebelum disimpan sebagai preset.');
+            return;
+        }
+        var name = prompt('Nama preset ini:');
+        if (!name) { return; }
+        var presets = loadCustomPresets();
+        presets[name] = comparedStocks.map(function (s) { return s.ticker; });
+        saveCustomPresets(presets);
+        renderCustomPresets();
+    }
+
+    $(document).ready(function () {
+        try {
+            var savedSort = JSON.parse(localStorage.getItem(SORT_STATE_KEY));
+            if (savedSort && savedSort.key) { sortKey = savedSort.key; sortDir = savedSort.dir === -1 ? -1 : 1; }
+        } catch (e) {}
+
+        renderChips();
+        renderCustomPresets();
+
+        $('#compareAddBtn').on('click', function () {
+            addTicker($('#compareInput').val());
+            $('#compareInput').val('').focus();
+        });
+        $('#compareInput').on('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTicker($(this).val());
+                $(this).val('');
+            }
+        });
+        $('.compare-preset-btn').on('click', function () { loadPreset($(this).data('type')); });
+        $('#compareClearBtn').on('click', clearAll);
+
+        $('.compare-window-btn').on('click', function () {
+            compareWindow = $(this).data('window');
+            $('.compare-window-btn').removeClass('active');
+            $(this).addClass('active');
+            updateWindowHeaders();
+            comparedStocks.forEach(function (s) { if (s.netTop5Raw) { applyCompareWindow(s); } });
+            renderChips();
+            renderChart();
+        });
+        $('#compareSaveBtn').on('click', saveCurrentAsPreset);
+
+        $('#compareCrossingOnly').on('change', function () {
+            crossingOnlyFilter = $(this).is(':checked');
+            renderSummaryTable(lastReady);
+        });
+
+        $('.compare-summary-table th.sortable').on('click', function () {
+            var key = $(this).data('sort');
+            if (sortKey === key) { sortDir = -sortDir; } else { sortKey = key; sortDir = 1; }
+            try { localStorage.setItem(SORT_STATE_KEY, JSON.stringify({ key: sortKey, dir: sortDir })); } catch (e) {}
+            renderSummaryTable(lastReady);
+        });
+
+        // Arriving from a "Compare" link elsewhere (e.g. Watchlist History)
+        // with ?stock=TICKER pre-fills that one ticker.
+        var params = new URLSearchParams(window.location.search);
+        var initialStock = params.get('stock');
+        if (initialStock) {
+            initialStock.split(',').forEach(function (t) { if (t) { addTicker(t); } });
+        }
+    });
+</script>
+{% endblock %}

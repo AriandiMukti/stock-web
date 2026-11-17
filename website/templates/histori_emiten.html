@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block content %}
+{% if kind == 'perubahan_kepemilikan' %}
+<style>
+    #historiIsi tbody tr > td {
+        transition: background-color 120ms ease;
+    }
+    #historiIsi tbody tr:hover > td {
+        background-color: rgba(96, 165, 250, 0.14);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        #historiIsi tbody tr > td { transition: none; }
+    }
+</style>
+{% endif %}
+<div class="content-card">
+    <div class="ap-section-title">{{ title }}</div>
+    <div id="historiIsi">Membaca arsip lokal…</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static',filename='js/histori_emiten.js') }}"></script>
+<script>
+$(function () {
+    var root = document.getElementById('historiIsi');
+    $.post({{ endpoint|tojson }}).done(function (data) {
+        historiRender(root, {{ kind|tojson }}, data);
+    }).fail(function () {
+        root.textContent = 'Gagal membaca arsip lokal.';
+    });
+});
+</script>
+{% endblock %}

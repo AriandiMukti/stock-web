@@ -1,0 +1,43 @@
+{% extends "base.html" %} {% block title %}Daftar &middot; BDM{% endblock %}
+
+{% block content %}
+{# Gaya .auth-* ada di base.html (dipakai bersama login.html). #}
+<div class="auth-split">
+    {% include "_auth_side.html" %}
+
+    <div class="auth-main">
+        <a class="auth-brand auth-brand-m" href="/">
+            <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg></span>
+            BDM
+        </a>
+        <a class="auth-back" href="/"><i data-feather="arrow-left"></i>Beranda</a>
+        <h1 class="auth-title">Buat akun</h1>
+        <p class="auth-sub">Satu akun untuk watchlist, jurnal keputusan, dan P&amp;L-mu.</p>
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="auth-field">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" maxlength="150" placeholder="nama@contoh.com" autocomplete="email" required autofocus>
+            </div>
+            <div class="auth-field">
+                <label for="firstName">Nama</label>
+                <input type="text" id="firstName" name="firstName" minlength="2" maxlength="150" placeholder="Nama depan" autocomplete="given-name" required>
+            </div>
+            <div class="auth-row2">
+                <div class="auth-field">
+                    <label for="password1">Password</label>
+                    <input type="password" id="password1" name="password1" minlength="10" maxlength="1024" placeholder="Minimal 10 karakter" autocomplete="new-password" required>
+                </div>
+                <div class="auth-field">
+                    <label for="password2">Ulangi password</label>
+                    <input type="password" id="password2" name="password2" minlength="10" maxlength="1024" placeholder="Sama persis" autocomplete="new-password" required>
+                </div>
+            </div>
+            <button type="submit" class="auth-submit">Buat akun</button>
+        </form>
+
+        <div class="auth-foot">Sudah punya akun? <a href="/login">Masuk</a></div>
+    </div>
+</div>
+{% endblock %}

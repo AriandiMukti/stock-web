@@ -1,0 +1,18 @@
+# Golden cross: buy when the fast average crosses above the slow one,
+# sell when it crosses back down or RSI gets overheated.
+#
+#   python -m stocklang stocklang/examples/golden_cross.stk
+
+stock BBCA
+
+fast  = sma(close, 10)
+slow  = sma(close, 30)
+rsi14 = rsi(close, 14)
+
+buy  = cross_up(fast, slow) and rsi14 < 70
+sell = cross_down(fast, slow) or rsi14 > 80
+
+print("Latest close:", close, " RSI:", round(rsi14, 1))
+
+backtest(buy, sell, capital = 10M, stop_loss = 8%)
+plot(close, fast, slow, rsi14, buy = buy, sell = sell, title = "BBCA golden cross")

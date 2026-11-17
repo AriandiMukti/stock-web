@@ -1,0 +1,17 @@
+{# Panel kiri halaman login & daftar: apa ini, dalam tiga baris. #}
+<aside class="auth-side">
+    <a class="auth-brand" href="/">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg></span>
+        BDM
+    </a>
+    <div class="auth-pitch">
+        <h2>Baca arus bandar.<br><span class="auth-grad">Uji sebelum percaya.</span></h2>
+        <p>Arus broker harian, kepemilikan KSEI, dan aktivitas insider emiten BEI &mdash; dengan status bukti di setiap menu.</p>
+    </div>
+    <ul class="auth-points">
+        <li><i data-feather="check"></i>Setiap menu menyebut statusnya: teruji luar sampel, kalibrasi, atau gagal.</li>
+        <li><i data-feather="check"></i>Sinyal dicatat ke jurnal maju sebelum hasilnya ada.</li>
+        <li><i data-feather="check"></i>Cache, jurnal, dan uji asap diperiksa tiap malam.</li>
+    </ul>
+    {% if data_sampai_id %}<div class="auth-meta"><i></i>data s/d <b>{{ data_sampai_id }}</b></div>{% endif %}
+</aside>

@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}Ramai Dibahas{% endblock %}
+{% block page_title %}Ramai Dibahas{% endblock %}
+
+{% block page_actions %}
+<button id="rdTarik" class="btn btn-outline-secondary btn-sm">Tarik sekarang</button>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .rd-flag { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+               color: var(--distrib); border: 1px solid var(--distrib-dim); padding: 2px 8px; border-radius: 20px; margin-left: 8px; vertical-align: middle; }
+    .rd-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 12.5px; }
+    .rd-bar .form-control { max-width: 160px; }
+    .rd-bar select.form-control { max-width: 210px; }
+    .rd-prog { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+    .rd-prog > div { height: 100%; background: var(--accum); width: 0; transition: width .4s; }
+    .rd-table tbody tr.rd-row { cursor: pointer; }
+    .rd-table tbody tr.rd-row:hover { background: var(--accum-glow, rgba(127,127,127,.06)); }
+    .rd-jenuh { font-size: 10.5px; color: var(--text-dim); }
+    .rd-posts { padding: 6px 4px 10px; }
+    .rd-post { border-left: 2px solid var(--line); padding: 4px 10px; margin: 6px 0; font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+    .rd-post .m { font-size: 11px; color: var(--text-dim); margin-bottom: 2px; white-space: normal; }
+    .rd-post .m a { color: inherit; }
+    .rd-src { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .rd-src textarea { width: 100%; min-height: 110px; font-family: var(--font-mono); font-size: 12px; }
+    .rd-kanal { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .rd-chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; }
+    .rd-chip.ok { border-color: var(--accum); }
+    .rd-chip.gagal { border-color: var(--distrib); color: var(--distrib); }
+    .rd-sub { font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-dim); margin: 10px 0 6px; }
+    .rd-sort { cursor: pointer; white-space: nowrap; }
+    .rd-sort.aktif { text-decoration: underline; }
+    .rd-post.pos { border-left-color: var(--accum); }
+    .rd-post.neg { border-left-color: var(--distrib); }
+    .rd-sent { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--line); margin: 8px 0 6px; }
+    .rd-sent > .p { background: var(--accum); }
+    .rd-sent > .n { background: var(--distrib); }
+    .rd-sent > .z { background: var(--line); flex: 1; }
+    .rd-mini { display: inline-flex; width: 46px; height: 4px; border-radius: 2px; overflow: hidden; background: var(--line); vertical-align: middle; margin-left: 6px; }
+    .rd-mini > .p { background: var(--accum); }
+    .rd-mini > .n { background: var(--distrib); margin-left: auto; }
+    .rd-suasana .ap-stat-value { font-size: 20px; }
+    .rd-vonis { font-size: 12.5px; font-weight: 600; }
+</style>
+
+<div class="content-card">
+    <div class="ap-section-title">Obrolan Stockbit &amp; Telegram<span class="rd-flag">Pemantauan, belum diuji</span></div>
+    <div class="ap-finding">
+        <h4>Emiten yang paling banyak disebut 24 jam terakhir &mdash; dan apakah harganya sudah lari duluan.</h4>
+        <p>Stockbit dibaca dari stream publik tiap emiten (30 post terakhir, tag <code>$EMITEN</code>); Telegram dari
+        channel publik dan, kalau disiapkan, grup yang kamu ikuti. Ini <strong>bukan sinyal beli</strong>: di riset berita
+        akuisisi, kabar ramai biasanya ketemu <em>setelah</em> harga naik dan beli sesudahnya justru menurunkan win rate.
+        Karena itu kolom 5 hari ada di sebelah jumlah obrolan. Bacaan tiap tarikan dicatat ke
+        <code>ramai_dibahas_harian.csv</code> untuk diuji maju nanti.</p>
+    </div>
+</div>
+
+<div class="content-card">
+    <div class="rd-bar">
+        <span id="rdInfo" class="ap-dim">Memuat&hellip;</span>
+        <span style="flex:1"></span>
+        <input type="text" id="rdFilter" class="form-control form-control-sm" placeholder="Cari emiten">
+        <select id="rdSumberFilter" class="form-control form-control-sm">
+            <option value="semua">Semua sumber</option>
+            <option value="sb">Ada di Stockbit</option>
+            <option value="tg">Ada di Telegram</option>
+            <option value="dua">Ada di dua-duanya</option>
+        </select>
+    </div>
+    <div id="rdProgWrap" style="display:none;">
+        <div class="rd-prog"><div id="rdProg"></div></div>
+        <div id="rdProgText" class="ap-dim" style="font-size:11.5px; margin-top:4px;"></div>
+    </div>
+</div>
+
+<div id="rdMessage" class="ap-empty" style="display:none;"></div>
+
+<div class="content-card rd-suasana" id="rdSuasanaCard" style="display:none;">
+    <div class="ap-section-title">Suasana Obrolan <span id="rdJendela"></span><span class="rd-flag">Kamus kata, deskripsi</span></div>
+    <div id="rdSuasana" class="ap-stat-grid"></div>
+    <div id="rdHari" class="rd-kanal"></div>
+    <div class="ap-note">Tiap post/pesan dinilai dari kamus kata pasar (naik, ARA, cuan, serok, &#x1F680; vs turun, ARB, nyangkut,
+        jebol, &#x1F62D;); kata sesudah <em>gak/belum/jangan</em> dibalik. <strong>Skor</strong> = (positif &minus; negatif) &divide;
+        (positif + negatif) &times; 100: +100 semua yang berpendapat positif, &minus;100 semua negatif. Sebagian besar post tidak memuat
+        kata mana pun (netral) dan tidak ikut skor. Kasar: sarkasme dan pertanyaan (&ldquo;kapan naik?&rdquo;) tidak terbaca. Riset
+        19 Okt: negativitas obrolan cuma mengikuti harga hari itu, tidak menebak IHSG besok &mdash; ini gambaran suasana, bukan sinyal.
+        <br>Jendelanya Senin&ndash;Jumat minggu berjalan; kalau dibuka Sabtu/Minggu, Senin&ndash;Jumat yang baru lewat. Kolom Sentimen
+        di tabel memakai jendela yang sama. Stockbit cuma memberi 30 post terakhir per emiten, jadi hari yang tidak sempat ditarik
+        hanya terwakili post emiten yang sepi &mdash; lihat jumlah post per hari di atas, dan tarik tiap hari supaya lengkap.</div>
+</div>
+
+<div class="content-card" id="rdTabelCard" style="display:none;">
+    <div class="ap-section-title">Paling Ramai 24 Jam <span id="rdTabelInfo" class="ap-dim"></span></div>
+    <div style="overflow-x:auto;">
+        <table class="ap-table rd-table">
+            <thead><tr>
+                <th>#</th>
+                <th class="ap-left">Emiten</th>
+                <th class="rd-sort" data-k="total" title="Stockbit (perkiraan kalau jenuh) + pesan Telegram unik">Total</th>
+                <th class="rd-sort" data-k="sb_kira" title="Post Stockbit 24 jam; &ge; = halaman jenuh, ~ = perkiraan dari laju">Stockbit</th>
+                <th class="rd-sort" data-k="sb_penulis" title="Akun berbeda yang posting -- satu akun spam tidak bisa menaikkan ini">Penulis</th>
+                <th class="rd-sort" data-k="sb_respon" title="Suka + balasan di post Stockbit">Respons</th>
+                <th class="rd-sort" data-k="tg" title="Pesan Telegram unik (pesan terusan dihitung sekali) &middot; jumlah channel/grup">Telegram</th>
+                <th class="rd-sort" data-k="lonjak" title="(24 jam + 1) / (rata-rata harian 7 hari sebelumnya + 1)">Lonjakan</th>
+                <th class="rd-sort" data-k="skor" title="Sentimen Senin-Jumat (lihat Suasana Obrolan): (positif - negatif) / (positif + negatif) x 100, dari post yang terbaca. Redup = kurang dari 5 yang berpendapat">Sentimen</th>
+                <th class="rd-sort" data-k="r1">1 hari %</th>
+                <th class="rd-sort" data-k="r5">5 hari %</th>
+                <th class="rd-sort" data-k="nilai_m" title="Median nilai transaksi 20 hari">Nilai (M)</th>
+            </tr></thead>
+            <tbody id="rdBody"></tbody>
+        </table>
+    </div>
+    <div class="ap-note">Klik baris untuk melihat post terbarunya. Stockbit cuma memberi 30 post terakhir per emiten, jadi emiten
+        yang ramai <em>jenuh</em> dalam beberapa jam: angkanya ditulis &ge;n dan totalnya memakai perkiraan laju (30 post &divide;
+        rentang waktunya, diskalakan ke 24 jam). Menarik lebih sering mengisi celah itu. Post yang menyebut lebih dari 5 emiten
+        (rekap IHSG dari portal berita, spam tag) tidak dihitung.</div>
+</div>
+
+<div class="content-card">
+    <div class="ap-section-title">Sumber Telegram</div>
+    <div class="rd-src">
+        <div>
+            <div class="rd-sub">Channel publik &mdash; tanpa login</div>
+            <textarea id="rdPublik" class="form-control" placeholder="satu per baris, mis.&#10;namachannel&#10;https://t.me/namachannel"></textarea>
+            <div class="ap-note">Dibaca dari pratinjau <code>t.me/s/&lt;nama&gt;</code>. Hanya channel (siaran) yang punya
+                pratinjau; grup diskusi masuk kolom sebelah.</div>
+        </div>
+        <div>
+            <div class="rd-sub">Grup / forum &mdash; pakai akun Telegram sendiri</div>
+            <textarea id="rdGrup" class="form-control" placeholder="@usernamegrup, link t.me, atau judul grup persis"></textarea>
+            <div id="rdTgSiap" class="ap-note"></div>
+        </div>
+    </div>
+    <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+        <button id="rdSimpan" class="btn btn-outline-secondary btn-sm">Simpan sumber</button>
+        <span id="rdSimpanInfo" class="ap-dim" style="font-size:12px;"></span>
+    </div>
+    <div class="rd-sub">Tarikan terakhir per sumber</div>
+    <div id="rdKanal" class="rd-kanal"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var RD = { data: null, sort: 'total', buka: {}, polling: null };
+
+    function rdEsc(t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); }
+    function rdNum(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="ap-dim">&mdash;</span>'; }
+        return Number(v).toLocaleString('id-ID', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
+    }
+    function rdSigned(v, d) {
+        if (v === null || v === undefined || isNaN(v)) { return '<span class="ap-dim">&mdash;</span>'; }
+        var cls = v > 0 ? 'ap-up' : (v < 0 ? 'ap-down' : 'ap-dim');
+        return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + rdNum(v, d) + '</span>';
+    }
+
+    function rdVonis(skor, pos, neg) {
+        if (!(pos + neg)) { return '<span class="ap-dim">Belum ada yang berpendapat</span>'; }
+        var porsi = Math.round(100 * Math.max(pos, neg) / (pos + neg));
+        if (skor >= 10) { return '<span class="ap-up">Mayoritas positif</span> <span class="ap-dim">(' + porsi + '% yang berpendapat)</span>'; }
+        if (skor <= -10) { return '<span class="ap-down">Mayoritas negatif</span> <span class="ap-dim">(' + porsi + '% yang berpendapat)</span>'; }
+        return '<span class="ap-dim">Seimbang</span>';
+    }
+
+    function rdSkorSel(r) {
+        if (r.skor === null || r.skor === undefined) { return '<span class="ap-dim">&mdash;</span>'; }
+        var n = r.pos + r.neg, sedikit = n < 5;
+        var judul = 'Positif ' + r.pos + ', negatif ' + r.neg
+            + (r.sb ? ' | Stockbit +' + r.sb_pos + '/-' + r.sb_neg + (r.skor_sb !== null ? ' (skor ' + r.skor_sb + ')' : '') : '')
+            + (r.tg ? ' | Telegram +' + r.tg_pos + '/-' + r.tg_neg + (r.skor_tg !== null ? ' (skor ' + r.skor_tg + ')' : '') : '')
+            + (sedikit ? ' | kurang dari 5 yang berpendapat' : '');
+        var bar = '<span class="rd-mini"><span class="p" style="width:' + (100 * r.pos / n) + '%"></span>'
+                + '<span class="n" style="width:' + (100 * r.neg / n) + '%"></span></span>';
+        return '<span title="' + rdEsc(judul) + '"' + (sedikit ? ' style="opacity:.5"' : '') + '>' + rdSigned(r.skor, 0) + bar + '</span>';
+    }
+
+    function rdSuasana(su) {
+        if (!su) { $('#rdSuasanaCard').hide(); return; }
+        var html = ['Stockbit', 'Telegram'].map(function (k) {
+            var s = su[k];
+            if (!s || !s.n) {
+                return '<div><div class="ap-stat-label">' + k + '</div><div class="ap-stat-value ap-dim">&mdash;</div>'
+                     + '<div class="ap-dim" style="font-size:12px;">Tidak ada post di jendela ini.</div></div>';
+            }
+            return '<div><div class="ap-stat-label">' + k + ' &middot; ' + rdNum(s.n) + ' post</div>'
+                + '<div class="ap-stat-value">' + (s.skor === null ? '<span class="ap-dim">&mdash;</span>' : rdSigned(s.skor, 0)) + '</div>'
+                + '<div class="rd-vonis">' + rdVonis(s.skor, s.pos, s.neg) + '</div>'
+                + '<div class="rd-sent"><span class="p" style="width:' + (100 * s.pos / s.n) + '%"></span><span class="z"></span>'
+                + '<span class="n" style="width:' + (100 * s.neg / s.n) + '%"></span></div>'
+                + '<div class="ap-dim" style="font-size:11.5px;"><span class="ap-up">' + rdNum(s.pos) + ' positif (' + s.pos_pct + '%)</span> &middot; '
+                + '<span class="ap-down">' + rdNum(s.neg) + ' negatif (' + s.neg_pct + '%)</span> &middot; ' + rdNum(s.netral) + ' netral</div></div>';
+        }).join('');
+        $('#rdSuasana').html(html);
+        $('#rdHari').html((su.hari || []).map(function (h) {
+            return '<span class="rd-chip">' + rdEsc(h.tgl) + ' &middot; ' + rdNum(h.n) + ' post &middot; '
+                 + (h.skor === null ? '<span class="ap-dim">&mdash;</span>' : rdSigned(h.skor, 0)) + '</span>';
+        }).join(''));
+        $('#rdSuasanaCard').show();
+    }
+
+    function rdBaris() {
+        var d = RD.data, q = $('#rdFilter').val().trim().toUpperCase(), f = $('#rdSumberFilter').val();
+        var rows = d.baris.filter(function (r) {
+            if (q && r.stock.indexOf(q) < 0) { return false; }
+            if (f === 'sb') { return r.sb > 0; }
+            if (f === 'tg') { return r.tg > 0; }
+            if (f === 'dua') { return r.sb > 0 && r.tg > 0; }
+            return true;
+        });
+        var k = RD.sort;
+        rows.sort(function (a, b) {
+            var x = a[k], y = b[k];
+            x = (x === null || x === undefined) ? -Infinity : x; y = (y === null || y === undefined) ? -Infinity : y;
+            return y - x;
+        });
+        $('.rd-sort').removeClass('aktif').filter('[data-k="' + k + '"]').addClass('aktif');
+        var html = rows.map(function (r, i) {
+            var sb = r.sb_jenuh
+                ? '&ge;' + rdNum(r.sb) + ' <span class="rd-jenuh">~' + rdNum(r.sb_kira) + '</span>'
+                : rdNum(r.sb);
+            var tg = r.tg ? rdNum(r.tg) + ' <span class="rd-jenuh">&middot; ' + r.tg_kanal + '</span>' : '<span class="ap-dim">0</span>';
+            var lj = d.baseline_siap ? rdNum(r.lonjak, 1) + '&times;'
+                   : '<span class="ap-dim" title="Baseline 7 hari belum cukup">' + rdNum(r.lonjak, 1) + '&times;</span>';
+            var tr = '<tr class="rd-row" data-s="' + rdEsc(r.stock) + '"><td class="ap-dim">' + (i + 1) + '</td>'
+                + '<td class="ap-left"><a href="/saham/' + rdEsc(r.stock) + '" onclick="event.stopPropagation();"><strong>'
+                + rdEsc(r.stock) + '</strong></a></td>'
+                + '<td><strong>' + rdNum(r.total) + '</strong></td><td>' + sb + '</td><td>' + rdNum(r.sb_penulis) + '</td>'
+                + '<td>' + rdNum(r.sb_respon) + '</td><td>' + tg + '</td><td>' + lj + '</td>'
+                + '<td>' + rdSkorSel(r) + '</td>'
+                + '<td>' + rdSigned(r.r1, 1) + '</td><td>' + rdSigned(r.r5, 1) + '</td><td>' + rdNum(r.nilai_m, 1) + '</td></tr>';
+            if (RD.buka[r.stock]) {
+                tr += '<tr class="rd-detail"><td></td><td colspan="11" class="ap-left"><div class="rd-posts">'
+                    + '<div class="m"><a href="/sebaran-kabar?kode=' + rdEsc(r.stock) + '">Simulasikan sebaran kabar '
+                    + rdEsc(r.stock) + ' &rarr;</a></div>'
+                    + (r.contoh.length ? r.contoh.map(function (p) {
+                        var meta = rdEsc(p.sumber) + ' &middot; ' + rdEsc(p.waktu) + (p.penulis ? ' &middot; ' + rdEsc(p.penulis) : '')
+                                 + (p.suka || p.balas ? ' &middot; ' + p.suka + ' suka, ' + p.balas + ' balasan' : '')
+                                 + (p.url ? ' &middot; <a href="' + rdEsc(p.url) + '" target="_blank" rel="noopener">buka</a>' : '');
+                        var kls = p.sent > 0 ? ' pos' : (p.sent < 0 ? ' neg' : '');
+                        return '<div class="rd-post' + kls + '"><div class="m">' + meta + '</div>' + rdEsc(p.teks) + '</div>';
+                    }).join('') : '<span class="ap-dim">Tidak ada cuplikan.</span>')
+                    + '</div></td></tr>';
+            }
+            return tr;
+        }).join('');
+        $('#rdBody').html(html || '<tr><td colspan="12" class="ap-dim">Tidak ada yang cocok.</td></tr>');
+        $('#rdTabelInfo').text('— ' + rows.length + ' dari ' + d.n_emiten + ' emiten yang disebut');
+    }
+
+    function rdSumber(d) {
+        if (!$('#rdPublik').is(':focus') && !$('#rdGrup').is(':focus') && !RD.sumberDimuat) {
+            $('#rdPublik').val((d.sumber.telegram_publik || []).join('\n'));
+            $('#rdGrup').val((d.sumber.telegram_grup || []).join('\n'));
+            RD.sumberDimuat = true;
+        }
+        var s = d.tg_siap, langkah = [];
+        if (!s.telethon) { langkah.push('pasang Telethon: <code>pip install telethon</code>'); }
+        if (!s.kredensial) { langkah.push('isi <code>TELEGRAM_API_ID</code> &amp; <code>TELEGRAM_API_HASH</code> (dari my.telegram.org) di <code>E:\\pengguna\\Program\\BDM\\.env</code>'); }
+        if (!s.sesi) { langkah.push('login sekali dari folder Flask: <code>python -m website.ramai_dibahas --login-telegram</code>'); }
+        $('#rdTgSiap').html(langkah.length ? 'Belum siap. Langkah: ' + langkah.map(function (x, i) { return (i + 1) + ') ' + x; }).join('; ') + '.'
+                                           : 'Siap &mdash; grup dibaca dengan akun Telegram yang sudah login.');
+        $('#rdKanal').html((d.kanal || []).map(function (k) {
+            var ok = k.status === 'ok';
+            return '<span class="rd-chip ' + (ok ? 'ok' : 'gagal') + '">' + rdEsc(k.nama) + ' &middot; '
+                 + (ok ? rdNum(k.pesan) + ' pesan' : rdEsc(k.status)) + (k.ditarik ? ' <span class="ap-dim">(' + rdEsc(k.ditarik) + ')</span>' : '')
+                 + '</span>';
+        }).join('') || '<span class="ap-dim">Belum pernah ditarik.</span>');
+    }
+
+    function rdTarikStatus(t) {
+        if (t && t.jalan) {
+            var pct = t.total ? Math.round(100 * t.selesai / t.total) : 0;
+            $('#rdProgWrap').show(); $('#rdProg').css('width', pct + '%');
+            $('#rdProgText').text('Menarik ' + t.tahap + (t.total ? ' — ' + t.selesai + '/' + t.total : '') + ' (mulai ' + t.mulai + ')');
+            $('#rdTarik').prop('disabled', true).text('Menarik…');
+            if (!RD.polling) { RD.polling = setInterval(function () { rdLoad(false, true); }, 2500); }
+        } else {
+            $('#rdProgWrap').hide();
+            $('#rdTarik').prop('disabled', false).text('Tarik sekarang');
+            if (RD.polling) { clearInterval(RD.polling); RD.polling = null; rdLoad(true); }
+            if (t && t.galat) { $('#rdMessage').show().text('Tarikan terakhir gagal: ' + t.galat); }
+        }
+    }
+
+    function rdLoad(force, diam) {
+        $.post('/ramai-dibahas-data', force ? { force: '1' } : {}).done(function (d) {
+            if (!d || d.available === false) {
+                $('#rdMessage').show().text((d && d.message) || 'Gagal memuat.');
+                return;
+            }
+            rdTarikStatus(d.tarik);
+            if (diam) { return; }
+            rdSumber(d);
+            if (d.kosong) {
+                $('#rdInfo').text(d.message); $('#rdTabelCard').hide(); $('#rdSuasanaCard').hide();
+                return;
+            }
+            RD.data = d;
+            $('#rdMessage').hide();
+            $('#rdInfo').html('Ditarik ' + rdEsc(d.ditarik) + ' (' + rdNum(d.basi_jam, 1) + ' jam lalu)'
+                + (d.baseline_siap ? '' : ' &middot; lonjakan belum bisa dibaca: tumpukan baru ' + rdNum(d.riwayat_hari, 1) + ' hari, perlu 8'));
+            $('#rdTabelCard').show();
+            $('#rdJendela').text('— ' + (d.sentimen_jendela || ''));
+            rdSuasana(d.suasana);
+            rdBaris();
+        }).fail(function () { if (!diam) { $('#rdMessage').show().text('Gagal memuat data.'); } });
+    }
+
+    // WAJIB di dalam document.ready: base.html memasang $.ajaxSetup untuk
+    // header X-CSRFToken di dalam $(function(){...}).
+    $(document).ready(function () {
+        $('#rdTarik').on('click', function () {
+            $('#rdMessage').hide();
+            $.post('/ramai-dibahas-tarik', {}).done(function (r) { rdTarikStatus(r.tarik); });
+        });
+        $('#rdFilter').on('input', function () { if (RD.data) { rdBaris(); } });
+        $('#rdSumberFilter').on('change', function () { if (RD.data) { rdBaris(); } });
+        $(document).on('click', '.rd-sort', function () { RD.sort = $(this).data('k'); if (RD.data) { rdBaris(); } });
+        $(document).on('click', 'tr.rd-row', function () {
+            var s = $(this).data('s'); RD.buka[s] = !RD.buka[s]; rdBaris();
+        });
+        $('#rdSimpan').on('click', function () {
+            $.post('/ramai-dibahas-sumber', { publik: $('#rdPublik').val(), grup: $('#rdGrup').val() }).done(function (r) {
+                $('#rdPublik').val(r.sumber.telegram_publik.join('\n'));
+                $('#rdGrup').val(r.sumber.telegram_grup.join('\n'));
+                $('#rdSimpanInfo').text('Tersimpan. Tekan "Tarik sekarang" untuk membaca sumbernya.');
+            }).fail(function () { $('#rdSimpanInfo').text('Gagal menyimpan.'); });
+        });
+        rdLoad(false);
+    });
+</script>
+{% endblock %}

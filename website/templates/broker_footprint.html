@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Broker Footprint{% endblock %}
+{% block page_title %}Broker Footprint{% endblock %}
+
+{% block content %}
+
+<style>
+    .footprint-controls { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap; }
+    .footprint-field { display: flex; flex-direction: column; gap: 3px; }
+    .footprint-field label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+    .footprint-preset-row { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+    .footprint-preset-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 2px; }
+    .footprint-stocks-hint { font-size: 11.5px; color: var(--text-dim); margin-bottom: 18px; }
+
+    .footprint-columns { display: flex; gap: 18px; flex-wrap: wrap; }
+    .footprint-col { flex: 1 1 320px; min-width: 280px; }
+    .footprint-col-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+    .footprint-table { width: 100%; }
+    .footprint-table th {
+        font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+        letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim);
+        text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    }
+    .footprint-table td {
+        font-family: var(--font-mono); font-size: 13px;
+        padding: 9px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text);
+    }
+    .footprint-table td.lot-buy { color: var(--accum); font-weight: 700; text-align: right; }
+    .footprint-table td.lot-sell { color: var(--distrib); font-weight: 700; text-align: right; }
+    .footprint-empty { color: var(--text-dim); font-size: 13px; padding: 14px 4px; }
+    .footprint-bar-track { background: var(--line-soft); border-radius: 4px; height: 6px; margin-top: 4px; overflow: hidden; }
+    .footprint-bar-fill { height: 100%; border-radius: 4px; }
+</style>
+
+<div class="footprint-controls">
+    <div class="footprint-field">
+        <label>Stocks (comma-separated, atau pakai preset)</label>
+        <input type="text" id="fpStocksInput" class="form-control form-control-sm" placeholder="BBCA,BBRI,BMRI" style="width:320px;">
+    </div>
+    <div class="footprint-field">
+        <label>Type</label>
+        <select id="fpStockType" class="form-select form-select-sm">
+            <option value="All">All</option>
+            <option value="Foreign">Foreign</option>
+        </select>
+    </div>
+    <div class="footprint-field">
+        <label>Date range</label>
+        <input type="text" id="fpRangeDate" class="form-control form-control-sm" value="{{ rangeDate }}">
+    </div>
+    <button type="button" class="btn btn-sm btn-primary" id="fpScanBtn">Scan</button>
+</div>
+
+<div class="footprint-preset-row">
+    <span class="footprint-preset-label">Preset:</span>
+    {% for w in watchlists %}
+    <button type="button" class="btn btn-sm btn-outline-secondary fp-preset-btn" data-type="{{ w.type }}">{{ w.label }}</button>
+    {% endfor %}
+</div>
+
+<div class="footprint-stocks-hint" id="fpStocksHint"></div>
+
+<div class="content-card" id="fpResults" style="display:none;">
+    <div class="footprint-columns">
+        <div class="footprint-col">
+            <div class="footprint-col-title">Top Buyers</div>
+            <table class="footprint-table">
+                <thead><tr><th>Broker</th><th style="text-align:right;">Total Lot</th></tr></thead>
+                <tbody id="fpBuyersBody"></tbody>
+            </table>
+        </div>
+        <div class="footprint-col">
+            <div class="footprint-col-title">Top Sellers</div>
+            <table class="footprint-table">
+                <thead><tr><th>Broker</th><th style="text-align:right;">Total Lot</th></tr></thead>
+                <tbody id="fpSellersBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var fpStocks = [];
+
+    function renderStocksHint() {
+        $('#fpStocksHint').text(fpStocks.length ? 'Scan mencakup: ' + fpStocks.join(', ') : '');
+    }
+
+    function loadPreset(type) {
+        $.getJSON('/watchlist-tickers?type=' + encodeURIComponent(type), function (data) {
+            fpStocks = data.tickers || [];
+            $('#fpStocksInput').val(fpStocks.join(','));
+            renderStocksHint();
+        });
+    }
+
+    function renderTable($body, rows, cls) {
+        $body.empty();
+        if (!rows.length) {
+            $body.append('<tr><td colspan="2" class="footprint-empty">Gak ada data.</td></tr>');
+            return;
+        }
+        var maxLot = Math.max.apply(null, rows.map(function (r) { return r.lot; }));
+        rows.forEach(function (r) {
+            var pct = maxLot > 0 ? (r.lot / maxLot * 100) : 0;
+            var $row = $('<tr></tr>');
+            $row.append($('<td></td>').html(r.broker + '<div class="footprint-bar-track"><div class="footprint-bar-fill" style="width:' + pct + '%; background:' + (cls === 'lot-buy' ? 'var(--accum)' : 'var(--distrib)') + ';"></div></div>'));
+            $row.append($('<td></td>').addClass(cls).text(r.lot.toLocaleString()));
+            $body.append($row);
+        });
+    }
+
+    function scan() {
+        var stocksRaw = $('#fpStocksInput').val();
+        fpStocks = stocksRaw.split(',').map(function (s) { return s.trim().toUpperCase(); }).filter(Boolean);
+        renderStocksHint();
+        if (!fpStocks.length) { alert('Isi kode saham dulu (atau pilih preset).'); return; }
+
+        $.post('/broker-footprint-data', {
+            stocks: fpStocks.join(','),
+            stockType: $('#fpStockType').val(),
+            rangeDate: $('#fpRangeDate').val()
+        }).done(function (data) {
+            $('#fpResults').show();
+            renderTable($('#fpBuyersBody'), data.buyers || [], 'lot-buy');
+            renderTable($('#fpSellersBody'), data.sellers || [], 'lot-sell');
+        }).fail(function () {
+            alert('Gagal scan data.');
+        });
+    }
+
+    $(document).ready(function () {
+        $('#fpScanBtn').on('click', scan);
+        $('.fp-preset-btn').on('click', function () { loadPreset($(this).data('type')); });
+
+        $('#fpRangeDate').daterangepicker({
+            opens: 'left',
+            startDate: moment($('#fpRangeDate').val().split('-')[0].trim(), 'MM/DD/YYYY'),
+            endDate: moment($('#fpRangeDate').val().split('-')[1].trim(), 'MM/DD/YYYY'),
+            locale: { format: 'MM/DD/YYYY' }
+        });
+    });
+</script>
+{% endblock %}
